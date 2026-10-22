@@ -45,6 +45,8 @@ const WAGMI = (window.WAGMI = { app, person, car });
   person.label = 'Quant';
   person.model = {
     update(dt, p, air) {
+      // a cutscene (or anything else that directs him) drives the body itself, mixer and all
+      if (WAGMI.directed) { WAGMI.directed(dt, p, air); return; }
       const v = Math.abs(p.speed);
       // which gait, by speed (the two nearest blended), and how fast its clip runs
       let k = 0; while (k < GAITS.length - 1 && v > GAITS[k + 1][1]) k++;
@@ -92,3 +94,8 @@ let last = performance.now();
 })();
 WAGMI.ready = true;
 console.log('[wagmi] Quant and the car are in');
+
+// the rest of the game, a module each (one that fails to load leaves the others running)
+for (const m of ['./combat/index.js', './intro.js']) {
+  try { const mod = await import(m); if (mod.install) await mod.install(WAGMI); } catch (err) { console.error('[wagmi]', m, err); }
+}
