@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>WAGMI City: car studio</title>
+  <style>html, body { margin: 0; height: 100%; background: #15171c; overflow: hidden; } canvas { display: block; }</style>
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/gh/mrdoob/three.js@bc7d0b3c3838d5da9495b5e603afd77ed3154d57/build/three.webgpu.js",
+        "three/webgpu": "https://cdn.jsdelivr.net/gh/mrdoob/three.js@bc7d0b3c3838d5da9495b5e603afd77ed3154d57/build/three.webgpu.js",
+        "three/tsl": "https://cdn.jsdelivr.net/gh/mrdoob/three.js@bc7d0b3c3838d5da9495b5e603afd77ed3154d57/build/three.tsl.js",
+        "three/addons/": "https://cdn.jsdelivr.net/gh/mrdoob/three.js@bc7d0b3c3838d5da9495b5e603afd77ed3154d57/examples/jsm/"
+      }
+    }
+  </script>
+</head>
+<body>
+<script type="module">
+// The car on a turntable in a studio: ?view=front34|rear34|side|top|thrust|night, ?paint=#hex, ?matte=1
+import * as THREE from 'three/webgpu';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { buildRoadster } from '../wagmi/roadster.js';
+
+const q = new URLSearchParams(location.search), view = q.get('view') || 'front34';
+const renderer = new THREE.WebGPURenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(2, devicePixelRatio)); renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = view === 'night' ? 0.7 : 1.0;
+renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+document.body.appendChild(renderer.domElement);
+await renderer.init();
+
+const scene = new THREE.Scene(); scene.background = new THREE.Color(view === 'night' ? '#07080C' : '#1A1D23');
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.03).texture;
+scene.environmentIntensity = view === 'night' ? 0.25 : 1;
+const key = new THREE.DirectionalLight('#FFFFFF', view === 'night' ? 0.4 : 2.2); key.position.set(4, 7, 5); key.castShadow = true;
+key.shadow.mapSize.set(2048, 2048); Object.assign(key.shadow.camera, { left: -4, right: 4, top: 4, bottom: -4, near: 1, far: 20 }); scene.add(key);
+scene.add(new THREE.HemisphereLight('#DDE6FF', '#202024', view === 'night' ? 0.15 : 0.5));
+const floor = new THREE.Mesh(new THREE.CircleGeometry(14, 96), new THREE.MeshStandardMaterial({ color: '#2A2D33', roughness: 0.5, metalness: 0.1 }));
+floor.rotation.x = -Math.PI / 2; floor.receiveShadow = true; scene.add(floor);
+
+const car = buildRoadster(THREE, { paint: q.get('paint') || '#8E0B14', matte: q.get('matte') === '1', cold: view === 'thrust' || view === 'night' ? 1 : 0, burn: view === 'thrust' || view === 'night' ? 0.8 : 0 });
+scene.add(car.group);
+
+const camera = new THREE.PerspectiveCamera(32, innerWidth / innerHeight, 0.1, 100);
+const at = { front34: [4.6, 1.5, 5.2], rear34: [-4.4, 1.6, -5.4], side: [7.6, 1.1, 0.0], top: [0.01, 9.5, 0.0], thrust: [-3.8, 1.2, -6.4], night: [-4.2, 1.4, -6.0] }[view] || [4.6, 1.5, 5.2];
+camera.position.set(...at);
+const controls = new OrbitControls(camera, renderer.domElement); controls.target.set(0, 0.55, view === 'thrust' || view === 'night' ? -1.2 : 0); controls.update();
+addEventListener('resize', () => { camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); });
+let last = performance.now(), frames = 0;
+renderer.setAnimationLoop(() => {
+  const now = performance.now(), dt = Math.min(0.05, (now - last) / 1000); last = now;
+  car.update(dt, q.get('spin') ? 6 : 0, 0); controls.update(); renderer.render(scene, camera);
+  if (++frames === 20) window.__ready = true;
+});
+</script>
+</body>
+</html>

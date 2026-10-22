@@ -905,10 +905,14 @@ class ThirdPersonControllerManager {
   poseCharacters(dt) {
     const p = this.entities.person;
     const air = p.position.y - this.getGroundHeight(p.position.x, p.position.z, 'person');
-    p.rig.update(dt, p.position.x, p.position.z, p.heading, personGround, this, air > 0.02 ? air : 0);
-    p.crowd.begin();
-    p.crowd.add(p.rig, 0);
-    p.crowd.end();
+    // (WAGMI City: a player model of its own animates itself; the procedural walker only without one)
+    if (p.model) p.model.update(dt, p, air > 0.02 ? air : 0);
+    else {
+      p.rig.update(dt, p.position.x, p.position.z, p.heading, personGround, this, air > 0.02 ? air : 0);
+      p.crowd.begin();
+      p.crowd.add(p.rig, 0);
+      p.crowd.end();
+    }
 
     const b = this.entities.cyclist;
     b.riderRig.ride(b.leanPivot, b.pedalPhase, b.bikeFrame);
@@ -926,6 +930,9 @@ class ThirdPersonControllerManager {
 
     if (this.activeMode === 'person') {
       this.updatePerson(dt, elapsed);
+    } else if (this.entities.person.inVehicle) {
+      // (WAGMI City: the player is in the car, the body put away until they get out)
+      this.entities.person.speed = 0;
     } else {
       // Keep the sidewalk pedestrian walking naturally when not actively controlled
       const p = this.entities.person;
@@ -1002,8 +1009,9 @@ class ThirdPersonControllerManager {
 
   updateCar(dt) {
     const c = this.entities.car;
-    const maxSpeed = this.keys.boost ? 36.0 : 23.5;
-    const accel = this.keys.boost ? 21.0 : 14.0;
+    // (WAGMI City: a car may bring its own pace: topSpeed, boostSpeed, accel, boostAccel)
+    const maxSpeed = this.keys.boost ? (c.boostSpeed ?? 36.0) : (c.topSpeed ?? 23.5);
+    const accel = this.keys.boost ? (c.boostAccel ?? 21.0) : (c.accel ?? 14.0);
 
     let throttle = 0;
     if (this.keys.forward) throttle = this.keys.forward;
@@ -1057,6 +1065,7 @@ class ThirdPersonControllerManager {
     c.heaveVel += (-c.heaveY * 85.0 - c.heaveVel * 12.0) * dt;
     c.heaveY = Math.max(-0.08, Math.min(0.14, c.heaveY + c.heaveVel * dt));
     c.chassisPivot.position.y = c.heaveY;
+    if (c.onUpdate) c.onUpdate(dt, this.keys, throttle, steerInput);
 
     if (c.carState) {
       c.carState.value.x = throttle < 0 || Math.abs(c.speed) < 0.6 ? 1 : 0;
