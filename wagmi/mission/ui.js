@@ -1,0 +1,429 @@
+// WAGMI City: the mission overlays, the GTA way. The shared style: Barlow Condensed, white with a soft dark shadow,
+// accent yellow #FFC93C (places, objectives), green #4ADE80 (objects), red #EF4444 (enemies, danger), blue #6CB8FF
+// (friends, Quant's car), acid green #B6FF3B (the Degens, ZK); panels rgba(8,10,14,0.62), 10 px corners.
+//   cine(on)                    letterbox bars in, the city's HUD out (and back)
+//   gameTitle(on) · title(act, name) · place(name, sub) · caption(name, role, colour)
+//   sub(speaker, text, colour) / sub(null)       subtitles (the objective line; above the bar in a cutscene)
+//   objective(parts) / objective(null)           parts: ['Get in your ', { car: 'blue' }, '.']
+//   help(text, secs)                             top-left; [F] draws a key cap
+//   skip(k)                                      'Hold SPACE to skip' with its ring (k 0..1, null hides)
+//   phone.show(screen, data) / phone.hide()      feed, incoming, video, ended, moontag
+//   caller(name, colour, status) / caller(null) · dm(from, text) · counter(label, value) / counter(null)
+//   passed({ title, stats, reward, note }) · failed(reason, { skip }) -> Promise<'retry'|'quit'|'skip'> · rekt()
+//   fade(to, secs) · gate({ when, onStart, fine }) -> Promise (up once when() is true; any key or a click starts)
+//   bootOff()                                    the boot veil (index.html: the key art until the gate is up) away
+//   story(on)                                    story mode: the sandbox's toolbar, telemetry, credit pill put away
+//   zk(on, name) · zkTalk(level)                 the video call's frame over ZK's room (mission/zk.js draws the room)
+export const COLORS = { yellow: '#FFC93C', green: '#4ADE80', red: '#EF4444', blue: '#6CB8FF', acid: '#B6FF3B', white: '#FFFFFF' };
+const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+const CSS = `
+#wg { position: fixed; inset: 0; pointer-events: none; z-index: 30; font-family: 'Barlow Condensed', system-ui, sans-serif; color: #fff; --bar: min(11vh, 9.5vw); }
+#wg * { box-sizing: border-box; }
+#wg .sh, #wg .wg-sub, #wg .wg-obj, #wg .wg-title, #wg .wg-place, #wg .wg-cap { text-shadow: 0 2px 10px rgba(0,0,0,.55), 0 1px 2px rgba(0,0,0,.85); }
+.wg-bar { position: absolute; left: 0; right: 0; height: var(--bar); background: #000; transition: transform .5s cubic-bezier(.2,.7,.2,1); z-index: 1; }
+.wg-bar.top { top: 0; transform: translateY(-101%); } .wg-bar.bot { bottom: 0; transform: translateY(101%); }
+body.wg-cine .wg-bar { transform: none; }
+body.wg-cine .hud, body.wg-cine #touch-controls, body.wg-gating .hud { opacity: 0 !important; visibility: hidden; transition: opacity .3s, visibility 0s .3s; }
+body.wg-gating .hud, body.wg-gating #touch-controls { transition: none !important; }
+body .hud { transition: opacity .5s; }
+body.wg-hidehint #hud-controls-hint { opacity: 0 !important; }
+.wg-fade { position: absolute; inset: 0; background: #000; opacity: 0; transition: opacity .6s; z-index: 20; }
+
+.wg-gtitle { position: absolute; left: 0; right: 0; top: 20%; text-align: center; opacity: 0; transform: scale(1.04); transition: opacity 1.2s, transform 7s cubic-bezier(.1,.6,.2,1); z-index: 3; pointer-events: none; }
+.wg-gtitle.on { opacity: 1; transform: scale(1); }
+.wg-gtitle.now { transition: none; }
+.wg-gtitle .logo { font: italic 800 clamp(52px, 10vw, 136px)/0.9 'Barlow Condensed', system-ui; letter-spacing: 1px; white-space: nowrap; text-shadow: 0 6px 30px rgba(0,0,0,.55), 0 2px 4px rgba(0,0,0,.4); }
+.wg-gtitle .logo b { color: #FFC93C; font-weight: 800; }
+.wg-gtitle .tag { display: inline-block; margin-top: 12px; padding: 7px 18px 6px; font: 700 clamp(13px, 1.5vw, 19px)/1 'Barlow Condensed'; letter-spacing: clamp(3px, .5vw, 6px); text-transform: uppercase; color: #fff;
+  background: radial-gradient(closest-side, rgba(6,8,12,.62), rgba(6,8,12,.38) 70%, rgba(6,8,12,0)); text-shadow: 0 1px 3px rgba(0,0,0,.8); }
+.wg-gtitle .rule { width: 140px; height: 3px; background: #FFC93C; margin: 14px auto 0; transform: scaleX(0); transition: transform 1.2s .4s cubic-bezier(.2,.7,.2,1); }
+.wg-gtitle.on .rule { transform: scaleX(1); }
+
+.wg-title { position: absolute; left: 0; right: 0; top: 64%; transform: translateY(-50%); text-align: center; z-index: 3; }
+.wg-title .act { font: 700 18px/1 'Barlow Condensed'; letter-spacing: 3px; color: #FFC93C; text-transform: uppercase; opacity: 0; transform: translateY(8px); transition: opacity .4s, transform .5s; }
+.wg-title .name { font: italic 800 64px/1.05 'Barlow Condensed'; letter-spacing: 1px; text-transform: uppercase; opacity: 0; transform: translateY(10px); transition: opacity .4s .1s, transform .6s .1s cubic-bezier(.2,.7,.2,1); }
+.wg-title.on .act, .wg-title.on .name { opacity: 1; transform: none; }
+.wg-title.out .act, .wg-title.out .name { opacity: 0; transition: opacity .6s; }
+
+.wg-place { position: absolute; right: 26px; bottom: 236px; text-align: right; opacity: 0; transform: translateX(14px); transition: opacity .5s, transform .6s; z-index: 3; }
+body.wg-cine .wg-place { bottom: calc(var(--bar) + 3.2vh); }
+.wg-place.on { opacity: 1; transform: none; }
+.wg-place .n { font: italic 700 30px/1 'Barlow Condensed'; }
+.wg-place .s { margin-top: 6px; font: 700 13px/1 'Barlow Condensed'; letter-spacing: 3px; color: #FFC93C; text-transform: uppercase; }
+
+.wg-cap { position: absolute; left: 5vw; bottom: calc(var(--bar) + 10vh); opacity: 0; transform: translateX(-18px); transition: opacity .35s, transform .5s cubic-bezier(.2,.7,.2,1); z-index: 3; border-left: 4px solid var(--c, #fff); padding: 2px 0 2px 14px; }
+.wg-cap.on { opacity: 1; transform: none; }
+.wg-cap .n { font: italic 800 54px/0.95 'Barlow Condensed'; text-transform: uppercase; letter-spacing: 1px; }
+.wg-cap .r { margin-top: 6px; font: 700 15px/1 'Barlow Condensed'; letter-spacing: 3px; text-transform: uppercase; color: var(--c, #fff); }
+
+/* (wrapped at about half the screen: a long line never reaches the speed panel or the radar) */
+.wg-line { position: absolute; left: 50%; bottom: 158px; transform: translateX(-50%); width: min(max(52vw, 320px), 820px, calc(100vw - 32px)); text-align: center; z-index: 4; }
+body.wg-cine .wg-line { bottom: calc(var(--bar) + 2.4vh); }
+body.wg-story:not(.wg-cine) .wg-line { bottom: 64px; }
+/* story mode: the sandbox's controls and telemetry away (the Map stays; the credit link stays) */
+body.wg-story .time-switch, body.wg-story #btn-teleport, body.wg-story #hud-toolbar .toolbar-divider, body.wg-story .brand-subtitle,
+body.wg-story #camera-switch, body.wg-story #hud-controls-hint { display: none !important; }
+body.wg-story.wg-onfoot .hud-bottom-right { display: none !important; }
+/* (the credit pill too: the credit is on the start gate; the help box takes the corner, GTA's place for it) */
+body.wg-story .hud-top-left { display: none !important; }
+body.wg-story .wg-help { top: 20px; }
+/* ZK's video call, full frame between the bars */
+/* (the room itself is drawn in 3D in place of the city's frame: mission/zk.js; this is the call's frame over it, cut
+   in and out hard; nothing in the bottom 100 px, where the subtitles are) */
+.wg-zk { position: absolute; inset: 0; opacity: 0; z-index: 0; overflow: hidden; }
+.wg-zk.on { opacity: 1; }
+.wg-zk .scan { position: absolute; inset: 0; background: repeating-linear-gradient(0deg, rgba(255,255,255,.03) 0 1px, transparent 1px 4px); }
+/* (no filters or blend modes on the full-frame insert: the city keeps drawing under it) */
+.wg-zk .vig { position: absolute; inset: 0; background: radial-gradient(80% 70% at 50% 45%, transparent 55%, rgba(0,0,0,.7)); }
+.wg-zk .hd { position: absolute; left: 5vw; top: calc(var(--bar) + 3vh); font: 800 clamp(16px, 1.8vw, 24px)/1 'Barlow Condensed'; letter-spacing: 4px; color: #fff; }
+.wg-zk .hd small { display: block; margin-top: 6px; font: 600 clamp(11px, 1.1vw, 14px)/1 'Barlow Condensed'; letter-spacing: 2px; color: rgba(255,255,255,.55); }
+.wg-zk .rec { position: absolute; right: 5vw; top: calc(var(--bar) + 3vh); font: 700 clamp(12px, 1.2vw, 15px)/1 'Barlow Condensed'; letter-spacing: 3px; color: #B6FF3B; }
+.wg-zk .wave { position: absolute; right: 5vw; top: calc(var(--bar) + 3vh + 26px); height: 26px; display: flex; gap: 3px; align-items: center; }
+.wg-zk .wave i { display: block; width: 3px; border-radius: 2px; background: #B6FF3B; height: 26px; transform: scaleY(.1); transition: transform .08s; will-change: transform; }
+.wg-zk .vc { position: absolute; left: 5vw; top: calc(var(--bar) + 3vh + 40px); font: 700 clamp(11px, 1.1vw, 14px)/1 'Barlow Condensed'; letter-spacing: 4px; color: #B6FF3B; opacity: .85; }
+.wg-zk .frm { position: absolute; left: 3vw; right: 3vw; top: calc(var(--bar) + 1.6vh); bottom: calc(var(--bar) + 1.6vh); border: 1px solid rgba(255,255,255,.12); border-radius: 6px; }
+.wg-sub, .wg-obj { font: 600 24px/1.25 'Barlow Condensed'; transition: opacity .25s; }
+.wg-obj { font-size: 26px; }
+.wg-sub b { font-weight: 700; letter-spacing: .5px; margin-right: 8px; }
+.wg-obj.hide, .wg-sub.hide { opacity: 0; }
+
+.wg-help { position: absolute; left: 20px; top: 92px; max-width: 360px; padding: 12px 16px; background: rgba(8,10,14,0.62); border-radius: 10px; font: 600 17px/1.3 'Barlow Condensed'; opacity: 0; transform: translateY(-6px); transition: opacity .3s, transform .3s; z-index: 4; backdrop-filter: blur(6px); }
+.wg-help.on { opacity: 1; transform: none; }
+#wg kbd { display: inline-block; min-width: 22px; padding: 0 6px; margin: 0 2px; border: 1px solid rgba(255,255,255,.55); border-radius: 5px; background: rgba(255,255,255,.12); font: 700 15px/20px 'Barlow Condensed'; text-align: center; }
+
+.wg-skip { position: absolute; right: 3.2vw; bottom: calc(5.5vh - 11px); display: flex; align-items: center; gap: 10px; font: 600 14px/1 'Barlow Condensed'; letter-spacing: 1px; color: rgba(255,255,255,.6); opacity: 0; transition: opacity .4s; z-index: 5; }
+.wg-skip.on { opacity: 1; }
+.wg-skip svg { width: 22px; height: 22px; transform: rotate(-90deg); }
+.wg-skip circle { fill: none; stroke-width: 3; }
+
+.wg-hold { position: absolute; left: 50%; top: 58%; transform: translate(-50%, -50%); display: flex; align-items: center; gap: 10px; padding: 8px 14px 8px 10px; background: rgba(8,10,14,0.62); border-radius: 10px; font: 700 17px/1 'Barlow Condensed'; opacity: 0; transition: opacity .2s; z-index: 5; }
+.wg-hold.on { opacity: 1; }
+.wg-hold svg { width: 26px; height: 26px; transform: rotate(-90deg); }
+.wg-hold circle { fill: none; stroke-width: 3.5; }
+.wg-ph-burner { position: absolute; inset: 0; background: linear-gradient(#1A2216, #0B0F09); padding: 20% 7% 0; font-family: 'Courier New', monospace; color: #B6FF3B; }
+.wg-ph-burner .h { font: 700 13px/1 'Courier New', monospace; letter-spacing: 1px; opacity: .7; margin-bottom: 14px; }
+.wg-ph-burner .m { font: 700 17px/1.35 'Courier New', monospace; padding: 10px 12px; border: 1px solid rgba(182,255,59,.4); border-radius: 6px; background: rgba(182,255,59,.06); white-space: pre-wrap; }
+.wg-blur { position: absolute; top: 0; bottom: 0; right: 0; width: 62%; background: linear-gradient(to right, rgba(4,5,8,0), rgba(4,5,8,.42) 45%, rgba(4,5,8,.55)); opacity: 0; transition: opacity .5s; z-index: 2; }
+/* (a shade, not a backdrop blur: the blur cost a tenth of the frame rate when the call came in) */
+.wg-blur.on { opacity: 1; }
+.wg-phone { position: absolute; right: 9vw; top: 50%; height: min(60vh, 600px); aspect-ratio: 9 / 19.2; transform: translate(0, -46%) rotate(2deg); opacity: 0; transition: opacity .45s, transform .55s cubic-bezier(.2,.7,.2,1); z-index: 3; }
+.wg-phone.on { opacity: 1; transform: translate(0, -50%) rotate(0deg); }
+.wg-phone .frame { position: absolute; inset: 0; border-radius: 13% / 6.2%; background: linear-gradient(145deg, #3a3d44, #121316 40%, #26282d); padding: 3.2%; box-shadow: 0 30px 80px rgba(0,0,0,.6), inset 0 0 0 1.5px rgba(255,255,255,.12); }
+.wg-phone .screen { position: relative; width: 100%; height: 100%; border-radius: 10.5% / 5%; overflow: hidden; background: #0B0D12; }
+.wg-phone .island { position: absolute; top: 1.6%; left: 50%; width: 30%; height: 3.4%; transform: translateX(-50%); background: #000; border-radius: 99px; z-index: 5; }
+.wg-phone .status { position: absolute; top: 1.9%; left: 9%; right: 9%; display: flex; justify-content: space-between; font: 700 12px/1 system-ui; z-index: 4; }
+.wg-ph-feed { position: absolute; inset: 0; padding: 18% 6% 6%; background: linear-gradient(#0E1118, #0A0C10); }
+.wg-ph-feed .hd { font: 800 20px/1 'Barlow Condensed'; letter-spacing: .5px; margin-bottom: 4px; }
+.wg-ph-feed .sub { font: 600 12px/1 'Barlow Condensed'; color: rgba(255,255,255,.5); letter-spacing: 1px; text-transform: uppercase; margin-bottom: 12px; }
+.wg-ph-feed .c { display: flex; gap: 9px; padding: 9px 0; border-top: 1px solid rgba(255,255,255,.07); opacity: 0; transform: translateY(14px); transition: opacity .35s, transform .45s cubic-bezier(.2,.7,.2,1); }
+.wg-ph-feed .c.on { opacity: 1; transform: none; }
+.wg-ph-feed .av { flex: 0 0 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; font: 800 13px/1 'Barlow Condensed'; color: #0A0C10; }
+.wg-ph-feed .h { font: 700 14px/1.1 'Barlow Condensed'; color: rgba(255,255,255,.62); }
+.wg-ph-feed .t { font: 600 17px/1.15 'Barlow Condensed'; margin-top: 2px; }
+.wg-ph-feed .c.hot .t { color: #FF8A8A; }
+.wg-ph-call { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; padding-top: 26%; background: radial-gradient(120% 70% at 50% 25%, #23262E, #07080A); }
+.wg-ph-call .who { font: 800 30px/1 'Barlow Condensed'; letter-spacing: 1px; margin-top: 14px; }
+.wg-ph-call .what { font: 600 14px/1 'Barlow Condensed'; color: rgba(255,255,255,.6); margin-top: 8px; letter-spacing: 1px; }
+.wg-ph-call .pic { width: 34%; aspect-ratio: 1; border-radius: 50%; background: radial-gradient(circle at 50% 38%, #3B3F48, #15171B); display: grid; place-items: center; font: 800 44px/1 'Barlow Condensed'; color: rgba(255,255,255,.5); animation: wgRing 1.1s infinite; }
+.wg-ph-call .btns { position: absolute; bottom: 10%; left: 0; right: 0; display: flex; justify-content: space-around; }
+.wg-ph-call .b { width: 22%; aspect-ratio: 1; border-radius: 50%; display: grid; place-items: center; font: 800 12px/1 'Barlow Condensed'; }
+.wg-ph-call .b.no { background: #EF4444; } .wg-ph-call .b.yes { background: #22C55E; animation: wgPulse .9s infinite; }
+.wg-ph-call .b.yes.press { transform: scale(.86); animation: none; filter: brightness(1.3); transition: transform .12s; }
+@keyframes wgRing { 0%,100% { box-shadow: 0 0 0 0 rgba(255,255,255,.18); } 50% { box-shadow: 0 0 0 14px rgba(255,255,255,0); } }
+@keyframes wgPulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.08); } }
+.wg-ph-video { position: absolute; inset: 0; background: #050507; }
+.wg-ph-video svg.zk { position: absolute; inset: 0; width: 100%; height: 100%; }
+.wg-ph-video .scan { position: absolute; inset: 0; background: repeating-linear-gradient(0deg, rgba(255,255,255,.035) 0 1px, transparent 1px 3px); mix-blend-mode: overlay; }
+.wg-ph-video .label { position: absolute; top: 9%; left: 0; right: 0; text-align: center; font: 800 18px/1 'Barlow Condensed'; letter-spacing: 3px; }
+.wg-ph-video .label small { display: block; font: 600 12px/1 'Barlow Condensed'; color: rgba(255,255,255,.55); letter-spacing: 1px; margin-top: 5px; }
+.wg-ph-video .wave { position: absolute; left: 12%; right: 12%; bottom: 17%; height: 34px; display: flex; gap: 3px; align-items: center; justify-content: center; }
+.wg-ph-video .wave i { display: block; width: 4px; border-radius: 2px; background: #B6FF3B; height: 3px; transition: height .08s; }
+.wg-ph-video .vc { position: absolute; left: 0; right: 0; bottom: 27%; text-align: center; font: 700 11px/1 'Barlow Condensed'; letter-spacing: 3px; color: #B6FF3B; opacity: .8; }
+.wg-ph-video .pip { position: absolute; right: 6%; bottom: 27%; width: 26%; aspect-ratio: 3 / 4; border-radius: 10px; background: linear-gradient(#2A2E36, #121419); border: 1px solid rgba(255,255,255,.2); overflow: hidden; }
+.wg-ph-video .pip:after { content: ''; position: absolute; left: 22%; right: 22%; bottom: -10%; height: 70%; border-radius: 50% 50% 0 0; background: #07080A; box-shadow: 0 -38px 0 -14px #07080A; }
+.wg-ph-video .end { position: absolute; bottom: 5%; left: 50%; transform: translateX(-50%); width: 18%; aspect-ratio: 1; border-radius: 50%; background: #EF4444; }
+.wg-ph-video.glitch svg.zk { animation: wgGlitch .22s steps(2) infinite; }
+@keyframes wgGlitch { 0% { transform: translate(0,0); filter: none; } 50% { transform: translate(1.5px,-1px); filter: hue-rotate(40deg) saturate(1.4); } 100% { transform: translate(-1px,1px); } }
+.wg-ph-ended { position: absolute; inset: 0; display: grid; place-items: center; background: #07080A; font: 700 22px/1 'Barlow Condensed'; color: rgba(255,255,255,.7); letter-spacing: 2px; }
+.wg-ph-tag { position: absolute; inset: 0; background: #0B1220; }
+.wg-ph-tag .map { position: absolute; inset: 0; }
+.wg-ph-tag .note { position: absolute; top: 9%; left: 5%; right: 5%; padding: 10px 12px; border-radius: 16px; background: rgba(30,34,44,.9); backdrop-filter: blur(8px); display: flex; gap: 10px; align-items: center; transform: translateY(-20px); opacity: 0; transition: transform .45s cubic-bezier(.2,.7,.2,1), opacity .3s; }
+.wg-ph-tag .note.on { transform: none; opacity: 1; }
+.wg-ph-tag .ic { flex: 0 0 34px; height: 34px; border-radius: 9px; background: #2F7FD8; display: grid; place-items: center; font-size: 19px; }
+.wg-ph-tag .a { font: 700 13px/1.1 'Barlow Condensed'; color: rgba(255,255,255,.6); letter-spacing: 1px; text-transform: uppercase; }
+.wg-ph-tag .b { font: 700 18px/1.1 'Barlow Condensed'; }
+
+.wg-caller { position: absolute; right: 24px; bottom: 236px; display: flex; gap: 12px; align-items: center; padding: 10px 16px 10px 10px; background: rgba(8,10,14,0.62); border-radius: 10px; opacity: 0; transform: translateX(16px); transition: opacity .3s, transform .4s; z-index: 4; backdrop-filter: blur(6px); }
+.wg-caller.on { opacity: 1; transform: none; }
+.wg-caller .av { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; font: 800 22px/1 'Barlow Condensed'; color: #0A0C10; }
+.wg-caller .n { font: 800 20px/1 'Barlow Condensed'; letter-spacing: 1px; }
+.wg-caller .s { font: 600 13px/1 'Barlow Condensed'; color: rgba(255,255,255,.6); margin-top: 4px; letter-spacing: 1px; }
+.wg-dm { position: absolute; right: 24px; top: 88px; width: 330px; padding: 12px 14px; background: rgba(8,10,14,0.72); border-radius: 10px; opacity: 0; transform: translateY(-10px); transition: opacity .3s, transform .4s; z-index: 4; backdrop-filter: blur(6px); }
+.wg-dm.on { opacity: 1; transform: none; }
+.wg-dm .a { font: 700 13px/1 'Barlow Condensed'; letter-spacing: 2px; text-transform: uppercase; color: #6CB8FF; }
+.wg-dm .b { font: 600 18px/1.2 'Barlow Condensed'; margin-top: 6px; }
+.wg-count { position: absolute; right: 24px; bottom: 228px; text-align: right; opacity: 0; transition: opacity .3s; z-index: 4; }
+.wg-count.on { opacity: 1; }
+.wg-count .l { font: 700 14px/1 'Barlow Condensed'; letter-spacing: 3px; color: rgba(255,255,255,.75); }
+.wg-count .v { font: 800 28px/1 'Barlow Condensed'; margin-top: 2px; }
+
+.wg-big { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 8; opacity: 0; transition: opacity .5s; }
+.wg-big.on { opacity: 1; }
+.wg-big .h { font: italic 800 84px/1 'Barlow Condensed'; letter-spacing: 1px; text-shadow: 0 4px 24px rgba(0,0,0,.6); transform: scale(1.15); transition: transform .6s cubic-bezier(.2,.7,.2,1); }
+.wg-big.on .h { transform: none; }
+.wg-big .t { font: 700 34px/1.1 'Barlow Condensed'; margin-top: 6px; text-shadow: 0 2px 10px rgba(0,0,0,.6); }
+.wg-big .stats { margin-top: 22px; min-width: 340px; padding: 14px 22px; background: rgba(8,10,14,0.62); border-radius: 10px; }
+.wg-big .row { display: flex; justify-content: space-between; gap: 40px; font: 700 18px/1.7 'Barlow Condensed'; letter-spacing: 1px; }
+.wg-big .row span:first-child { color: rgba(255,255,255,.7); letter-spacing: 2px; }
+.wg-big .reward { margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,.12); font: 800 26px/1.2 'Barlow Condensed'; color: #FFC93C; display: flex; justify-content: space-between; }
+.wg-big .note { font: 600 15px/1.2 'Barlow Condensed'; color: rgba(255,255,255,.7); margin-top: 2px; text-align: right; }
+.wg-big .why { font: 600 26px/1.2 'Barlow Condensed'; margin-top: 10px; }
+.wg-big .choices { display: flex; gap: 14px; margin-top: 26px; pointer-events: auto; }
+.wg-big button { font: 700 20px/1 'Barlow Condensed'; letter-spacing: 2px; text-transform: uppercase; color: #fff; padding: 12px 26px; border-radius: 10px; border: 1px solid rgba(255,255,255,.25); background: rgba(8,10,14,0.62); cursor: pointer; }
+.wg-big button.sel, .wg-big button:hover { background: #FFC93C; color: #0A0C10; border-color: #FFC93C; }
+body.wg-rekt #canvas-container { filter: grayscale(.85) contrast(1.05); transition: filter .6s; }
+#canvas-container { transition: filter .8s; }
+
+.wg-gate { position: absolute; inset: 0; z-index: 2; pointer-events: auto; cursor: pointer; opacity: 0; transition: opacity .8s;
+  background: radial-gradient(70% 55% at 50% 30%, rgba(255,170,60,.16), rgba(255,170,60,0) 70%), linear-gradient(rgba(5,6,9,.5), rgba(5,6,9,.18) 45%, rgba(5,6,9,.8)), #05060900; }
+.wg-gate.on { opacity: 1; }
+.wg-gate .go { position: absolute; left: 50%; top: 66%; transform: translateX(-50%); max-width: calc(100% - 32px); padding: 10px 26px; text-align: center; font: 700 clamp(13px, 2vw, 26px)/1.25 'Barlow Condensed'; letter-spacing: clamp(1px, .4vw, 5px); text-transform: uppercase; animation: wgBlink 1.6s ease-in-out infinite; text-shadow: 0 2px 10px rgba(0,0,0,.7);
+  background: radial-gradient(closest-side, rgba(6,8,12,.55), rgba(6,8,12,0)); white-space: nowrap; }
+@media (max-width: 560px) { .wg-gate .go { font-size: 4.3vw; padding: 8px 12px; top: 60%; } .wg-gate .fine { letter-spacing: 1px; } }
+.wg-gate .fine { position: absolute; bottom: calc(var(--bar) + 2.6vh); left: 16px; right: 16px; text-align: center; font: 600 clamp(12px, 1.2vw, 15px)/1.5 'Barlow Condensed'; letter-spacing: 2px; color: rgba(255,255,255,.72); text-shadow: 0 1px 4px rgba(0,0,0,.8); }
+@keyframes wgBlink { 0%,100% { opacity: .6; } 50% { opacity: 1; } }
+`;
+
+export function createUI() {
+  if (!document.getElementById('wg-css')) { const st = document.createElement('style'); st.id = 'wg-css'; st.textContent = CSS; document.head.appendChild(st); }
+  const root = document.createElement('div'); root.id = 'wg'; document.body.appendChild(root);
+  const el = (cls, html = '', parent = root) => { const d = document.createElement('div'); d.className = cls; d.innerHTML = html; parent.appendChild(d); return d; };
+  const zkEl = el('wg-zk', `<div class="scan"></div><div class="vig"></div><div class="frm"></div>
+    <div class="hd"><span class="nm">UNKNOWN</span><small>VIDEO CALL · <span class="clock">00:07</span></small></div><div class="rec">● LIVE</div><div class="wave">${'<i></i>'.repeat(16)}</div><div class="vc">VOICE CHANGER ON</div>`);
+  const barT = el('wg-bar top'), barB = el('wg-bar bot');
+  const fadeEl = el('wg-fade');
+  const gTitle = el('wg-gtitle', `<div class="logo">WAGMI <b>CITY</b></div><div class="rule"></div><div class="tag">We're all gonna make it</div>`);
+  const titleEl = el('wg-title', `<div class="act"></div><div class="name"></div>`);
+  const placeEl = el('wg-place', `<div class="n"></div><div class="s"></div>`);
+  const capEl = el('wg-cap', `<div class="n"></div><div class="r"></div>`);
+  const line = el('wg-line', `<div class="wg-obj hide"></div><div class="wg-sub hide"></div>`);
+  const objEl = line.querySelector('.wg-obj'), subEl = line.querySelector('.wg-sub');
+  const helpEl = el('wg-help');
+  const skipEl = el('wg-skip', `<span>Hold <kbd>SPACE</kbd> to skip</span><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" stroke="rgba(255,255,255,.25)"/><circle class="p" cx="12" cy="12" r="9" stroke="#FFC93C" stroke-dasharray="56.5" stroke-dashoffset="56.5"/></svg>`);
+  const blurEl = el('wg-blur');
+  const phoneEl = el('wg-phone', `<div class="frame"><div class="screen"><div class="island"></div><div class="status"><span>5:45</span><span>5G ▮▮▮</span></div><div class="content"></div></div></div>`);
+  const callerEl = el('wg-caller', `<div class="av"></div><div><div class="n"></div><div class="s"></div></div>`);
+  const dmEl = el('wg-dm', `<div class="a"></div><div class="b"></div>`);
+  const countEl = el('wg-count', `<div class="l"></div><div class="v"></div>`);
+  const bigEl = el('wg-big');
+  const holdEl = el('wg-hold', `<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" stroke="rgba(255,255,255,.25)"/><circle class="p" cx="12" cy="12" r="9" stroke="#FFC93C" stroke-dasharray="56.5" stroke-dashoffset="56.5"/></svg><span></span>`);
+
+  const timers = new Map();
+  const later = (key, ms, fn) => { clearTimeout(timers.get(key)); timers.set(key, setTimeout(fn, ms)); };
+  const keycaps = (s) => esc(s).replace(/\[([^\]]+)\]/g, '<kbd>$1</kbd>');
+  // objective parts: strings, and { noun: 'yellow' | 'red' | 'blue' | 'green' } for the one coloured noun
+  const rich = (parts) => (Array.isArray(parts) ? parts : [parts]).map((p) => {
+    if (typeof p === 'string') return keycaps(p);
+    const [k, c] = Object.entries(p)[0]; return `<span style="color:${COLORS[c] || c}">${keycaps(k)}</span>`;
+  }).join('');
+
+  let objHtml = null, subOn = false;
+  const ui = {
+    root, COLORS,
+    cine(on) { document.body.classList.toggle('wg-cine', !!on); },
+    // (never quite black: a canvas the browser stops drawing under an opaque cover costs a long frame to bring back)
+    fade(to = 1, secs = 0.6) { fadeEl.style.transition = `opacity ${secs}s`; fadeEl.style.opacity = String(Math.min(to, 0.985)); return sleep(secs * 1000); },
+    // (now: at once, no fade: a skip mustn't leave it over the game)
+    gameTitle(on, now = false) { gTitle.classList.toggle('now', !!now); gTitle.classList.toggle('on', !!on); if (now) { void gTitle.offsetWidth; gTitle.classList.remove('now'); } },
+    bootOff() { const b = document.getElementById('wg-boot'); if (!b) return; b.classList.add('off'); setTimeout(() => b.remove(), 900); },
+    title(act, name, hold = 2.6) {
+      titleEl.querySelector('.act').textContent = act || ''; titleEl.querySelector('.name').textContent = name || '';
+      titleEl.classList.remove('out'); void titleEl.offsetWidth; titleEl.classList.add('on');
+      later('title', (0.4 + hold) * 1000, () => { titleEl.classList.add('out'); later('title2', 700, () => titleEl.classList.remove('on', 'out')); });
+    },
+    titleOff() { titleEl.classList.remove('on', 'out'); },
+    place(name, sub = '', secs = 3) {
+      placeEl.querySelector('.n').textContent = name; placeEl.querySelector('.s').textContent = sub;
+      placeEl.classList.add('on'); later('place', secs * 1000, () => placeEl.classList.remove('on'));
+    },
+    placeOff() { placeEl.classList.remove('on'); },
+    caption(name, role = '', color = '#FFFFFF', secs = 2.8) {
+      if (!name) { capEl.classList.remove('on'); return; }
+      capEl.style.setProperty('--c', color);
+      capEl.querySelector('.n').textContent = name; capEl.querySelector('.r').textContent = role;
+      capEl.classList.remove('on'); void capEl.offsetWidth; capEl.classList.add('on');
+      later('cap', secs * 1000, () => capEl.classList.remove('on'));
+    },
+    // the objective line: a subtitle takes it while someone speaks, the objective waits for the gap
+    sub(speaker, text, color = '#FFFFFF') {
+      if (!text) { subOn = false; subEl.classList.add('hide'); if (objHtml) objEl.classList.remove('hide'); return; }
+      subEl.innerHTML = (speaker ? `<b style="color:${color}">${esc(speaker.toUpperCase())}</b>` : '') + esc(text);
+      subOn = true; subEl.classList.remove('hide'); objEl.classList.add('hide');
+    },
+    objective(parts, secs = 7) {
+      if (!parts) { objHtml = null; objEl.classList.add('hide'); return; }
+      objHtml = rich(parts); objEl.innerHTML = objHtml;
+      if (!subOn) objEl.classList.remove('hide');
+      later('obj', secs * 1000, () => { objEl.classList.add('hide'); objHtml = null; });
+    },
+    help(text, secs = 7) {
+      if (!text) { helpEl.classList.remove('on'); return; }
+      helpEl.innerHTML = rich(text); helpEl.classList.add('on');
+      later('help', secs * 1000, () => helpEl.classList.remove('on'));
+    },
+    skip(k) {
+      if (k == null) { skipEl.classList.remove('on'); return; }
+      skipEl.classList.add('on'); skipEl.querySelector('circle.p').setAttribute('stroke-dashoffset', String(56.5 * (1 - Math.min(1, k))));
+    },
+    // a hold-to-act ring in the middle of the screen (k 0..1; label null hides)
+    hold(label, k = 0) {
+      if (label == null) { holdEl.classList.remove('on'); return; }
+      holdEl.querySelector('span').innerHTML = rich(label); holdEl.classList.add('on');
+      holdEl.querySelector('circle.p').setAttribute('stroke-dashoffset', String(56.5 * (1 - Math.min(1, k))));
+    },
+    caller(name, color = '#6CB8FF', status = 'On call') {
+      if (!name) { callerEl.classList.remove('on'); return; }
+      const av = callerEl.querySelector('.av'); av.textContent = name[0]; av.style.background = color;
+      callerEl.querySelector('.n').textContent = name.toUpperCase(); callerEl.querySelector('.s').textContent = status;
+      callerEl.classList.add('on');
+    },
+    dm(from, text, secs = 8) {
+      if (!from) { dmEl.classList.remove('on'); return; }
+      dmEl.querySelector('.a').textContent = `New message · ${from}`; dmEl.querySelector('.b').textContent = text;
+      dmEl.classList.add('on'); later('dm', secs * 1000, () => dmEl.classList.remove('on'));
+    },
+    counter(label, value) {
+      if (label == null) { countEl.classList.remove('on'); return; }
+      countEl.querySelector('.l').textContent = label; countEl.querySelector('.v').textContent = value; countEl.classList.add('on');
+    },
+    passed({ title = '', stats = [], reward = '', note = '' } = {}, secs = 6) {
+      bigEl.innerHTML = `<div class="h" style="color:#FFC93C">MISSION PASSED</div><div class="t">${esc(title)}</div>
+        <div class="stats">${stats.map(([a, b]) => `<div class="row"><span>${esc(a)}</span><span>${esc(b)}</span></div>`).join('')}
+        ${reward ? `<div class="reward"><span>FOLLOWERS</span><span>${esc(reward)}</span></div>` : ''}${note ? `<div class="note">${esc(note)}</div>` : ''}</div>`;
+      bigEl.classList.add('on'); bigEl.style.pointerEvents = 'none';
+      return sleep(secs * 1000).then(() => bigEl.classList.remove('on'));
+    },
+    failed(reason, { skip = false } = {}) {
+      const opts = ['retry', 'quit', ...(skip ? ['skip'] : [])];
+      bigEl.innerHTML = `<div class="h" style="color:#EF4444;font-size:72px">MISSION FAILED</div><div class="why">${esc(reason)}</div>
+        <div class="choices">${opts.map((o, i) => `<button data-o="${o}" class="${i === 0 ? 'sel' : ''}">${o}</button>`).join('')}</div>`;
+      bigEl.classList.add('on'); bigEl.style.pointerEvents = 'auto';
+      return new Promise((res) => {
+        let sel = 0;
+        const btns = [...bigEl.querySelectorAll('button')];
+        const done = (o) => { removeEventListener('keydown', onKey, true); bigEl.classList.remove('on'); bigEl.style.pointerEvents = 'none'; res(o); };
+        const onKey = (e) => {
+          if (['ArrowLeft', 'ArrowRight', 'KeyA', 'KeyD'].includes(e.code)) { sel = (sel + (/Left|KeyA/.test(e.code) ? -1 : 1) + btns.length) % btns.length; btns.forEach((b, i) => b.classList.toggle('sel', i === sel)); }
+          else if (e.code === 'Enter' || e.code === 'Space') done(opts[sel]);
+          e.stopImmediatePropagation(); e.preventDefault();
+        };
+        addEventListener('keydown', onKey, true);
+        btns.forEach((b) => b.addEventListener('click', () => done(b.dataset.o)));
+      });
+    },
+    rekt(on = true) {
+      document.body.classList.toggle('wg-rekt', !!on);
+      if (!on) { bigEl.classList.remove('on'); return; }
+      bigEl.innerHTML = `<div class="h" style="color:#EF4444;font-size:96px">REKT</div>`; bigEl.classList.add('on');
+    },
+    // the start gate: the logo in the sky over the live city under a veil, 'Click or press any key to start'. It goes up
+    // as soon as when() is true (polled on a timer: no frame needed) and a key or a click anywhere starts; the logo
+    // stays up into the first shot (gameTitle(false) takes it down)
+    gate({ fine = '', when = () => true, onStart = null } = {}) {
+      document.body.classList.add('wg-gating');
+      const touch = matchMedia('(pointer: coarse)').matches;
+      const g = el('wg-gate', `<div class="go">${touch ? 'Tap to start' : 'Click or press any key to start'}</div><div class="fine">${esc(fine)}</div>`);
+      let shown = false;
+      const show = () => { shown = true; g.classList.add('on'); gTitle.classList.add('on'); ui.bootOff(); };
+      if (when()) show(); else { const poll = setInterval(() => { if (when()) { clearInterval(poll); show(); } }, 50); }
+      return new Promise((res) => {
+        const go = (e) => {
+          if (!shown) return;
+          if (e.type === 'keydown' && (e.metaKey || e.ctrlKey || e.altKey || e.repeat)) return;
+          e.stopImmediatePropagation(); if (e.type === 'keydown') e.preventDefault();
+          removeEventListener('keydown', go, true); removeEventListener('pointerdown', go, true);
+          try { onStart?.(); } catch (err) { console.warn(err); }
+          g.classList.remove('on'); document.body.classList.remove('wg-gating'); setTimeout(() => g.remove(), 900);
+          res();
+        };
+        addEventListener('keydown', go, true); addEventListener('pointerdown', go, true);
+      });
+    },
+    story(on) { document.body.classList.toggle('wg-story', !!on); },
+    zk(on, name = 'UNKNOWN') { zkEl.classList.toggle('on', !!on); if (on) { zkEl.querySelector('.nm').textContent = name; if (!zkT) zkT = performance.now(); } },
+    zkTalk(level) {
+      if (!zkEl.classList.contains('on')) return;
+      for (const b of zkWave.children) b.style.transform = `scaleY(${(0.06 + 0.9 * Math.random() * level * (0.4 + 0.6 * Math.random())).toFixed(3)})`;
+      zkClock.textContent = `00:${String(7 + Math.floor((performance.now() - zkT) / 1000)).padStart(2, '0')}`;
+    },
+    phone: null,
+  };
+
+  /* ---------------------------------------------------------- the phone -- */
+  const content = phoneEl.querySelector('.content');
+  let wave = null, waveT = 0;
+  const ZK_SVG = `<svg class="zk" viewBox="0 0 90 192" preserveAspectRatio="xMidYMid slice">
+    <defs>
+      <radialGradient id="zkRoom" cx="50%" cy="34%" r="70%"><stop offset="0" stop-color="#2A1838"/><stop offset=".55" stop-color="#0C0812"/><stop offset="1" stop-color="#030205"/></radialGradient>
+      <radialGradient id="zkRing" cx="50%" cy="50%" r="50%"><stop offset=".78" stop-color="#fff" stop-opacity="0"/><stop offset=".86" stop-color="#F4F0FF" stop-opacity=".95"/><stop offset=".94" stop-color="#C9B8FF" stop-opacity=".25"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></radialGradient>
+      <linearGradient id="zkVisor" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#F5F7FA"/><stop offset=".35" stop-color="#8A93A3"/><stop offset=".5" stop-color="#E9EEF5"/><stop offset=".7" stop-color="#4C5463"/><stop offset="1" stop-color="#C7CFDB"/></linearGradient>
+      <linearGradient id="zkSheen" x1="0" x2="1"><stop offset="0" stop-color="#fff" stop-opacity="0"/><stop offset=".5" stop-color="#fff" stop-opacity=".85"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient>
+      <clipPath id="zkVclip"><path d="M30 70 Q45 63 60 70 L59 81 Q45 86 31 81 Z"/></clipPath>
+    </defs>
+    <rect width="90" height="192" fill="url(#zkRoom)"/>
+    <circle cx="45" cy="74" r="36" fill="url(#zkRing)"/>
+    <path d="M10 192 L12 150 Q14 128 34 122 L40 118 L50 118 L56 122 Q76 128 78 150 L80 192 Z" fill="#06060A"/>
+    <path d="M34 122 Q22 128 18 150 M56 122 Q68 128 72 150" stroke="#B6FF3B" stroke-width="1.1" fill="none" opacity=".9"/>
+    <path d="M40 118 L45 150 L50 118" stroke="#B6FF3B" stroke-width=".8" fill="none" opacity=".7"/>
+    <circle cx="45" cy="138" r="4.2" fill="none" stroke="#E8C25A" stroke-width="1.6"/>
+    <path d="M37 104 L38 118 L52 118 L53 104 Z" fill="#050508"/>
+    <ellipse cx="45" cy="78" rx="17" ry="22" fill="#08080C"/>
+    <path d="M28 70 Q45 52 62 70 Q63 60 58 54 Q45 44 32 54 Q27 60 28 70 Z" fill="#0B0B10"/>
+    <path d="M30 70 Q45 63 60 70 L59 81 Q45 86 31 81 Z" fill="url(#zkVisor)"/>
+    <g clip-path="url(#zkVclip)"><rect class="sheen" x="10" y="60" width="14" height="30" fill="url(#zkSheen)" transform="skewX(-20)"><animate attributeName="x" values="10;70;10" dur="3.2s" repeatCount="indefinite"/></rect>
+      <ellipse cx="38" cy="74" rx="4" ry="2.2" fill="none" stroke="#fff" stroke-width=".7" opacity=".85"/><ellipse cx="52" cy="74" rx="4" ry="2.2" fill="none" stroke="#fff" stroke-width=".7" opacity=".85"/></g>
+  </svg>`;
+  const zkWave = zkEl.querySelector('.wave'), zkClock = zkEl.querySelector('.clock');
+  let zkT = 0;
+  function setWave(level) { if (!wave) return; for (const b of wave.children) b.style.height = `${3 + Math.random() * 28 * level}px`; }
+  ui.phone = {
+    el: phoneEl,
+    show(screen, d = {}) {
+      phoneEl.classList.add('on'); blurEl.classList.toggle('on', d.blur !== false);
+      wave = null;
+      if (screen === 'feed') {
+        content.innerHTML = `<div class="wg-ph-feed"><div class="hd">@quant</div><div class="sub">Comments · ${esc(d.count || '18.4K')}</div>
+          ${(d.items || []).map(([h, t, c, hot]) => `<div class="c${hot ? ' hot' : ''}"><div class="av" style="background:${c}">${esc(h[1].toUpperCase())}</div><div><div class="h">${esc(h)}</div><div class="t">${esc(t)}</div></div></div>`).join('')}</div>`;
+        const cs = [...content.querySelectorAll('.c')];
+        cs.forEach((c, i) => setTimeout(() => c.classList.add('on'), 150 + i * (d.every || 420)));
+      } else if (screen === 'incoming') {
+        content.innerHTML = `<div class="wg-ph-call"><div class="pic">?</div><div class="who">${esc(d.name || 'UNKNOWN')}</div><div class="what">${esc(d.what || 'Video call…')}</div>
+          <div class="btns"><div class="b no">✕</div><div class="b yes">✓</div></div></div>`;
+      } else if (screen === 'video') {
+        content.innerHTML = `<div class="wg-ph-video glitch">${ZK_SVG}<div class="scan"></div><div class="label">${esc(d.name || 'UNKNOWN')}<small class="clock">00:00</small></div>
+          <div class="wave">${'<i></i>'.repeat(22)}</div><div class="vc">VOICE CHANGER ON</div><div class="end"></div></div>`;
+        wave = content.querySelector('.wave'); waveT = performance.now();
+      } else if (screen === 'ended') {
+        content.innerHTML = `<div class="wg-ph-ended">CALL ENDED</div>`;
+      } else if (screen === 'burner') {
+        content.innerHTML = `<div class="wg-ph-burner"><div class="h">1 NEW MESSAGE · UNKNOWN</div><div class="m">${esc(d.text || '')}</div></div>`;
+      } else if (screen === 'moontag') {
+        content.innerHTML = `<div class="wg-ph-tag"><svg class="map" viewBox="0 0 90 192" preserveAspectRatio="xMidYMid slice">
+          <rect width="90" height="192" fill="#0E1626"/>
+          ${[20, 46, 72].map((x) => `<rect x="${x}" y="0" width="6" height="192" fill="#1D2A40"/>`).join('')}
+          ${[30, 62, 94, 126, 158].map((y) => `<rect x="0" y="${y}" width="90" height="4" fill="#1D2A40"/>`).join('')}
+          <path d="M49 40 L49 150" stroke="#2F7FD8" stroke-width="2" stroke-dasharray="3 3" opacity=".8"/>
+          <circle class="paw" cx="49" cy="60" r="6" fill="#2F7FD8" stroke="#fff" stroke-width="1.5"><animate attributeName="cy" values="60;132" dur="5s" fill="freeze"/></circle>
+          <text x="54" y="182" font-family="Barlow Condensed" font-weight="700" font-size="7" fill="#7C8AA5">5TH AVE</text></svg>
+          <div class="note"><div class="ic">🐾</div><div><div class="a">MoonTag · now</div><div class="b">${esc(d.text || 'Moon is moving · 5th Ave')}</div></div></div></div>`;
+        setTimeout(() => content.querySelector('.note')?.classList.add('on'), 250);
+      }
+    },
+    press() { content.querySelector('.b.yes')?.classList.add('press'); },
+    talk(level) { setWave(level); const c = content.querySelector('.clock'); if (c) { const s = Math.floor((performance.now() - waveT) / 1000); c.textContent = `00:${String(s).padStart(2, '0')}`; } },
+    hide() { phoneEl.classList.remove('on'); blurEl.classList.remove('on'); },
+  };
+  return ui;
+}

@@ -537,6 +537,37 @@ function createTrafficSystem(scene, sidewalks, obstacles) {
 
   // Edges and signalized intersections around the focus, to place vehicles and pedestrians on
   const nearEdges = [];
+  // (WAGMI City: hold zones, rects { minX, maxX, minZ, maxZ } a cutscene keeps clear: nothing is placed in one, no
+  // car turns onto a road through one, a car or pedestrian found in one is put somewhere else out of view, and
+  // pedestrians turn back at its edge. hold([...]) sets them, hold([]) lets the traffic back)
+  const holds = [];
+  let heldEdges = new Set();
+  const held = (x, z, m = 0) => {
+    for (const r of holds) if (x > r.minX - m && x < r.maxX + m && z > r.minZ - m && z < r.maxZ + m) return true;
+    return false;
+  };
+  function hold(rects = []) {
+    holds.length = 0;
+    holds.push(...rects);
+    heldEdges = new Set();
+    if (!holds.length) return;
+    // (a road is held when any of its roadway, curb to curb, is in one)
+    for (const e of edges) {
+      const half = e.half || 3;
+      test: for (let s = 0; s <= e.len + 2; s += 3) {
+        const t = Math.min(s, e.len);
+        for (const lat of [-half, 0, half]) {
+          if (held(e.sx + e.dx * t + e.rx * lat, e.sz + e.dz * t + e.rz * lat, 0.5)) { heldEdges.add(e); break test; }
+        }
+      }
+    }
+    // (a car not yet committed to its turn onto a held road picks another its lane allows)
+    for (const v of vehicles) {
+      if (!v.edge || v.conn || v.claimed || v.commit || !v.move || !heldEdges.has(v.move.to)) continue;
+      const m = chooseMove(v, true);
+      if (m && m.out[v.lane] >= 0) v.move = m;
+    }
+  }
   const nearSignals = [];
   let nearX = Infinity;
   let nearZ = Infinity;
@@ -648,6 +679,7 @@ function createTrafficSystem(scene, sidewalks, obstacles) {
         w *= 0.02; // too little road left to change lanes for it
       }
       if (toFocus && m.to.dx * (focusX - v.x) + m.to.dz * (focusZ - v.z) > 0) w *= 3;
+      if (heldEdges.size && heldEdges.has(m.to)) w *= 1e-6; // (WAGMI City: a hold zone; only when there is no other way)
       weights[k] = w;
       total += w;
     }
@@ -1334,7 +1366,7 @@ function createTrafficSystem(scene, sidewalks, obstacles) {
   function spawnVehicle(v, rMin, rMax, hidden) {
     for (let attempt = 0; attempt < 12; attempt++) {
       const e = nearEdges[Math.floor(Math.random() * nearEdges.length)];
-      if (!e || (v.bus && e.axis !== 'ave') || e.len < 2 * v.half + 10) continue;
+      if (!e || (v.bus && e.axis !== 'ave') || e.len < 2 * v.half + 10 || heldEdges.has(e)) continue;
       const lane = Math.floor(Math.random() * e.lanes.length);
       const s = v.half + 5 + Math.random() * (e.len - 2 * v.half - 10);
       const x = e.sx + e.dx * s + e.rx * e.lanes[lane];
@@ -1434,6 +1466,7 @@ function createTrafficSystem(scene, sidewalks, obstacles) {
       const z = track.az + track.uz * t;
       const d = Math.hypot(x - focusX, z - focusZ);
       if (d < rMin || d > rMax || (hidden && visible(x, z, 2))) continue;
+      if (holds.length && held(x, z, 1)) continue; // (WAGMI City: a hold zone)
       if (crosswalk && track.node.curb.some((q) => Math.hypot(q.x - x, q.z - z) < QUEUE_GAP)) continue;
       Object.assign(p, track);
       p.t = t;
@@ -1498,7 +1531,13 @@ function createTrafficSystem(scene, sidewalks, obstacles) {
       t = p.t;
       p.v = 0;
     }
-    if (p.dir > 0 ? t >= p.len : t <= 0) {
+    // (WAGMI City: ...or at the edge of a hold zone)
+    if (holds.length && held(p.ax + p.ux * t, p.az + p.uz * t, 0.5) && !held(p.x, p.z, 0.5)) {
+      t = p.t;
+      p.dir = -p.dir;
+      p.v = 0;
+      p.pause = TURN_TIME;
+    } else if (p.dir > 0 ? t >= p.len : t <= 0) {
       t = p.dir > 0 ? p.len : 0;
       p.dir = -p.dir;
       p.v = 0;
@@ -1867,6 +1906,8 @@ function createTrafficSystem(scene, sidewalks, obstacles) {
       const d = v.edge ? Math.hypot(v.x - focusX, v.z - focusZ) : Infinity;
       if (!v.edge || (jump && d > NEAR_RADIUS)) {
         spawnVehicle(v, 0, NEAR_RADIUS, false);
+      } else if (heldEdges.size && (heldEdges.has(v.edge) || held(v.x, v.z, v.half + 1))) {
+        if (!spawnVehicle(v, 120, NEAR_RADIUS, true)) spawnVehicle(v, 120, 900, false); // (WAGMI City: a hold zone)
       } else if (budget > 0 && (d > 1200 || (d > VEHICLE_RADIUS && !visible(v.x, v.z, v.half + 2))) && spawnVehicle(v, 100, 300, true)) {
         budget--;
       }
@@ -1941,6 +1982,8 @@ function createTrafficSystem(scene, sidewalks, obstacles) {
       const d = p.placed ? Math.hypot(p.x - focusX, p.z - focusZ) : Infinity;
       if (!p.placed || (jump && d > NEAR_RADIUS)) {
         spawnPed(p, 0, NEAR_RADIUS, false);
+      } else if (holds.length && held(p.x, p.z, 0.5)) {
+        if (!spawnPed(p, 60, NEAR_RADIUS, true)) spawnPed(p, 60, 900, false); // (WAGMI City: a hold zone)
       } else if (pedBudget > 0 && (d > 1000 || (d > PED_RADIUS && !visible(p.x, p.z, 2))) && spawnPed(p, 60, 260, true)) {
         pedBudget--;
       }
@@ -1965,7 +2008,8 @@ function createTrafficSystem(scene, sidewalks, obstacles) {
     cars,
     buses,
     peds,
-    network
+    network,
+    hold // (WAGMI City)
   };
 }
 

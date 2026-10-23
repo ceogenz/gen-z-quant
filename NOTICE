@@ -1,0 +1,34 @@
+WAGMI City: notices and credits
+================================
+
+Slop New York
+-------------
+The city this game is built on is Slop New York by Mr.doob, under the MIT License (see LICENSE).
+
+
+Spiderbench (street combat)
+---------------------------
+Copyright (c) 2026 Shikhar. Used with the author's permission. These parts are NOT covered by
+the MIT License in LICENSE; they remain under their author's terms.
+
+  - wagmi/combat/: the street fight's design and code are ported from Spiderbench's combat:
+    the enemy behaviour and the director that hands one man at a time the right to attack, the
+    telegraphed swings, hit reactions with root motion, the freeflow strike and dash, the dodge
+    and the counter, hit-stop and slow motion, the combat camera, the particle effects (ported
+    to three.js TSL node materials), and the overlays' design.
+  - assets/characters/thug.glb: Spiderbench's thug (mesh, rig and its own brawler clips), with
+    the same rig's walk, jog, run, sprint, guard, hit-react and turn loops, re-dressed in new
+    colours as the Degens (the gun and webbed clips are not included).
+  - The freeflow clips in Quant's model (ffJab, ffCross, ffHook, ffKick, ffRiser, ffLeap,
+    ffDodge, ffDodgeSide, ffLaunch, ffAirHold, ffAir1, ffAir2, ffAirSlam, ffSlamLand,
+    ffFinisher) were retargeted from Spiderbench's clips.
+
+
+Props (street fight)
+--------------------
+  - assets/props/trash-cans.glb: "Metal Trash Can" by GurJas Studios, from Poly Haven
+    (https://polyhaven.com/a/metal_trash_can), CC0-1.0 (https://polyhaven.com/license). Taken from
+    the GameMog asset library's copy (triangles cut from 13960 to 5994, transforms baked), re-packed
+    as a GLB with its textures reduced to 512 px. Both cans (galvanised, rusted) and their lids.
+  - The bats and bottles are made in code (wagmi/combat/items.js); the fight's sounds are made in
+    code with WebAudio (wagmi/combat/sfx.js). No recorded audio is used.

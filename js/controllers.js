@@ -135,7 +135,7 @@ class ThirdPersonControllerManager {
       backward: ['KeyS', 'ArrowDown'],
       left: ['KeyA', 'ArrowLeft'],
       right: ['KeyD', 'ArrowRight'],
-      up: ['Space', 'KeyE'],
+      up: ['Space'], // (WAGMI City: E is the fight's grab now, no longer a second jump key)
       down: ['KeyQ', 'KeyC'],
       boost: ['ShiftLeft', 'ShiftRight']
     };
@@ -979,6 +979,9 @@ class ThirdPersonControllerManager {
 
   updatePerson(dt) {
     const p = this.entities.person;
+    // (WAGMI City: in a fight, or in the middle of a move, the fight moves him itself: footwork facing his man,
+    // camera-relative, lunges, rolls; with the same collision and ground as below. True when it did)
+    if (p.control && p.control(dt, this.keys, this)) return;
     const maxWalk = this.keys.boost ? 8.2 : 4.4;
     const turnRate = 2.6;
 
