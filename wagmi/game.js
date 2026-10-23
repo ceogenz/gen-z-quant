@@ -123,6 +123,8 @@ const WAGMI = (window.WAGMI = { app, person, car });
   // where its box is clear of the buildings, the street's things and every other car (slid along the lane to find room);
   // true if it moved it. Also on WAGMI.recoverCar.key (X), any time in the car. On foot it puts the parked car back.
   const TS = app.trafficSystem, HW = app.highwayTraffic;
+  // (the highways' cars stand in the follow camera's way too, as the city's do: js/cameras.js highwayBoxes)
+  if (HW?.near) app.cameraSystem.highway = HW;
   const wrapA = (a) => Math.atan2(Math.sin(a), Math.cos(a));
   function lanesNear(x, z, R) {
     const out = [];
@@ -409,14 +411,14 @@ const ground = (p) => cm.getGroundHeight(p.x, p.z, 'person');
 const near = () => Math.hypot(person.position.x - car.position.x, person.position.z - car.position.z) < 4.2 * (rs.scale || 1);
 // (a spot he can't stand on: in a building)
 const walled = (p) => { _v.set(p.x, ground(p), p.z); cm.resolveHorizontalCollision(_v, 0.35, _v.y + 1.0); return hdist(_v, p) > 0.02; };
-const sound = (name, vol = 1, at = null) => { const p = at || toWorld((car.body?.hx ?? 1) + 0.1, 0.1, _w); WAGMI.audio?.play?.(name, { pos: [p.x, p.y + 0.8, p.z], vol }); };
+const sound = (name, vol = 1, at = null) => { const p = at || toWorld(((car.body?.hx ?? 1) + 0.1) * (door.side === 'R' ? -1 : 1), 0.1, _w); WAGMI.audio?.play?.(name, { pos: [p.x, p.y + 0.8, p.z], vol }); };
 // (jobs for later, seconds from now; a new move clears them)
 let jobs = [];
 const later = (secs, fn) => jobs.push({ t: secs, fn });
 
-// the driver's door: p its way up (0 to 1, eased on the hinge) going toward want; shut, it thunks (slam: a slam), and
-// starts the engine if he just got in
-const door = { p: 0, want: 0, rate: 2, slam: false };
+// the door he uses (side: the driver's, L; the passenger's, R, when he gets out that way): p its way up (0 to 1, eased
+// on the hinge) going toward want; shut, it thunks (slam: a slam), and starts the engine if he just got in
+const door = { p: 0, want: 0, rate: 2, slam: false, side: 'L' };
 function doorTo(want, secs, slam = false) {
   door.rate = 1 / secs; door.slam = slam;
   if (door.want === want) return;
@@ -426,7 +428,13 @@ function doorStep(dt) {
   if (door.p === door.want) return;
   door.p += Math.sign(door.want - door.p) * Math.min(Math.abs(door.want - door.p), dt * door.rate);
   if (door.p === 0) { sound(door.slam ? 'doorClose' : 'doorThunk', 1); if (ride.engine) { ride.engine = false; sound('engineStart', 0.9); } }
-  rs.setDoor('L', door.p < 0.5 ? 4 * door.p ** 3 : 1 - (-2 * door.p + 2) ** 3 / 2);
+  rs.setDoor(door.side, door.p < 0.5 ? 4 * door.p ** 3 : 1 - (-2 * door.p + 2) ** 3 / 2);
+}
+// (the other door: the one that was up shut at once)
+function doorSide(s) {
+  if (door.side === s) return;
+  rs.setDoor(door.side, 0);
+  Object.assign(door, { side: s, p: 0, want: 0 });
 }
 
 // the camera: over T s from where it was to wherever the city's camera wants it now (it follows the mode); where it was
@@ -487,6 +495,7 @@ function blocked(p) {
 const IN_MAX = 1.5;
 function getIn(quick = false) {
   if (ride.phase) return;
+  doorSide('L');
   if (quick || walled(toWorld(drv.door[0], drv.door[1]))) return inQuick();
   jobs = [];
   const path = route(person.position);
@@ -537,7 +546,7 @@ function startIn() {
   doorTo(1, 0.4);
 }
 function inQuick() {
-  jobs = []; ride.phase = null; ride.k = 1;
+  jobs = []; ride.phase = null; ride.k = 1; doorSide('L');
   Q.reach('R', null, 0);
   person.inVehicle = true; person.speed = 0; person.mesh.visible = false;
   app.selectMode('car'); car.speed = 0;
@@ -558,7 +567,7 @@ function startOut() {
   const d = toWorld(drv.door[0], drv.door[1]);
   car.halt = 0; car.speed = 0;
   if (walled(d)) return outQuick();
-  camFrom(1.1);
+  doorSide('L'); camFrom(1.1);
   person.position.set(d.x, ground(d), d.z); person.heading = car.heading; person.speed = 0; person.verticalVel = 0;
   person.inVehicle = false; person.mesh.visible = true;
   app.selectMode('person');
@@ -566,23 +575,27 @@ function startOut() {
   doorTo(1, 0.5);
 }
 function finishOut() { if (drv.attached) drv.detach(person.mesh); ride.phase = null; ride.k = 1; doorTo(0, 0.5); }
-// (the old way: out at the driver's door at once, 1.75 m off the car's middle; the door flung up and slammed)
+// (the old way: out at the driver's door at once, 1.75 m off the car's middle; the door flung up and slammed. With that
+// side against a wall or a post: out of the passenger's, the view swung out off the car's flank for a beat, so its body
+// doesn't fill the frame)
 function outQuick() {
   jobs = []; ride.phase = null; ride.k = 1; car.halt = 0;
-  const h = car.heading, side = 1.75;
-  person.position.set(car.position.x + Math.cos(h) * side, car.position.y, car.position.z - Math.sin(h) * side);
+  const h = car.heading, side = 1.75, s = blocked(toWorld(side, 0, _w)) && !blocked(toWorld(-side, 0, _w)) ? -1 : 1;
+  doorSide(s > 0 ? 'L' : 'R');
+  person.position.set(car.position.x + Math.cos(h) * side * s, car.position.y, car.position.z - Math.sin(h) * side * s);
   person.position.y = ground(person.position);
   person.heading = h; person.inVehicle = false; person.mesh.visible = true; person.verticalVel = 0;
   car.speed = 0;
   if (drv.attached) drv.detach(person.mesh);
   app.selectMode('person');
+  if (s < 0) { cs.orbitYawOffset = 0.35; cs.userOrbitTimer = 1.2; }
   door.p = Math.max(door.p, 0.4); doorTo(1, 0.15); later(0.9, () => doorTo(0, 0.4, true));
 }
 // the dive: the door flung up while he braces in his seat (LAUNCH s), then out of it with the car's way on him, a roll
 // on the road, up on his feet; the car runs on
 const LAUNCH = 0.12;
 function bail() {
-  jobs = [];
+  jobs = []; doorSide('L');
   const seat = toWorld(rs.seat.hip[0], rs.seat.hip[2], _w); person.position.set(seat.x, ground(seat), seat.z);
   camFrom(0.9, person.position);
   person.inVehicle = false; person.speed = 0; person.verticalVel = 0;

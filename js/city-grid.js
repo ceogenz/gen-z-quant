@@ -2127,13 +2127,18 @@ function buildCityGrid(scene) {
 
   // Perimeter of a small park: hex-paver slab flush with the sidewalks, granite coping & iron fence set back from
   // the curb (gates where the walks come out), and a row of big London planes & lampposts along the outer sidewalk.
-  // pk.clipToShore: the slab, fence and tree row keep to the island's asphalt deck where the shore cuts a corner off
+  // pk.clipToShore: the slab, fence and tree row keep to the island's asphalt deck where the shore cuts a corner off.
+  // (WAGMI City) pk.poly: the square's own curb outline (convex), for one whose streets run slanted to the grid: the
+  // slab, fence, tree row and lawns keep inside it, so the streets round it stay streets (the walks and the fountain
+  // stay where the bounds put them)
   function buildSmallPark(pk) {
     const minX = pk.x - pk.w * 0.5;
     const maxX = pk.x + pk.w * 0.5;
     const minZ = pk.z - pk.d * 0.5;
     const maxZ = pk.z + pk.d * 0.5;
-    const slab = pk.clipToShore ? clipPolygonToConvex(MANHATTAN_COASTLINE, rectPolygon(minX, maxX, minZ, maxZ)) : rectPolygon(minX, maxX, minZ, maxZ);
+    const rect = rectPolygon(minX, maxX, minZ, maxZ);
+    const shaped = !!(pk.clipToShore || pk.poly);
+    const slab = pk.poly ? clipPolygonToConvex(pk.poly, rect) : pk.clipToShore ? clipPolygonToConvex(MANHATTAN_COASTLINE, rect) : rect;
     addPavedPlaza(slab, 0, PARK_Y);
     addFootprint(pk.x, pk.z, pk.w, pk.d);
     const fi = 2.6; // outer sidewalk width
@@ -2142,20 +2147,43 @@ function buildCityGrid(scene) {
     const fMinZ = minZ + fi;
     const fMaxZ = maxZ - fi;
     const inset = fi + 3.0;
+    const fenceLine = shaped ? offsetConvexPolygon(slab, -fi) : rectPolygon(fMinX, fMaxX, fMinZ, fMaxZ);
     const gates = [...(pk.gates ?? [])];
     for (const c of pk.cells) {
       const cell = { minX: minX + inset, maxX: maxX - inset, minZ: minZ + inset, maxZ: maxZ - inset - (pk.southPlaza ?? 0), ...c };
+      if (pk.poly) {
+        // (the lawns inside the outline; the hub and the walks toward the bounds' corners, as for a rectangle)
+        const cx = (cell.minX + cell.maxX) * 0.5;
+        const cz = (cell.minZ + cell.maxZ) * 0.5;
+        Object.assign(cell, { poly: offsetConvexPolygon(slab, -inset), hubX: cx, hubZ: cz, rays: rectPolygon(cell.minX, cell.maxX, cell.minZ, cell.maxZ).map((p) => Math.atan2(p.z - cz, p.x - cx)) });
+      }
       const { hx, hz, rays } = buildParkCell(cell, pk.speciesMix);
       for (const a of rays) {
         const dx = Math.cos(a);
         const dz = Math.sin(a);
-        const tx = dx > 1e-6 ? (fMaxX - hx) / dx : (dx < -1e-6 ? (fMinX - hx) / dx : Infinity);
-        const tz = dz > 1e-6 ? (fMaxZ - hz) / dz : (dz < -1e-6 ? (fMinZ - hz) / dz : Infinity);
-        const t = Math.min(tx, tz);
-        gates.push({ x: hx + dx * t, z: hz + dz * t });
+        let t = Infinity;
+        if (pk.poly) {
+          // (where the walk meets the fence line)
+          for (let i = 0; i < fenceLine.length; i++) {
+            const p = fenceLine[i];
+            const q = fenceLine[(i + 1) % fenceLine.length];
+            const ex = q.x - p.x;
+            const ez = q.z - p.z;
+            const den = dx * ez - dz * ex;
+            if (Math.abs(den) < 1e-9) continue;
+            const s = ((p.x - hx) * ez - (p.z - hz) * ex) / den;
+            const u = ((p.x - hx) * dz - (p.z - hz) * dx) / den;
+            if (s > 0 && u >= -1e-6 && u <= 1 + 1e-6) t = Math.min(t, s);
+          }
+        } else {
+          const tx = dx > 1e-6 ? (fMaxX - hx) / dx : (dx < -1e-6 ? (fMinX - hx) / dx : Infinity);
+          const tz = dz > 1e-6 ? (fMaxZ - hz) / dz : (dz < -1e-6 ? (fMinZ - hz) / dz : Infinity);
+          t = Math.min(tx, tz);
+        }
+        if (t < Infinity) gates.push({ x: hx + dx * t, z: hz + dz * t });
       }
     }
-    const fenceSegs = polygonFenceSegments(pk.clipToShore ? offsetConvexPolygon(slab, -fi) : rectPolygon(fMinX, fMaxX, fMinZ, fMaxZ), gates, 2.3)
+    const fenceSegs = polygonFenceSegments(fenceLine, gates, 2.3)
       .filter(([, z1, , z2]) => !(pk.openSouth && z1 > fMaxZ - 0.1 && z2 > fMaxZ - 0.1));
     for (const [x1, z1, x2, z2] of fenceSegs) {
       const len = Math.hypot(x2 - x1, z2 - z1);
@@ -2164,7 +2192,7 @@ function buildCityGrid(scene) {
     parkFenceGeos.push(buildFenceStripGeometry(fenceSegs, PARK_Y + 0.32, 0.95));
 
     // London planes & lampposts lining the perimeter sidewalk (kept clear of the corners & gates)
-    const row = pk.clipToShore ? offsetConvexPolygon(slab, -1.3) : rectPolygon(minX + 1.3, maxX - 1.3, minZ + 1.3, maxZ - 1.3);
+    const row = shaped ? offsetConvexPolygon(slab, -1.3) : rectPolygon(minX + 1.3, maxX - 1.3, minZ + 1.3, maxZ - 1.3);
     for (let i = 0; i < row.length; i++) {
       const a = row[i];
       const b = row[(i + 1) % row.length];
@@ -2196,6 +2224,19 @@ function buildCityGrid(scene) {
   const smallParks = {};
   const wsq = parkRect('Washington Square Park');
   const x5 = window.NYC.avenueX('5');
+  // (WAGMI City) Washington Square's curbs run slanted to the grid (its south side ~20 m lower at the east end than the
+  // west, its east and west sides leaning ~10 m): the park keeps to its own curb (the outline's convex hull) on the
+  // south, east and west, so Washington Sq S, E and W stay streets; its north side stays on the bounds' straight edge,
+  // with the Arch and the rally's set on it (the north-east corner squared off to match)
+  if (wsq) {
+    const pts = [...wsq.block.poly, { x: wsq.block.maxX, z: wsq.block.minZ }].sort((p, q) => p.x - q.x || p.z - q.z);
+    const turn = (o, p, q) => (p.x - o.x) * (q.z - o.z) - (p.z - o.z) * (q.x - o.x);
+    const lower = [];
+    const upper = [];
+    for (const p of pts) { while (lower.length > 1 && turn(lower[lower.length - 2], lower[lower.length - 1], p) <= 0) lower.pop(); lower.push(p); }
+    for (const p of pts.slice().reverse()) { while (upper.length > 1 && turn(upper[upper.length - 2], upper[upper.length - 1], p) <= 0) upper.pop(); upper.push(p); }
+    wsq.poly = lower.slice(0, -1).concat(upper.slice(0, -1));
+  }
   for (const [key, def] of Object.entries({
     // diagonal & N-S walks, oval fountain
     madison: parkRect('Madison Square Park', { speciesMix: [0.7, 0.1], cells: [{ extraRays: [-QUARTER, QUARTER], hubR: 6, fountain: 4.2 }] }),

@@ -8,7 +8,9 @@
 // the rev limiter's bounce (wheelspin against a wall, flat out in reverse), and an idle burble at rest.
 // Load is heard as level and brightness: on the throttle the loops play open and driven, off it they drop back, darker.
 // Until the loops arrive (or if they can't), a plain synthesized note follows the same gearbox.
-// createSupercar(M, out, { voice }) -> { update(dt, s) -> state, ready, stop(), state }
+// createSupercar(M, out, { voice }) -> { update(dt, s) -> state, ready, stop(), rev(delay), state }
+//   s.mute: no pops or crackle (it is fading out, the car going ALL ELECTRIC); rev(delay): the engine catching, a blip
+//   of the throttle after delay s (switching back from electric). Made at speed, it starts in the gear for that speed.
 //   voice 'v8' (the only one now: the owner picked the V8 all the way up over a V8 with a V10's shriek on top)
 
 export const LOOPS_V8 = [
@@ -66,10 +68,11 @@ export function createSupercar(M, out, opt = {}) {
   }).catch((e) => { console.warn('[audio] engine loops:', e); return false; });
 
   // the gearbox and the engine's state
-  const S = { gear: 1, rpm: IDLE, target: IDLE, load: 0, cut: 0, shiftT: 0, hold: 0, blip: 0, lim: 0, limT: 0, overrun: 0, popT: 0, acc: 0, lastV: 0, stuck: 0, rev: false, kick: false };
+  const S = { gear: 1, rpm: IDLE, target: IDLE, load: 0, cut: 0, shiftT: 0, hold: 0, blip: 0, lim: 0, limT: 0, overrun: 0, popT: 0, acc: 0, lastV: null, stuck: 0, rev: false, kick: false, mute: false, revT: 0, catchT: 0 };
   const gearRpm = (v, g) => (v / (g === 'R' ? REV : GEARS[g - 1])) * 1000;
 
   function pop(k = 1, big = false, delay = 0) {
+    if (S.mute) return;
     const t = now() + 0.002 + delay;
     // a crack of bright noise, a dull thump under it
     M.burst(level, { t, dur: big ? 0.06 : 0.025 + Math.random() * 0.03, type: 'bandpass', f0: big ? 900 : 1300 + Math.random() * 1600, f1: 500, q: 0.9, peak: (big ? 0.9 : 0.45) * k, a: 0.001 });
@@ -83,6 +86,15 @@ export function createSupercar(M, out, opt = {}) {
     // gas: pressing the way it goes (or pulling away either way); braking: pressing against it
     const gas = th > 0 ? (fwd > 0 ? th : 0) : th < 0 ? (fwd < 0 || v < 0.3 ? -th : 0) : 0;
     const braking = th !== 0 && gas === 0 && v > 0.5;
+    S.mute = !!s.mute; if (S.mute) S.overrun = 0;
+    // (made at speed: straight into the gear a cruise would have it in)
+    if (S.lastV == null) {
+      S.lastV = v;
+      if (v > 0.5 && fwd > 0) { let g = 1; while (g < GEARS.length && gearRpm(v, g) > (gas > 0 ? 5200 : 4000)) g++; S.gear = g; S.rpm = Math.max(IDLE, gearRpm(v, g)); }
+    }
+    // the catch: a blip of the throttle a moment after it fires
+    if (S.revT > 0 && (S.revT -= dt) <= 0) S.catchT = 0.55;
+    S.catchT = Math.max(0, S.catchT - dt);
     S.acc += (((v - S.lastV) / Math.max(1e-3, dt)) - S.acc) * Math.min(1, dt * 8); S.lastV = v;
     const hard = gas > 0.5 && S.acc > 3, cruising = gas > 0 && !hard;
     S.shiftT -= dt; S.cut = Math.max(0, S.cut - dt); S.blip = Math.max(0, S.blip - dt);
@@ -124,9 +136,10 @@ export function createSupercar(M, out, opt = {}) {
     S.stuck = gas > 0.5 && v < 3 && S.acc < 1 ? S.stuck + dt : 0;
     if (S.stuck > 0.5) target = REDLINE + 600;
     if (S.blip > 0) target += 900 * (S.blip / 0.16);
+    if (S.catchT > 0) target += (v < 8 ? 2600 : 1300) * Math.sin(Math.PI * Math.min(1, (0.55 - S.catchT) / 0.45));
     if (S.cut > 0) target -= 250;
     // in gear the engine is tied to the wheels: it follows fast; free (launch, blip, spin) it swings a little slower
-    const free = S.stuck > 0.5 || S.blip > 0 || (S.gear === 1 && v < 8);
+    const free = S.stuck > 0.5 || S.blip > 0 || S.catchT > 0 || (S.gear === 1 && v < 8);
     const rate = target > S.rpm ? (free ? 9000 : 16000) : (S.shiftT > 0.15 ? 14000 : free ? 7000 : 20000);
     S.rpm += Math.max(-rate * dt, Math.min(rate * dt, target - S.rpm));
     // the limiter: past the red line the ignition cuts and the revs bounce
@@ -139,7 +152,7 @@ export function createSupercar(M, out, opt = {}) {
     S.rpm = Math.max(IDLE * 0.9, Math.min(REDLINE + 50, S.rpm));
 
     // the load: on the throttle (and the blip's stab of it), off in the cut and the limiter's bounces
-    const want = S.cut > 0 || S.lim ? 0 : Math.max(gas, S.blip > 0 ? 0.6 : 0, S.stuck > 0.5 ? 1 : 0);
+    const want = S.cut > 0 || S.lim ? 0 : Math.max(gas, S.blip > 0 ? 0.6 : 0, S.catchT > 0.2 ? 0.85 : 0, S.stuck > 0.5 ? 1 : 0);
     S.load += (want - S.load) * Math.min(1, dt / (want > S.load ? 0.04 : 0.09));
 
     // overrun: lifting at high revs crackles for a second or so
@@ -182,6 +195,7 @@ export function createSupercar(M, out, opt = {}) {
     stopped = true;
     if (L) for (const x of L) try { x.src.stop(t + 0.05); } catch {}
     for (const o of synth.o) try { o.stop(t + 0.05); } catch {}
+    if (M.live) setTimeout(() => { try { level.disconnect(); } catch {} }, 300);
   }
-  return { update, ready, stop, state: S, get loaded() { return !!L; } };
+  return { update, ready, stop, rev(delay = 0.1) { S.revT = Math.max(0.001, delay); }, state: S, get loaded() { return !!L; } };
 }

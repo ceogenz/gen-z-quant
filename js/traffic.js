@@ -2707,15 +2707,19 @@ function createHighwayTraffic(scene, lanes) {
     const b = lane.pts[i + 1];
     const y = a.y + (b.y - a.y) * t;
     if (y < -1) return null;
-    const spec = BODY_SPECS[c.kind];
     out.x = a.x + (b.x - a.x) * t;
     out.y = y;
     out.z = a.z + (b.z - a.z) * t;
     out.yaw = Math.atan2(b.x - a.x, b.z - a.z);
-    out.hw = spec.halfWidth ? Math.max(...spec.halfWidth.map((p) => p[1])) : 0.93;
-    out.hl = spec.zFront ?? HWY_CAR_LEN / 2;
+    out.hw = bodyHalf[c.kind][0];
+    out.hl = bodyHalf[c.kind][1];
     out.c = c;
     return out;
+  }
+  const bodyHalf = {};
+  for (const kind of KINDS) {
+    const spec = BODY_SPECS[kind];
+    bodyHalf[kind] = [spec.halfWidth ? Math.max(...spec.halfWidth.map((p) => p[1])) : 0.93, spec.zFront ?? HWY_CAR_LEN / 2];
   }
   const hwyNear = [];
   // the least overlap of two boxes on the ground (middle, yaw, half width, half length), 0 apart
@@ -2731,12 +2735,25 @@ function createHighwayTraffic(scene, lanes) {
     }
     return pen;
   }
+  // (a lane runs for miles: only the cars along the stretch of it that comes within r are placed)
   function near(x, z, r, out = []) {
     out.length = 0;
     for (const lane of lanes) {
       const [x0, x1, z0, z1] = lane.box;
       if (x < x0 - r || x > x1 + r || z < z0 - r || z > z1 + r) continue;
+      const P = lane.pts;
+      let lo = Infinity;
+      let hi = -Infinity;
+      for (let i = 0; i + 1 < P.length; i++) {
+        const a = P[i];
+        const b = P[i + 1];
+        if (Math.min(a.x, b.x) > x + r || Math.max(a.x, b.x) < x - r || Math.min(a.z, b.z) > z + r || Math.max(a.z, b.z) < z - r) continue;
+        if (lane.cum[i] < lo) lo = lane.cum[i];
+        if (lane.cum[i + 1] > hi) hi = lane.cum[i + 1];
+      }
+      if (lo > hi) continue;
       for (const c of lane.cars) {
+        if (c.u < lo || c.u > hi) continue;
         const p = place(c);
         if (p && Math.abs(p.x - x) < r && Math.abs(p.z - z) < r) out.push(p);
       }

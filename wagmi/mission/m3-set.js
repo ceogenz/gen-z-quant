@@ -667,15 +667,23 @@ export async function buildFiona(W) {
   root.visible = false; W.app.scene.add(root);
   const P = { root, inner, bones, mixer, rig: rig(mixer, clipMap), clips: Object.keys(clipMap), top, arm: (side, target, pole, w) => armTo(bones, side, target, pole, w, MH_ARM), relax: () => {} };
   const B = bones;
-  // her eyes (the vertices the eyes' own primitive draws, in the rest pose: the GLB's primitives share one vertex list,
-  // so not its bounding box): the shades sit just in front of them
-  const eb = new THREE.Box3(), _v = V();
-  inner.traverse((o) => { if (!o.isMesh || !/eyes/.test(o.material?.name || '')) return; const g = o.geometry, pa = g.attributes.position, ix = g.index;
-    const n = ix ? ix.count : pa.count; for (let i = 0; i < n; i++) eb.expandByPoint(_v.fromBufferAttribute(pa, ix ? ix.getX(i) : i).applyMatrix4(o.matrixWorld)); });
-  const eye = eb.isEmpty() ? B.head.getWorldPosition(V()).add(V(0, 0.09, 0.09)) : eb.getCenter(V()).setZ(eb.max.z);
+  // her eyes in the bind pose (the vertices the eyes' own primitive draws, through the skin's bind matrix: the GLB's
+  // primitives share one vertex list, so not its bounding box; and its bones were saved mid-clip, so the model as it
+  // loads is not in that pose): the shades hung on her head bone just in front of them, the way the skin hangs on it
+  const eb = new THREE.Box3(), _v = V(); let eyeMesh = null;
+  inner.traverse((o) => { if (!o.isSkinnedMesh || !/eyes/.test(o.material?.name || '')) return; eyeMesh = o; const g = o.geometry, pa = g.attributes.position, ix = g.index;
+    const n = ix ? ix.count : pa.count; for (let i = 0; i < n; i++) eb.expandByPoint(_v.fromBufferAttribute(pa, ix ? ix.getX(i) : i).applyMatrix4(o.bindMatrix)); });
   const shades = new THREE.Group(), frame = new THREE.MeshStandardMaterial({ color: '#F4F4F6', roughness: 0.3 }), lens = new THREE.MeshPhysicalMaterial({ color: '#08080A', roughness: 0.05, metalness: 0.5, clearcoat: 1 });
-  for (const sx of [-1, 1]) { const l = new THREE.Mesh(new THREE.BoxGeometry(0.058, 0.038, 0.01), frame); l.position.x = sx * 0.033; l.rotation.y = sx * 0.18; shades.add(l); const k = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.029, 0.007), lens); k.position.set(sx * 0.033, 0, 0.004); k.rotation.y = sx * 0.18; shades.add(k); }
-  onBone(P, 'head', shades, 0, eye.y + 0.004, eye.z + 0.022);
+  for (const sx of [-1, 1]) { const l = new THREE.Mesh(new THREE.BoxGeometry(0.058, 0.038, 0.01), frame); l.position.x = sx * 0.033; l.rotation.y = sx * 0.18; shades.add(l); const k = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.029, 0.007), lens); k.position.set(sx * 0.033, 0, 0.004); k.rotation.y = sx * 0.18; shades.add(k);
+    // (the arms back to her ears)
+    const arm = new THREE.Mesh(new THREE.BoxGeometry(0.005, 0.007, 0.1), frame); arm.position.set(sx * 0.064, 0.008, -0.05); arm.rotation.y = sx * -0.06; shades.add(arm); }
+  const bridge = new THREE.Mesh(new THREE.BoxGeometry(0.014, 0.006, 0.008), frame); bridge.position.set(0, 0.009, 0.002); shades.add(bridge);
+  const hb = eyeMesh && eyeMesh.skeleton.bones.findIndex((b) => b.name === 'head');
+  if (eyeMesh && hb >= 0 && !eb.isEmpty()) {
+    const eye = eb.getCenter(V()).setZ(eb.max.z), at = new THREE.Matrix4().makeTranslation(eye.x, eye.y + 0.004, eye.z + 0.016);
+    eyeMesh.skeleton.boneInverses[hb].clone().multiply(at).decompose(shades.position, shades.quaternion, shades.scale);
+    eyeMesh.skeleton.bones[hb].add(shades); shades.traverse((m) => { if (m.isMesh) { m.castShadow = true; m.frustumCulled = false; } });
+  } else { const eye = B.head.getWorldPosition(V()).add(V(0, 0.09, 0.09)); onBone(P, 'head', shades, 0, eye.y, eye.z); }
   // the megaphone (in her right hand; posed by the scene or the rally each frame: P.mega)
   const mega = new THREE.Group();
   const white = new THREE.MeshStandardMaterial({ color: '#F2F2F0', roughness: 0.4 }), acidM = new THREE.MeshStandardMaterial({ color: '#B6FF3B', emissive: '#6FA81A', emissiveIntensity: 0.5 });

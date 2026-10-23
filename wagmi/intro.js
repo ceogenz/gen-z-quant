@@ -447,6 +447,7 @@ function buildScript(ctx) {
   const LUNGE = [109.75, 390.92], STEP = [109.18, 390.82];
   const GETUP0 = [LUNGE[0] - 0.45, LUNGE[1]];         // the get-up starts where the fall left his hips
   const STAND = [GETUP0[0] + 0.31, GETUP0[1] + 0.11];  // and ends a step on (the clip's own travel)
+  const T_UP = 45.2, UP_FADE = 0.2;                     // (the get-up: from, and its fade in)
   const qHeading = angleKeys([[16.0, -PI / 2], [24.0, -PI / 2], [24.35, 0], [24.75, PI / 2], [76.95, PI / 2], [77.35, 0], [77.8, -1.41]]);
   function quantAt(t) {
     if (t < 11.8) return { x: 112, z: 386.8, h: 0, vis: t > 11.45 };
@@ -455,8 +456,10 @@ function buildScript(ctx) {
     if (t < 34.3) return { x: 109, z: 390.8, h: qHeading(t), vis: true };
     if (t < 35.45) { const k = ease.inOut((t - 34.3) / 0.45); return { x: lerp(109, STEP[0], k), z: lerp(390.8, STEP[1], k), h: qHeading(t), vis: true }; }
     if (t < 36.12) { const k = ease.inOut((t - 35.45) / 0.67); return { x: lerp(STEP[0], LUNGE[0], k), z: lerp(STEP[1], LUNGE[1], k), h: PI / 2, vis: true }; }
-    if (t < 45.2) return { x: LUNGE[0], z: LUNGE[1], h: PI / 2, vis: true };
-    return { x: GETUP0[0], z: GETUP0[1], h: qHeading(t), vis: true };
+    if (t < T_UP) return { x: LUNGE[0], z: LUNGE[1], h: PI / 2, vis: true };
+    // (over the get-up's fade in his place goes over with it, or his body would jump the 0.45 m and slide back)
+    const k = smooth((t - T_UP) / UP_FADE);
+    return { x: lerp(LUNGE[0], GETUP0[0], k), z: lerp(LUNGE[1], GETUP0[1], k), h: qHeading(t), vis: true };
   }
   qRig.set([
     [0, 'idle'],
@@ -473,7 +476,7 @@ function buildScript(ctx) {
     // the lunge: two upright steps at the van; the shove lands; back and down from the fall's stagger
     [35.45, 'jog', { from: 0.36, speed: 0.62, fade: 0.15 }],
     [36.12, 'death', { from: 0.72, speed: 0.9, loop: false, fade: 0.15 }],
-    [45.2, 'getup', { speed: 0.8, loop: false, fade: 0.2 }],
+    [T_UP, 'getup', { speed: 0.8, loop: false, fade: UP_FADE }],
     [47.15, 'idle', { fade: 0.5 }],
     // the call: his left hand talking while the right holds the phone up
     [54.35, ['idle/noArmL', ['talk/armL', { from: 0.6 }]], { fade: 0.3 }],
@@ -789,7 +792,8 @@ function buildScript(ctx) {
   }
   const FINGERS = (side) => [2, 3, 4, 5].flatMap((f) => [1, 2, 3].map((j) => B[`finger${f}-${j}_${side}`])).filter(Boolean);
   const THUMB = (side) => [1, 2, 3].map((j) => B[`finger1-${j}_${side}`]).filter(Boolean);
-  const qKeep = keeper([B.spine05, B.foot_L, B.foot_R, B.neck02, B.neck01, B.head, B.upperarm01_R, B.lowerarm01_R, B.upperarm01_L, B.lowerarm01_L, B.lowerarm02_R, B.lowerarm02_L, B.wrist_R, B.wrist_L, ...FINGERS('R'), ...THUMB('R'), ...FINGERS('L'), ...THUMB('L')]);
+  const qKeep = keeper([B.spine05, B.foot_L, B.foot_R, B.neck02, B.neck01, B.head, B.upperarm01_R, B.lowerarm01_R, B.upperarm01_L, B.lowerarm01_L, B.lowerarm02_R, B.lowerarm02_L, B.wrist_R, B.wrist_L,
+    B.clavicle_R, B.clavicle_L, B.shoulder01_R, B.shoulder01_L, B.upperarm02_R, B.upperarm02_L, ...FINGERS('R'), ...THUMB('R'), ...FINGERS('L'), ...THUMB('L')]);
   // a hand turned so its fingers run along `along` and the back of it faces `facing` (world), by weight
   function orientHand(side, along, facing, w) {
     const wr = B[`wrist_${side}`], fm = B[`finger3-1_${side}`], ix = B[`finger2-1_${side}`], pk = B[`finger5-1_${side}`];
@@ -991,19 +995,60 @@ function buildScript(ctx) {
     let roll = a0.angleTo(a1); if (V().crossVectors(a0, a1).dot(ax) < 0) roll = -roll;
     turnBone(B.spine05, new THREE.Quaternion().setFromAxisAngle(ax, roll * k));
   }
-  // His arms down on the pavement beside him, palms on it (the fall's clip flings them over his head, and laying his
-  // back flat took them through the pavement): each wrist reached to a place on it [toward his feet, out to his side]
-  // from its shoulder, the elbow out, the hand turned palm down and laid flat.
-  const ARMS_DOWN = { R: [0.12, 0.4], L: [0.2, 0.42] };
+  // His shoulders and arms down on the pavement. The fall's clip ends with his arms flung over his head and his
+  // shoulders hunched up and back round his ears for it: laid down beside him from there, the near shoulder caved into
+  // his chest and the elbow went through the pavement. So down there the shoulders go back to their rest (his idle's,
+  // standing: down, easy) and each arm is laid out from it, as a man lies when he has been put down hard on his back:
+  // the upper arm along the pavement a little out from his side [ARMS_DOWN: its angle out from his length], the elbow on
+  // the stone, the forearm back in toward his hip a little [its angle], the hand palm down on the stone, rolled a little
+  // onto its outer edge [roll], the fingers easy. Each joint is put where it lies (the wrist reached to its place, the
+  // elbow to its own), so nothing goes through the stone or through him.
+  const GIRDLE = (s) => [`clavicle_${s}`, `shoulder01_${s}`], ARM = (s) => [`upperarm01_${s}`, `upperarm02_${s}`, `lowerarm01_${s}`, `lowerarm02_${s}`, `wrist_${s}`];
+  let armRest = null; // (the rest: found once, from his idle)
+  function findArmRest() {
+    qKeep.restore(); qRig.pose(1);
+    const r = {}; for (const s of ['R', 'L']) for (const n of [...GIRDLE(s), ...ARM(s)]) if (B[n]) r[n] = B[n].quaternion.clone();
+    return r;
+  }
+  function settleShoulders(k) {
+    if (k <= 0.001 || !armRest) return;
+    for (const s of ['R', 'L']) { for (const n of GIRDLE(s)) B[n]?.quaternion.slerp(armRest[n], k); B[`clavicle_${s}`]?.updateMatrixWorld(true); }
+  }
+  // (and once his back is flat, back onto the stone, his shoulder blades flat on it: each collarbone turned back about
+  // his length until the shoulder's joint is SHOULDER_Y over it; standing's rest would have them rounded up off it)
+  const SHOULDER_Y = 0.12;
+  function shouldersDown(k) {
+    if (k <= 0.001 || !armRest) return;
+    const g = P.position.y, len = B.spine05.getWorldPosition(V()).sub(B.head.getWorldPosition(V())).setY(0).normalize(), up = V(0, 1, 0);
+    for (const s of ['R', 'L']) {
+      const cl = B[`clavicle_${s}`], c = cl.getWorldPosition(V()), v = B[`upperarm01_${s}`].getWorldPosition(V()).sub(c);
+      const o = V().crossVectors(up, len); if (o.dot(v) < 0) o.negate();
+      const n = V().crossVectors(o, up).normalize(); v.addScaledVector(len, -v.dot(len));
+      const r = v.length(); if (r < 0.02) continue;
+      const cur = Math.atan2(v.dot(up), v.dot(o)), want = Math.asin(clamp((g + SHOULDER_Y - c.y) / r, -0.95, 0.95));
+      if (want < cur) turnBone(cl, new THREE.Quaternion().setFromAxisAngle(n, (want - cur) * k));
+    }
+  }
+  // (radians: the upper arm out from his length, the forearm's; the hand rolled out; the heights of the elbow and the
+  // wrist over the stone, the arm's flesh under the joint)
+  const ARMS_DOWN = { R: { up: 0.5, fore: 0.2, roll: 0.35 }, L: { up: 0.6, fore: 0.3, roll: 0.45 } }, ELBOW_Y = 0.045, WRIST_Y = 0.035;
   function armsDown(k) {
-    if (k <= 0.001) return;
+    if (k <= 0.001 || !armRest) return;
+    shouldersDown(k);
     const g = P.position.y, feet = B.spine05.getWorldPosition(V()).sub(B.head.getWorldPosition(V())).setY(0).normalize();
     const out = B.upperarm01_R.getWorldPosition(V()).sub(B.upperarm01_L.getWorldPosition(V())).setY(0).normalize(); // (to his right)
     for (const side of ['R', 'L']) {
-      const sh = B[`upperarm01_${side}`].getWorldPosition(V()), o = side === 'R' ? out : out.clone().negate(), [dn, ou] = ARMS_DOWN[side];
-      const tg = sh.clone().addScaledVector(feet, dn).addScaledVector(o, ou); tg.y = g + 0.025;
-      reach(B[`upperarm01_${side}`], B[`lowerarm01_${side}`], B[`wrist_${side}`], tg, sh.clone().addScaledVector(o, 1).addScaledVector(feet, -0.25).add(V(0, -0.35, 0)), k);
-      orientHand(side, tg.clone().sub(sh).setY(0).normalize().addScaledVector(o, 0.15), V(0, 1, 0), k);
+      const b1 = B[`upperarm01_${side}`], b2 = B[`lowerarm01_${side}`], b3 = B[`wrist_${side}`], a = ARMS_DOWN[side];
+      // (from the arm's rest, so the elbow bends on its own hinge)
+      for (const n of ARM(side)) B[n]?.quaternion.slerp(armRest[n], k);
+      b1.updateMatrixWorld(true);
+      const o = side === 'R' ? out : out.clone().negate(), sh = b1.getWorldPosition(V()), el0 = b2.getWorldPosition(V());
+      const la = sh.distanceTo(el0), lb = el0.distanceTo(b3.getWorldPosition(V()));
+      const flat = (ang) => feet.clone().multiplyScalar(Math.cos(ang)).addScaledVector(o, Math.sin(ang));
+      const dy1 = Math.min(0, g + ELBOW_Y - sh.y), el = sh.clone().addScaledVector(flat(a.up), Math.sqrt(Math.max(0, la * la - dy1 * dy1))); el.y = sh.y + dy1;
+      const dy2 = Math.min(0, g + WRIST_Y - el.y), wr = el.clone().addScaledVector(flat(a.fore), Math.sqrt(Math.max(0, lb * lb - dy2 * dy2))); wr.y = el.y + dy2;
+      reach(b1, b2, b3, wr, el, k);
+      orientHand(side, flat(a.fore - 0.12), V(0, 1, 0).addScaledVector(o, a.roll), k);
       shareTwist(side, 0.55 * k);
       shape(side, SHAPES.flat, k);
     }
@@ -1060,14 +1105,17 @@ function buildScript(ctx) {
     // shoulders and head propped up off the ground)
     const sk = standK(t);
     if (sk > 0) upright(W, q.h, sk);
+    // (on the pavement his shoulders settle, before his back is squared on it by them)
+    const ak = armsK(t);
+    settleShoulders(ak);
     const fk = flatK(t);
     if (fk > 0) layFlat(fk);
     // his hands and the phone
     const ph = phoneAt(t);
     phone.visible = ph.mode !== 'none' && q.vis;
-    if (!phoneGround) { phoneGround = findPhoneGround(); qKeep.restore(); qRig.pose(t); qKeep.save(); P.mesh.updateMatrixWorld(true); }
+    if (!phoneGround) { phoneGround = findPhoneGround(); armRest = findArmRest(); qKeep.restore(); qRig.pose(t); qKeep.save(); P.mesh.updateMatrixWorld(true); }
     // (on the pavement his arms lie on it beside him)
-    armsDown(armsK(t));
+    armsDown(ak);
     if (ph.mode === 'held') {
       const up = upW(t);
       if (up > 0.001) {

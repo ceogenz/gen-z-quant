@@ -108,6 +108,12 @@ class CameraSystem {
     // (WAGMI City) what else stands in the street, for keepInView: blockers(x, z, r, entity) -> boxes in the colliders'
     // form (the traffic, a parked car, a mission's van or stage screen: wagmi/combat/camera.js createBlockers), or null
     this.blockers = null;
+    // (WAGMI City) the shore highways' traffic too (js/traffic.js createHighwayTraffic, set by wagmi/game.js): its cars
+    // are boxes like the city's cars in createBlockers (highwayBoxes)
+    this.highway = null;
+    this._hwNear = [];
+    this._hwBoxes = [];
+    this._hwPool = [];
 
     this.bindPointerControls();
   }
@@ -451,11 +457,42 @@ class CameraSystem {
   // swings round him to the clearest way within reach, no faster than ~140 degrees a second, and back once straight
   // behind him is clear again; with no clear way at all it rises over him, looking down. (Only the camera moves: the
   // follow and orbit state are left as they are.)
-  // the buildings' collision boxes within r of p, and (WAGMI City) the street's other things (this.blockers)
+  // the buildings' collision boxes within r of p, and (WAGMI City) the street's other things (this.blockers) and the
+  // highways' cars (this.highway)
   nearBoxes(p, r, entity) {
     const near = this.controllerManager.nearColliders(p.x, p.z, r);
     const more = this.blockers ? this.blockers(p.x, p.z, r, entity) : null;
-    return more && more.length ? near.concat(more) : near;
+    const hwy = this.highway ? this.highwayBoxes(p.x, p.z, r) : null;
+    const all = more && more.length ? near.concat(more) : near;
+    return hwy && hwy.length ? all.concat(hwy) : all;
+  }
+
+  // (WAGMI City) the shore highways' cars within r of (x, z), as the city's cars are in createBlockers: on foot every
+  // one, its box a little over its roof; driving, only one the lens is in or right at (else every car passing behind
+  // him would pull the view in and let it out again). One up on the viaduct stands from its wheels, not the ground.
+  highwayBoxes(x, z, r) {
+    const out = this._hwBoxes;
+    out.length = 0;
+    const list = this.highway.near(x, z, r + 7, this._hwNear);
+    if (!list.length) return out;
+    const onFoot = this.controllerManager.activeMode !== 'car';
+    const L = this.camera.position;
+    for (const v of list) {
+      const cs = Math.cos(v.yaw), sn = Math.sin(v.yaw), hx = v.hw, hz = v.hl;
+      if (!onFoot) {
+        const dx = L.x - v.x, dz = L.z - v.z;
+        if (Math.abs(dx * cs - dz * sn) > hx + 1 || Math.abs(dx * sn + dz * cs) > hz + 1) continue;
+      }
+      const o = this._hwPool[out.length] || (this._hwPool[out.length] = { obb: { cx: 0, cz: 0, cs: 1, sn: 0, hx: 0, hz: 0 }, minX: 0, maxX: 0, minZ: 0, maxZ: 0, minY: 0, maxY: 0 });
+      const b = o.obb;
+      b.cx = v.x; b.cz = v.z; b.cs = cs; b.sn = sn; b.hx = hx; b.hz = hz;
+      const ex = Math.abs(cs) * hx + Math.abs(sn) * hz, ez = Math.abs(sn) * hx + Math.abs(cs) * hz;
+      o.minX = v.x - ex; o.maxX = v.x + ex; o.minZ = v.z - ez; o.maxZ = v.z + ez;
+      o.minY = v.y - 0.3;
+      o.maxY = v.y + (v.c && v.c.kind === 'suv' ? 1.76 : 1.45) + (onFoot ? 0.6 : 0.1);
+      out.push(o);
+    }
+    return out;
   }
 
   // (WAGMI City) how much of the line from p to q is clear of the buildings and the street's things (0 to 1; 1: all of

@@ -219,7 +219,9 @@ export function rallyScene(W, { say, fiona, rally, spotter }) {
       // in the crowd, the stage
       // (in the crowd, over their heads: a spot the park's trees leave clear to the stage)
       { t: 3.2, cam: (t) => ({ pos: keys([[3.2, [CROWD_CAM[0], 2.75, CROWD_CAM[1]]], [5.8, [CROWD_CAM[0] - 0.3, 2.7, CROWD_CAM[1] - 0.5]]], 'linear')(t), look: [0, 3.7, 2808.5], fov: 50, shake: 0.5 }) },
-      { t: 5.8, cam: (t) => ({ pos: keys([[5.8, [2.6, top + 1.2, FZ + 4.4]], [8.4, [2.2, top + 1.25, FZ + 3.9]]], 'linear')(t), look: [FX, top + 1.55, FZ], fov: 34, shake: 0.6 }) },
+      // (her, close, from her left: the megaphone is in her right hand, so from here it points off past her and her face
+      // and her shades read; a frontal shot puts its bell over her face)
+      { t: 5.8, cam: (t) => ({ pos: keys([[5.8, [2.65, top + 1.42, FZ + 1.95]], [8.4, [2.35, top + 1.46, FZ + 1.75]]], 'linear')(t), look: [FX + 0.05, top + 1.5, FZ + 0.1], fov: 30, shake: 0.5 }) },
       { t: 8.4, cam: (t) => ({ pos: [sp.x - 1.6, 1.75, sp.z + 2.6], look: keys([[8.4, [sp.x + 0.2, 1.5, sp.z - 0.4]], [11, [sp.x + 0.4, 1.4, sp.z - 2]]])(t), fov: 40, shake: 0.6 }) },
     ],
     cues: [

@@ -12,7 +12,7 @@
 //   moon.collar: where a leash clips on (an Object3D on the neck)
 // buildLeash(THREE): a blue leash, a rope of 14 points (verlet), from Quant's hand to Moon's collar, or loose.
 // Units are metres; Moon faces +z and stands on y = 0.
-import { attribute, positionLocal, uniform, vec3, float, sin, time, mix, smoothstep, uv, fract, abs, normalViewGeometry } from 'three/tsl';
+import { attribute, positionLocal, uniform, vec3, float, sin, time, mix, smoothstep, uv, fract, abs, fwidth, normalViewGeometry } from 'three/tsl';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 // a small seeded random, so Moon's coat is the same every time
@@ -109,18 +109,25 @@ export function buildMoon(THREE, o = {}) {
     const drift = sin(time.mul(1.7).add(seed.mul(23.0))).mul(0.0025).mul(t);
     m.positionNode = positionLocal.add(sway.mul(t.mul(t))).add(vec3(drift, 0, drift.mul(0.6)));
     const across = abs(uv().x.mul(2.0).sub(1.0));
-    const strand = uv().x.mul(6.0).add(seed.mul(5.3));
+    // (23 Oct: nine fibres across a clump, not six, each its own width and length, with gaps between them from just off
+    // the root: in a close-up the clump reads as hair, not as a card with straight sides)
+    const strand = uv().x.mul(9.0).add(seed.mul(5.3)), f = fract(strand);
     const fibre = fract(sin(strand.floor().mul(12.9898).add(seed.mul(78.233))).mul(43758.5453));
+    const core = float(1.0).sub(abs(f.mul(2.0).sub(1.0)));
+    // (where a fibre is under ~2 px on screen (Moon at play distance) the gaps and the fibres' shading fade back to the
+    // clump's old look: solid at the root, parting toward the tip; only close up does it split all the way)
+    const far = smoothstep(0.3, 0.7, fwidth(strand));
     const root = mix(vec3(0.62, 0.58, 0.53), vec3(0.93, 0.9, 0.85), smoothstep(0.0, 0.6, t));
     const tint = mix(vec3(1.0, 0.98, 0.94), vec3(0.96, 0.965, 0.98), seed);
-    const shade = mix(float(0.84), float(1.0), float(1.0).sub(across.mul(across))).mul(mix(float(0.8), float(1.04), fibre));
+    // (each fibre a shade darker at its sides, so neighbours part by light as well as by the gaps)
+    const shade = mix(float(0.84), float(1.0), float(1.0).sub(across.mul(across))).mul(mix(float(0.78), float(1.04), fibre)).mul(mix(mix(float(0.88), float(1.0), smoothstep(0.0, 0.7, core)), float(1.0), far));
     m.colorNode = root.mul(tint).mul(shade);
-    // (the clump narrows toward its tip; the middle fibres run on to it, the outer ones stop short, and from halfway out
-    // the clump parts into its fibres)
-    const profile = float(1.0).sub(t.mul(t).mul(0.75));
-    const reach = float(1.02).sub(across.mul(0.3)).sub(fibre.mul(0.3));
-    const parted = smoothstep(0.0, 0.3, fract(strand)).mul(smoothstep(1.0, 0.7, fract(strand)));
-    const split = mix(float(1.0), parted, smoothstep(0.12, 0.6, t));
+    // (the clump narrows toward its tip; the middle fibres run on to it, the outer ones stop short and some thinner, and
+    // the gaps between the fibres open wider toward the tips)
+    const profile = float(1.0).sub(t.mul(t).mul(0.75)).sub(fibre.mul(across).mul(0.22));
+    const reach = float(1.02).sub(across.mul(0.3)).sub(fibre.mul(0.36));
+    const gap = mix(float(0.08), float(0.4), smoothstep(0.03, 0.5, t)).mul(mix(float(0.75), float(1.25), fibre));
+    const near = smoothstep(gap.mul(0.55), gap, core), split = mix(near, mix(float(1.0), near, smoothstep(0.12, 0.6, t)), far);
     m.opacityNode = smoothstep(profile, profile.sub(0.4), across).mul(smoothstep(reach, reach.sub(0.1), t)).mul(split);
     // (a lock's normal is the skin's under it on both faces: a lock seen from behind is lit like its neighbours)
     m.normalNode = normalViewGeometry;
@@ -205,17 +212,18 @@ export function buildMoon(THREE, o = {}) {
   const onHead = (s) => V(s.x * 0.058, s.y * 0.055 + 0.012, s.z * 0.059 - 0.003);
   const clearOfEyes = (p, r) => p.distanceTo(eyeL) > r && p.distanceTo(eyeR) > r;
   addCoat(head, [
-    { c: V(0, 0.012, -0.003), r: V(0.058, 0.055, 0.059), n: 360, width: 0.019, droop: 0.38, wave: 0.16, lift: 0.005,
+    { c: V(0, 0.012, -0.003), r: V(0.058, 0.055, 0.059), n: 430, width: 0.016, droop: 0.38, wave: 0.16, lift: 0.005,
       keep: (s) => s.z < 0.3 && clearOfEyes(onHead(s), 0.02),
       len: (s) => 0.032 + 0.016 * Math.max(0, -s.z), dir: (s, n) => comb([n, 0.35], [flat(n), 0.55], [down, 0.6], [back, 0.2]) },
     // (a tuft over the crown, so the parting never shows bare)
     { c: V(0, 0.012, -0.003), r: V(0.058, 0.055, 0.059), n: 110, width: 0.022, droop: 0.4, wave: 0.1, keep: (s) => s.y > 0.68,
       len: () => 0.024, dir: (s, n) => comb([n, 0.5], [back, 0.7], [flat(n), 0.3]) },
-    // (the face in short, dense, soft fur, swept back from the eyes and the nose: the close-ups show a face, not a mop)
-    { c: V(0, 0.012, -0.003), r: V(0.059, 0.056, 0.06), n: 820, width: 0.014, droop: 0.15, wave: 0.06, lift: 0.003,
+    // (the face in short, dense, soft fur, swept back from the eyes and the nose: the close-ups show a face, not a mop;
+    // 23 Oct: more and narrower clumps here, where the camera comes closest)
+    { c: V(0, 0.012, -0.003), r: V(0.059, 0.056, 0.06), n: 1000, width: 0.0115, droop: 0.15, wave: 0.06, lift: 0.003,
       keep: (s) => s.z >= 0.2 && clearOfEyes(onHead(s), 0.0108),
       len: (s) => (s.y > 0.4 ? 0.02 : 0.014), dir: (s, n) => comb([n, 0.55], [down, 0.4], [back, 0.35]) },
-    { c: V(0, -0.023, 0.05), r: V(0.031, 0.027, 0.033), n: 320, width: 0.014, droop: 0.25, wave: 0.07, lift: 0.002,
+    { c: V(0, -0.023, 0.05), r: V(0.031, 0.027, 0.033), n: 380, width: 0.012, droop: 0.25, wave: 0.07, lift: 0.002,
       keep: (s) => { const p = V(s.x * 0.031, s.y * 0.027 - 0.023, s.z * 0.033 + 0.05); return p.distanceTo(noseAt) > 0.0128 && clearOfEyes(p, 0.0125); },
       len: (s) => (s.y < -0.2 ? 0.026 : 0.016), dir: (s, n) => comb([down, 0.6], [flat(n), 0.55], [fwd, 0.1]) },
   ]);

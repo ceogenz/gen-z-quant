@@ -542,8 +542,11 @@ function createMission(W, { keep = false } = {}) {
       // round it, already rolling, so they are on him as he sets off and it takes a real run to lose them; from 150 m
       // down W 8th St at 8 m/s, a boost up 5th Ave lost them at the first corner in 25 s)
       // (escape / vmax: this chase's own lose time (s) and top speed (m/s), for the pursuit to read when it takes them:
-      // at heat 2's 8 s and 30 m/s a boost up 5th Ave still loses them in ~20 s; the brief wants 45-60 s)
-      const chase = S.chase = W.pursuit?.start?.({ heat: 2, kind: 'degens', count: 2, from: { x: -48, z: 2700 }, speed: 16, escape: 16, vmax: 35, target: () => (inCar() ? car.position : P.position) }) || null;
+      // at heat 2's 8 s and 30 m/s a boost up 5th Ave still loses them in ~20 s; the brief wants 45-60 s. With the
+      // real-key lose bot: escape 16 lost them at 42-52 s, ~33 s after the last sighting, so a clean early break came in
+      // under 45; at 25 it is ~32-37 s after the last sighting: 45-49 s in four runs that shook them by 7-17 s; a messy
+      // start (stuck on the kerb, rammed) runs to 60-70 s)
+      const chase = S.chase = W.pursuit?.start?.({ heat: 2, kind: 'degens', count: 2, from: { x: -48, z: 2700 }, speed: 16, escape: 25, vmax: 35, target: () => (inCar() ? car.position : P.position) }) || null;
       let lost = false, wasIn = inCar();
       const t0 = now();
       const off = hook(() => {
