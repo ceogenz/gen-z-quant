@@ -1,4 +1,4 @@
-# WAGMI City: Missions
+# Gen Z Quant: Missions
 
 The campaign design: what a GTA mission is made of, the eight missions that walk Quant across the whole island, and
 Mission 1 "Dognapped" shot by shot so it can be built now.
@@ -57,7 +57,7 @@ hand-off, so those two parts below come from the series as a whole (III, San And
 
 ## 2. The mission grammar (our template)
 
-Every WAGMI City mission is built from these pieces, in this order. Wording and colours are exact.
+Every Gen Z Quant mission is built from these pieces, in this order. Wording and colours are exact.
 
 ### 2.1 Blip and trigger
 - The contact's mission shows on the radar and the full map as a round blip with the contact's initial, accent
@@ -288,7 +288,7 @@ back by crossing the whole city, and on the way the Degens find out who really t
 | II | Down Bad | adds Downtown: everything south of z -1385 to the Battery | Gears' "Static Garage", W 22nd St between 10th & 11th Ave, bay door (-1560, 0.22, 1611) facing north | Gears |
 | III | To the Moon | the whole island to z -7090 (129th St) | Coach Ruth's gym "Ruth's Corner", W 125th St between Lenox Ave & ACP Blvd, door (-450, 0.22, -6708) facing north | Coach Ruth |
 
-**The gate.** WAGMI City DOT's "Smart Barrier Pilot": concrete barriers with orange LED signs (SMART BARRIER PILOT ·
+**The gate.** Gen Z Quant DOT's "Smart Barrier Pilot": concrete barriers with orange LED signs (SMART BARRIER PILOT ·
 ROAD CLOSED · THANK YOU FOR YOUR PATIENCE) across every road at the act's boundary, and a soft wall for every mode at
 that z (z < -1385 in Acts I-II, z > 1530 in Act I). Touching it, help: "The Smart Barrier is closed. This part of WAGMI
 City opens later in the story." The full map shades the locked area and labels it CLOSED. Act ends lift it, with the
@@ -581,7 +581,7 @@ call: keep it. Skippable after 1 s (hold Space or Enter).
 
 | # | Time | What happens | Dialogue |
 |---|---|---|---|
-| 1 | 0-6 s | Aerial over Murray Hill's roofs to the Empire State Building. Title: **WAGMI CITY**. | Ambient city, a stinger. |
+| 1 | 0-6 s | Aerial over Murray Hill's roofs to the Empire State Building. Title: **GEN Z QUANT**. | Ambient city, a stinger. |
 | 2 | 6-11 s | E 37th St from the Madison end, craning down to Quant's car at the curb. Place: *Murray Hill* · E 37th St · Midtown · 5:45 PM. | |
 | 3 | 11-14.8 s | The door: Moon trots out first, Quant follows reading his phone. Captions *Moon* · very good dog, *Quant* · the coin kid. | QUANT: "'Delete your account.' Good morning to you too." |
 | 4 | 14.8-21 s | His phone over the right of the frame: the comments scroll. Then Moon's eye level: she looks up, wags, pulls for the car. | QUANT: "Okay, okay. Car, then the park, then we log off forever." "Kidding. Obviously." |
@@ -729,7 +729,7 @@ plays exactly as written (the swap happens as he pulls up).
 - In car mode at start, the player's walker is not marked as in the car, so the ambient branch of
   `controllerManager.update` walks Quant's model up the 5th Ave sidewalk while you drive (at load the person entity is
   at (-11.6, 0.22, 408.8), visible). game.js could set `person.inVehicle = true` when the game starts in the car.
-- Traffic includes police cruisers with the real city's livery; for WAGMI City they want a fictional one (WCPD).
+- Traffic includes police cruisers with the real city's livery; for Gen Z Quant they want a fictional one (WCPD).
 - The full map teleports on click; story mode needs that off (section 3).
 - The cutscene camera pattern used for the scouting stills: replace `__NYC_APP.cameraSystem.update` with a function
   that sets the camera's position, look-at and FOV each frame, and put it back when the shot ends

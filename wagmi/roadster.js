@@ -1,4 +1,4 @@
-// WAGMI City: Quant's car. An original electric hypercar: a long, low wedge of flat
+// Gen Z Quant: Quant's car. An original electric hypercar: a long, low wedge of flat
 // panels and crisp creases. A knife-edge nose with a slim light line over a black face and no grille, a flat bonnet
 // between knife-edged fender crests; a narrow bronze glasshouse that peaks over the cabin and falls in one long line to
 // a high chopped tail, carried there by two flat sails with the back glass sunk in a trough between them; satin white
@@ -577,7 +577,7 @@ export function buildRoadster(THREE, o = {}) {
     cx.fillStyle = '#EEEEEA'; cx.fillRect(0, 0, 512, 256);
     cx.strokeStyle = '#2A2C33'; cx.lineWidth = 10; cx.strokeRect(14, 14, 484, 228);
     cx.fillStyle = '#1C1E24'; cx.font = "700 150px 'Barlow Condensed', 'Arial Narrow', system-ui, sans-serif"; cx.textAlign = 'center'; cx.textBaseline = 'middle';
-    cx.fillText('WAGMI', 256, 136);
+    cx.fillText('QUANT', 256, 136);
     const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 4;
     const pm = new THREE.MeshStandardNodeMaterial({ map: tex, roughness: 0.35, metalness: 0.2 });
     const plate = new THREE.Mesh(new THREE.PlaneGeometry(0.28, 0.14), pm); plate.rotation.y = Math.PI; plate.position.set(0, 0.626, ZR + 0.026); g.add(plate);

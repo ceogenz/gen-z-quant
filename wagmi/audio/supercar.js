@@ -1,4 +1,4 @@
-// WAGMI City: the supercar's engine (Quant's car). A virtual gearbox makes an engine speed (rpm) out of the road speed,
+// Gen Z Quant: the supercar's engine (Quant's car). A virtual gearbox makes an engine speed (rpm) out of the road speed,
 // and the engine's voice is real recordings cut into constant-pitch loops at a few engine speeds (assets/sfx/engine),
 // played together and crossfaded by rpm, each pitched by rpm / its own rpm:
 //   v8-*    a Maserati GranTurismo S (the Ferrari-built 4.7 V8), standing, idling and revving (lmartins, CC BY 4.0)

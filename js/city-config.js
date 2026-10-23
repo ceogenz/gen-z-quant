@@ -491,7 +491,7 @@ const BLOCKS = GEO.blocks.map(([flat, rects, park, parkName, isRect, frames], id
     median: /Malls?$/.test(parkName) || Math.min(maxX - minX, maxZ - minZ) < 9
   };
 }).filter((b) => !removedMedian(b));
-// (WAGMI City) The planted malls and long medians down the middle of Park Ave (S), Broadway, Adam Clayton Powell Jr.
+// (Gen Z Quant) The planted malls and long medians down the middle of Park Ave (S), Broadway, Adam Clayton Powell Jr.
 // Blvd, Allen St, Delancey St... are road now (the owner: the green centre divider can go): left out of the blocks, so
 // nothing is built, stands or walks on them and the traffic and the car drive over where they were. REMOVED_MEDIANS:
 // each one's centreline { ax, az, bx, bz, w } (its long axis, along its longest side), where city-grid.js paints a
@@ -814,7 +814,7 @@ Object.assign(window.NYC, {
   ISLAND_BOUNDS,
   LANDMARK_BLOCKS,
   BLOCKS,
-  REMOVED_MEDIANS, // (WAGMI City)
+  REMOVED_MEDIANS, // (Gen Z Quant)
   CUT_Z,
   SIGNAL_TIMING,
   streetZ,

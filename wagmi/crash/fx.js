@@ -1,4 +1,4 @@
-// WAGMI City: a crash's bits: sparks (bright streaks that fall and die), debris (glass, plastic and paint chips that
+// Gen Z Quant: a crash's bits: sparks (bright streaks that fall and die), debris (glass, plastic and paint chips that
 // tumble, bounce, lie in the road a while and go) and water (a burst hydrant: a column of drops thrown up and falling
 // back, soft mist billowing round it and off the top, spray off the ground where it lands). Sparks and debris are
 // instanced meshes; the water is instanced billboards (soft-edged, lit by the hour's sun and sky, capped at a few

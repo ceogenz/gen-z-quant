@@ -1,4 +1,4 @@
-// WAGMI City: the pause menu, GTA's. Esc (or P) in play: the city stops where it is (its frame loop held: the traffic,
+// Gen Z Quant: the pause menu, GTA's. Esc (or P) in play: the city stops where it is (its frame loop held: the traffic,
 // the crowd, the fight, the car; the missions' clocks with it), the sound dips, and the menu comes up: Resume, the brief
 // (the objective, the last lines said, the last help), the controls, restart from a checkpoint, the sound, back to the
 // title. Esc, P or Resume plays on. In a cutscene too (its clock stops with the city's; Space held still skips it); not

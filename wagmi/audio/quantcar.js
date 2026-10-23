@@ -1,4 +1,4 @@
-// WAGMI City: Quant's car, heard from the driver's seat. A supercar: its engine (supercar.js) is a V8 voice over a
+// Gen Z Quant: Quant's car, heard from the driver's seat. A supercar: its engine (supercar.js) is a V8 voice over a
 // virtual six-speed gearbox (revs that climb and drop at each shift, pops on the upshifts, crackle on the overrun, blips
 // on the downshifts, the limiter, an idle burble). Over and around it, following the speed (v) and the load (the throttle):
 //   turbine  a narrow band of rushing air whistling high, spooling up while the boost burns

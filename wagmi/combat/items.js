@@ -1,4 +1,4 @@
-// WAGMI City: street weapons and props, about the sidewalk, in a Degen's hand or in Quant's. No guns, no knives.
+// Gen Z Quant: street weapons and props, about the sidewalk, in a Degen's hand or in Quant's. No guns, no knives.
 //   bat        lathe-turned ash with black tape (a Degen's: stained black, acid-green tape); swung; ~8 hits and it snaps
 //   bottle     lathe glass (a TSL node material: clear face-on, solid at the edges), half full; smashed over a head (one
 //              use) or thrown: it arcs and shatters

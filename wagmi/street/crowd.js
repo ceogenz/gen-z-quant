@@ -1,4 +1,4 @@
-// WAGMI City: the street crowd. New Yorkers on every sidewalk round Quant, several times what the city keeps of its own
+// Gen Z Quant: the street crowd. New Yorkers on every sidewalk round Quant, several times what the city keeps of its own
 // (js/traffic.js spreads its 340 walkers over 320 m): they walk round the blocks both ways, keep to their side, step
 // round the street furniture, bunch up at the corners waiting for the WALK and cross on it, stand about, and run from
 // trouble. One instanced, skinned draw per level of detail (js/pedestrians.js PersonCrowd); only those in view solve

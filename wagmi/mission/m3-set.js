@@ -1,4 +1,4 @@
-// WAGMI City: Mission 3's sets and people.
+// Gen Z Quant: Mission 3's sets and people.
 //   rally   the $MOON2 launch at Washington Square: a stage under the arch (the city's own arch, js/city-grid.js), a big
 //           LED screen in front of its opening with the live $MOON2 chart (a canvas: pumping green, then the dump in red),
 //           Moon's face on a banner over the arch's attic, speaker stacks, crowd barriers, the hype crowd (the city's

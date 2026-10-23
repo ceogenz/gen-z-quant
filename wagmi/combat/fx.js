@@ -1,4 +1,4 @@
-// WAGMI City: the fight's effects: GPU-instanced billboard particles (hit sparks, flashes, rings, sweat, dust), drawn
+// Gen Z Quant: the fight's effects: GPU-instanced billboard particles (hit sparks, flashes, rings, sweat, dust), drawn
 // with TSL node materials (WebGPU: no ShaderMaterial). One instanced quad per pool; each particle a billboard stretched
 // along its own motion on screen. The textures are drawn on canvases at start-up (no files). Colours are linear HDR: the
 // city's bloom picks up anything over 1.

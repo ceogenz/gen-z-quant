@@ -1,4 +1,4 @@
-// WAGMI City: Mission 2's sets. The Degens' container yard on the 12th Ave apron by the cruise piers (W 54th-55th St):
+// Gen Z Quant: Mission 2's sets. The Degens' container yard on the 12th Ave apron by the cruise piers (W 54th-55th St):
 // a chain-link fence with a gate onto 12th Ave (south), a side gate (east) and a torn gap on the park side (west), stacks
 // of shipping containers (solid: they join the city's colliders while the yard stands, so Quant, the car, the Degens and
 // the fight's camera all keep out of them), floodlights with pools of light, and the stash: a folding table of burner

@@ -3,7 +3,7 @@
 // Road markings generated from the drivable road network (js/road-network.js), so the paint matches where traffic
 // actually drives and stops: dashed lane lines, double yellow centre lines on two-way roads, stop bars at the stop
 // lines, continental crosswalks across every intersection approach and green bike lanes along wide one-way avenues.
-// (WAGMI City) Lines joined through bends and the double yellow down wide two-way streets: ported from Slop New York by
+// (Gen Z Quant) Lines joined through bends and the double yellow down wide two-way streets: ported from Slop New York by
 // Mr.doob, MIT, commit 30096be.
 
 const { THREE, CROSSWALK, createRoadPaintMaterial } = window.NYC;
@@ -56,7 +56,7 @@ function buildRoadPaint(scene, network) {
     }
     return true;
   };
-  // (WAGMI City) Whether the centre line o of e runs down a median the game removed for more than a few metres: city-grid.js
+  // (Gen Z Quant) Whether the centre line o of e runs down a median the game removed for more than a few metres: city-grid.js
   // already paints that one's double yellow (city-config.js REMOVED_MEDIANS), and a second pair on top would double it
   const removedMedians = window.NYC.REMOVED_MEDIANS || [];
   const onRemovedMedian = (e, o) => {

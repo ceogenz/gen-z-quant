@@ -1,4 +1,4 @@
-// WAGMI City: Mission 2's overlays, in the shared style (ui.js): Juno's video call and her screen share (the burner's
+// Gen Z Quant: Mission 2's overlays, in the shared style (ui.js): Juno's video call and her screen share (the burner's
 // twin pinging in Times Square) in the phone frame, Lev's phone (the Degens' group chat), the tail meter (how far
 // behind the van, how suspicious they are), the lookouts' alert marks over their heads, and Lev's car's damage.
 //   const U = createM2UI(W.ui);

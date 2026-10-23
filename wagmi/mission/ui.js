@@ -1,4 +1,4 @@
-// WAGMI City: the mission overlays, the GTA way. The shared style: Barlow Condensed, white with a soft dark shadow,
+// Gen Z Quant: the mission overlays, the GTA way. The shared style: Barlow Condensed, white with a soft dark shadow,
 // accent yellow #FFC93C (places, objectives), green #4ADE80 (objects), red #EF4444 (enemies, danger), blue #6CB8FF
 // (friends, Quant's car), acid green #B6FF3B (the Degens, ZK); panels rgba(8,10,14,0.62), 10 px corners.
 //   cine(on)                    letterbox bars in, the city's HUD out (and back)
@@ -254,7 +254,7 @@ export function createUI() {
     <div class="hd"><span class="nm">UNKNOWN</span><small>VIDEO CALL · <span class="clock">00:07</span></small><small class="vc">VOICE CHANGER ON</small></div><div class="rec">● LIVE</div><div class="wave">${'<i></i>'.repeat(16)}</div>`);
   const barT = el('wg-bar top'), barB = el('wg-bar bot');
   const fadeEl = el('wg-fade');
-  const gTitle = el('wg-gtitle', `<div class="logo">WAGMI <b>CITY</b></div><div class="rule"></div><div class="tag">We're all gonna make it</div>`);
+  const gTitle = el('wg-gtitle', `<div class="logo">GEN Z <b>QUANT</b></div><div class="rule"></div><div class="tag">We're all gonna make it</div>`);
   const titleEl = el('wg-title', `<div class="act"></div><div class="name"></div>`);
   const placeEl = el('wg-place', `<div class="n"></div><div class="s"></div>`);
   const capEl = el('wg-cap', `<div class="n"></div><div class="r"></div>`);

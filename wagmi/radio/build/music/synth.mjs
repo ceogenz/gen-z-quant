@@ -1,4 +1,4 @@
-// WAGMI City: a small offline synth for the radio's original tracks (Node, not loaded by the game). A song is written
+// Gen Z Quant: a small offline synth for the radio's original tracks (Node, not loaded by the game). A song is written
 // as notes on a bar / sixteenth grid; every note is synthesised into its bus, the buses mixed (EQ, sidechain to the
 // kick, reverb and delay sends), the master glued, limited and set to a loudness. Deterministic (seeded).
 export const SR = 44100;

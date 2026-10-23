@@ -1,4 +1,4 @@
-// WAGMI City: the sounds that keep going. Each is fn(M, out) -> { set(o), stop(secs), sources }: it plays into `out`
+// Gen Z Quant: the sounds that keep going. Each is fn(M, out) -> { set(o), stop(secs), sources }: it plays into `out`
 // (already placed); set() takes what it understands (vol, rate, speed m/s, load 0..1, dop the doppler factor, mode).
 //   siren    an NYPD siren through its horn speaker: mode 'wail' (a slow rise and fall), 'yelp' (fast), 'phaser'
 //            (faster still) or 'off'

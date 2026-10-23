@@ -1,4 +1,4 @@
-// WAGMI City: the cast's voices. Every spoken line is a file (assets/voice/<id>.m4a) listed in assets/voice/manifest.json
+// Gen Z Quant: the cast's voices. Every spoken line is a file (assets/voice/<id>.m4a) listed in assets/voice/manifest.json
 // with its speaker and words (built from the game's own lines by wagmi/radio/build/voices.mjs). The subtitles drive
 // them: ui.sub(speaker, text) shows a line and calls WAGMI.voice.sub(speaker, text), which plays that line's file
 // from the top (once per showing; ui.sub(null) between lines). A call's sound is put on live: ZK's video call, Juno's

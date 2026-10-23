@@ -22,7 +22,7 @@ const CAMERA_PRESETS = [
 // The follow cameras' lens keeps LENS_PAD m off the buildings (the near plane, 0.35 m out, stays clear of a wall)
 const LENS_PAD = 0.3;
 // How far a line from p (unit direction ux, uy, uz) runs, up to len, before it comes within LENS_PAD of one of the
-// boxes: the controllers' colliders, boxes from the ground up to maxY, some turned (obb); (WAGMI City) a box with a minY
+// boxes: the controllers' colliders, boxes from the ground up to maxY, some turned (obb); (Gen Z Quant) a box with a minY
 // starts there instead (a sign, a screen up on its truss). A box the line starts within the pad of counts at its own
 // size, one it starts inside not at all.
 function rayClear(p, ux, uy, uz, len, boxes) {
@@ -105,10 +105,10 @@ class CameraSystem {
     this._view = null;
     this._pivot = new THREE.Vector3();
     this._look = new THREE.Vector3();
-    // (WAGMI City) what else stands in the street, for keepInView: blockers(x, z, r, entity) -> boxes in the colliders'
+    // (Gen Z Quant) what else stands in the street, for keepInView: blockers(x, z, r, entity) -> boxes in the colliders'
     // form (the traffic, a parked car, a mission's van or stage screen: wagmi/combat/camera.js createBlockers), or null
     this.blockers = null;
-    // (WAGMI City) the shore highways' traffic too (js/traffic.js createHighwayTraffic, set by wagmi/game.js): its cars
+    // (Gen Z Quant) the shore highways' traffic too (js/traffic.js createHighwayTraffic, set by wagmi/game.js): its cars
     // are boxes like the city's cars in createBlockers (highwayBoxes)
     this.highway = null;
     this._hwNear = [];
@@ -264,7 +264,7 @@ class CameraSystem {
 
     switch (this.activePresetId) {
       case 'chase': {
-        // (WAGMI City: a car that frames itself, entity.chase: its own lens, a short pull back with speed instead of the
+        // (Gen Z Quant: a car that frames itself, entity.chase: its own lens, a short pull back with speed instead of the
         // long one, and the lens widening with speed and more on the boost, so the car stays big and speed still reads;
         // its shake flat out, below)
         const ch = entity.chase;
@@ -288,7 +288,7 @@ class CameraSystem {
           entity.position.z - Math.cos(totalYaw) * horizDist
         );
 
-        // (WAGMI City: ahead the way the camera faces round him, not the way he faces: dragged round to his front or
+        // (Gen Z Quant: ahead the way the camera faces round him, not the way he faces: dragged round to his front or
         // side, he stays in the middle of the frame)
         const lookUpBias = entity.type === 'helicopter' ? 0.2 : (entity.type === 'car' ? 0.52 : 1.55);
         desiredLook.set(
@@ -452,7 +452,7 @@ class CameraSystem {
     this._look.copy(this.currentLookAt);
     if ((this.activePresetId === 'chase' || this.activePresetId === 'action') && this.followEntity === entity) this.keepInView(entity, dt);
     else this._view = null;
-    // (WAGMI City: a car's own lens trembles a little flat out, from about its top speed up to its boost's: the speed
+    // (Gen Z Quant: a car's own lens trembles a little flat out, from about its top speed up to its boost's: the speed
     // reads without the camera dropping back off it)
     const ch = this._lens && entity.chase;
     if (ch && ch.shake) {
@@ -473,7 +473,7 @@ class CameraSystem {
   // swings round him to the clearest way within reach, no faster than ~140 degrees a second, and back once straight
   // behind him is clear again; with no clear way at all it rises over him, looking down. (Only the camera moves: the
   // follow and orbit state are left as they are.)
-  // the buildings' collision boxes within r of p, and (WAGMI City) the street's other things (this.blockers) and the
+  // the buildings' collision boxes within r of p, and (Gen Z Quant) the street's other things (this.blockers) and the
   // highways' cars (this.highway)
   nearBoxes(p, r, entity) {
     const near = this.controllerManager.nearColliders(p.x, p.z, r);
@@ -483,7 +483,7 @@ class CameraSystem {
     return hwy && hwy.length ? all.concat(hwy) : all;
   }
 
-  // (WAGMI City) the shore highways' cars within r of (x, z), as the city's cars are in createBlockers: on foot every
+  // (Gen Z Quant) the shore highways' cars within r of (x, z), as the city's cars are in createBlockers: on foot every
   // one, its box a little over its roof; driving, only one the lens is in or right at (else every car passing behind
   // him would pull the view in and let it out again). One up on the viaduct stands from its wheels, not the ground.
   highwayBoxes(x, z, r) {
@@ -511,7 +511,7 @@ class CameraSystem {
     return out;
   }
 
-  // (WAGMI City) how much of the line from p to q is clear of the buildings and the street's things (0 to 1; 1: all of
+  // (Gen Z Quant) how much of the line from p to q is clear of the buildings and the street's things (0 to 1; 1: all of
   // it): a cutscene's hand-back glides only while the line from him to the lens stays clear (wagmi/mission/cine.js)
   segClear(p, q, entity) {
     const x = q.x - p.x, y = q.y - p.y, z = q.z - p.z, L = Math.hypot(x, y, z);
@@ -519,7 +519,7 @@ class CameraSystem {
     return rayClear(p, x / L, y / L, z / L, L, this.nearBoxes(p, L + 1, entity)) / L;
   }
 
-  // (WAGMI City) the turn of the player (rad: the least there is) that puts the view behind him clear of all round him
+  // (Gen Z Quant) the turn of the player (rad: the least there is) that puts the view behind him clear of all round him
   // at its full length; 0 when straight behind him already is, or in a car. A cutscene's hand-back turns him by it (a
   // van, a wall or the stage right at his back would have the view in it): wagmi/mission/cine.js release()
   clearTurn(entity) {

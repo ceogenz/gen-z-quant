@@ -1,4 +1,4 @@
-// WAGMI City: Mission 2's scripted vehicles: the HODL Moving Co. van Quant tails and Lev's car he chases. Each drives
+// Gen Z Quant: Mission 2's scripted vehicles: the HODL Moving Co. van Quant tails and Lev's car he chases. Each drives
 // an authored route (a smooth curve through [x, z] points, sampled by distance) at a speed the mission asks for, and
 // lives in the city's traffic:
 //   - it brakes for what is ahead of it on its way (the traffic's cars and buses, Quant's car), IDM style, unless it

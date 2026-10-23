@@ -1,4 +1,4 @@
-// WAGMI City: Moon, Quant's dog. A small white fluffy dog (a Maltese / Havanese type: a full, soft white coat, dark
+// Gen Z Quant: Moon, Quant's dog. A small white fluffy dog (a Maltese / Havanese type: a full, soft white coat, dark
 // eyes, a black nose, floppy furry ears, a plumed tail over the back), built in code from soft volumes and about 4,000
 // clumps of fur: tapered cards combed over the body, each a clump of fibres with a ragged tip drawn by its material,
 // the roots shaded, the tips swaying as Moon moves. A little rig of pivots does the rest: idle (breathing, a wag, a tilt of the

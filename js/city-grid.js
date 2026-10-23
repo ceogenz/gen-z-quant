@@ -1540,10 +1540,10 @@ function buildCityGrid(scene) {
       }
       if (b.median) addFootprint((b.minX + b.maxX) * 0.5, (b.minZ + b.maxZ) * 0.5, b.maxX - b.minX, b.maxZ - b.minZ);
     }
-    // (WAGMI City: no clipped hedge on the medians any more: the malls down the middle of Park Ave, Broadway, Allen St...
+    // (Gen Z Quant: no clipped hedge on the medians any more: the malls down the middle of Park Ave, Broadway, Allen St...
     // are road with a double yellow line (below, city-config.js REMOVED_MEDIANS), the short islands left plain concrete)
   }
-  // (WAGMI City) A double yellow line down where each removed median ran, 0.5 m short of its ends (createRoadPaintMaterial
+  // (Gen Z Quant) A double yellow line down where each removed median ran, 0.5 m short of its ends (createRoadPaintMaterial
   // attributes, as js/road-paint.js lays them)
   {
     const { createRoadPaintMaterial, REMOVED_MEDIANS } = window.NYC;
@@ -1641,7 +1641,7 @@ function buildCityGrid(scene) {
   const parkTreeSites = []; // { x, y, z, scale, species } park & plaza trees planted by street-details.js (section 7)
   const PLAZA_Y = 0.24;
   const pavedRects = []; // plaza & park slab bounds, exported so street trees (street-details.js) stay off them
-  const plazaSolids = (window.NYC.plazaSolids = []); // (WAGMI City: the granite a car stops dead at, wagmi/crash) { kind, x, z, w, d }
+  const plazaSolids = (window.NYC.plazaSolids = []); // (Gen Z Quant: the granite a car stops dead at, wagmi/crash) { kind, x, z, w, d }
 
   function addPavedPlaza(pts, style, topY = PLAZA_Y) {
     group.add(createExtrudedPolygonMesh(pts, 0.0, topY - 0.04, curbMat, true, false));
@@ -1885,14 +1885,14 @@ function buildCityGrid(scene) {
     if (w.name === 'Jacqueline Kennedy Onassis Reservoir') {
       const track = offsetPolygon(pts, -6);
       if (track) group.add(createExtrudedPolygonMesh(track, 1.18, 0.38, cpPathMat, true, false));
-      if (track) window.NYC.cpTrack = track; // (WAGMI City: its top is ground, controllers.js getGroundHeight)
+      if (track) window.NYC.cpTrack = track; // (Gen Z Quant: its top is ground, controllers.js getGroundHeight)
       group.add(createFlatPolygonMesh(pts, 1.58, waterMat, true));
     } else {
       group.add(createFlatPolygonMesh(pts, 1.24, waterMat, true));
     }
   }
 
-  window.NYC.cpWater = cpWaterPolys; // (WAGMI City: nobody walks or drives into it, controllers.js inParkWater)
+  window.NYC.cpWater = cpWaterPolys; // (Gen Z Quant: nobody walks or drives into it, controllers.js inParkWater)
 
   // The loop drives (East, West, Center & Terrace Drives, car-free) and the four transverse roads crossing the park
   const cpDrives = [];
@@ -2040,7 +2040,7 @@ function buildCityGrid(scene) {
   const BED_Y = 0.41; // lawn top inside the granite bed copings
   const parkLawnGeos = [];
   const parkFenceGeos = [];
-  // (WAGMI City) The parks' iron fences and railings solid to Quant's car (carOnly: people on foot step over the low
+  // (Gen Z Quant) The parks' iron fences and railings solid to Quant's car (carOnly: people on foot step over the low
   // hoops and walk through as before; the gates are the gaps in the runs): a turned box 0.3 m thick along each run, up to
   // its top (js/controllers.js: a wall to the car, wagmi/crash: `fence`, the iron's clang)
   const fenceColliders = [];
@@ -2157,7 +2157,7 @@ function buildCityGrid(scene) {
         return [p.x, p.z, q.x, q.z];
       });
       parkFenceGeos.push(buildFenceStripGeometry(hoopSegs, BED_Y - 0.01, 0.5));
-      solidFence(hoopSegs, BED_Y + 0.5); // (WAGMI City)
+      solidFence(hoopSegs, BED_Y + 0.5); // (Gen Z Quant)
       lineBedEdges(bed);
       scatterParkTrees(bed, cell.treeSpacing ?? 9.0, BED_Y, 2.0, speciesMix);
     }
@@ -2190,7 +2190,7 @@ function buildCityGrid(scene) {
   // Perimeter of a small park: hex-paver slab flush with the sidewalks, granite coping & iron fence set back from
   // the curb (gates where the walks come out), and a row of big London planes & lampposts along the outer sidewalk.
   // pk.clipToShore: the slab, fence and tree row keep to the island's asphalt deck where the shore cuts a corner off.
-  // (WAGMI City) pk.poly: the square's own curb outline (convex), for one whose streets run slanted to the grid: the
+  // (Gen Z Quant) pk.poly: the square's own curb outline (convex), for one whose streets run slanted to the grid: the
   // slab, fence, tree row and lawns keep inside it, so the streets round it stay streets (the walks and the fountain
   // stay where the bounds put them)
   function buildSmallPark(pk) {
@@ -2252,7 +2252,7 @@ function buildCityGrid(scene) {
       addBox(graniteMat, (x1 + x2) * 0.5, PARK_Y - 0.02, (z1 + z2) * 0.5, 0.42, 0.34, len + 0.2, Math.atan2(x2 - x1, z2 - z1), false);
     }
     parkFenceGeos.push(buildFenceStripGeometry(fenceSegs, PARK_Y + 0.32, 0.95));
-    solidFence(fenceSegs, PARK_Y + 1.27); // (WAGMI City)
+    solidFence(fenceSegs, PARK_Y + 1.27); // (Gen Z Quant)
 
     // London planes & lampposts lining the perimeter sidewalk (kept clear of the corners & gates)
     const row = shaped ? offsetConvexPolygon(slab, -1.3) : rectPolygon(minX + 1.3, maxX - 1.3, minZ + 1.3, maxZ - 1.3);
@@ -2287,7 +2287,7 @@ function buildCityGrid(scene) {
   const smallParks = {};
   const wsq = parkRect('Washington Square Park');
   const x5 = window.NYC.avenueX('5');
-  // (WAGMI City) Washington Square's curbs run slanted to the grid (its south side ~20 m lower at the east end than the
+  // (Gen Z Quant) Washington Square's curbs run slanted to the grid (its south side ~20 m lower at the east end than the
   // west, its east and west sides leaning ~10 m): the park keeps to its own curb (the outline's convex hull) on the
   // south, east and west, so Washington Sq S, E and W stay streets; its north side stays on the bounds' straight edge,
   // with the Arch and the rally's set on it (the north-east corner squared off to match)
@@ -2400,7 +2400,7 @@ function buildCityGrid(scene) {
     addGround(BED_Y, bed);
     const lawnTop = offsetPolygonInward(bed, 0.3);
     if (lawnTop) parkLawnGeos.push(createExtrudedPolygonMesh(lawnTop, 0.3, BED_Y - 0.3, cpLawnMat).geometry);
-    // (WAGMI City) a low hoop fence round the lawn on its coping, as round the squares' beds (7B), solid to Quant's car
+    // (Gen Z Quant) a low hoop fence round the lawn on its coping, as round the squares' beds (7B), solid to Quant's car
     const hoop = offsetPolygonInward(bed, 0.18) || bed;
     const hoopSegs = hoop.map((p, k) => {
       const q = hoop[(k + 1) % hoop.length];
@@ -2502,7 +2502,7 @@ function buildCityGrid(scene) {
       railSegs.push([A.x, A.z, B.x, B.z]);
     }
     if (railSegs.length) parkFenceGeos.push(buildFenceStripGeometry(railSegs, COPING_TOP, 1.1));
-    solidFence(railSegs, COPING_TOP + 1.1); // (WAGMI City)
+    solidFence(railSegs, COPING_TOP + 1.1); // (Gen Z Quant)
   }
 
   // One merged lawn mesh & one alpha-tested iron fence mesh for every small park
@@ -2579,7 +2579,7 @@ function buildCityGrid(scene) {
     benchInst.receiveShadow = true;
     benchInst.computeBoundingSphere();
     group.add(benchInst);
-    window.NYC.plazaBenches = { inst: benchInst, matrices: benchMatrices }; // (WAGMI City: a car knocks them flying, wagmi/crash)
+    window.NYC.plazaBenches = { inst: benchInst, matrices: benchMatrices }; // (Gen Z Quant: a car knocks them flying, wagmi/crash)
   }
   if (lampMatrices.length) {
     const poleGeo = mergeGeometries([
@@ -2611,7 +2611,7 @@ function buildCityGrid(scene) {
     poolInst.instanceMatrix.needsUpdate = true;
     poolInst.computeBoundingSphere();
     group.add(poolInst);
-    window.NYC.parkLamps = { pole: poleInst, globe: globeInst, pool: poolInst, matrices: lampMatrices }; // (WAGMI City: a car knocks them down, wagmi/crash)
+    window.NYC.parkLamps = { pole: poleInst, globe: globeInst, pool: poolInst, matrices: lampMatrices }; // (Gen Z Quant: a car knocks them down, wagmi/crash)
   }
 
   // Park & plaza tree and lamp sites, read by street-details.js after the city grid is built
@@ -2751,7 +2751,7 @@ function buildManhattanWaterfrontEdge(group, { blockSidewalks, parkTreeSites, la
       let front = Infinity;
       for (const b of near) if (Math.abs(r.z - b.cz) < b.d / 2 - 1) front = Math.min(front, edgeD(b, r.s));
       const a = r.land ? r.land[0] : r.d0 + HWY_W + 0.5;
-      // (WAGMI City: r.landTrees, where the belt ended before: past it, trees only on a block, see plantBelt)
+      // (Gen Z Quant: r.landTrees, where the belt ended before: past it, trees only on a block, see plantBelt)
       if (front < Infinity && front - 1.2 - (r.land ? r.land[1] : a) >= (west && r.z < -350 ? 14 : 8)) { r.landTrees = r.land ? r.land[1] : a; r.land = [a, front - 1.2]; }
     }
     return rows;
@@ -2911,7 +2911,7 @@ function buildManhattanWaterfrontEdge(group, { blockSidewalks, parkTreeSites, la
         const d = a + 1.9 + k * rowGap + (hash(k, zt) - 0.5) * 1.0;
         if (d > b - 1.6) break;
         if (blocked(r, d) || (key === 'river' && blocked(r, a)) || hash(z, d) < 0.1) continue;
-        // (WAGMI City: out on the stretch the belt reaches over to a receding front (see sampleShore), only on a block,
+        // (Gen Z Quant: out on the stretch the belt reaches over to a receding front (see sampleShore), only on a block,
         // a park's or a sidewalk's: off one it may be an avenue carrying on, 12th Ave south of W 52nd and of W 45th)
         if (key === 'land' && r.landTrees != null && d > r.landTrees - 1.6 && !window.NYC.blockAt(X(r, d), z)) continue;
         parkTreeSites.push({ x: X(r, d), y: LAWN_Y, z, scale: s0 + hash(d, z) * (s1 - s0), species: pickSpecies(hash(z * 0.37, d), mix), tier });
@@ -3187,7 +3187,7 @@ function buildManhattanWaterfrontEdge(group, { blockSidewalks, parkTreeSites, la
     a.pts.push(...b.pts);
     highwayLanes.splice(highwayLanes.indexOf(b), 1);
   }
-  // (WAGMI City) No tree in the carriageway: a park's tree site (any park's, the belts', the squares') within a lane's
+  // (Gen Z Quant) No tree in the carriageway: a park's tree site (any park's, the belts', the squares') within a lane's
   // half width and a trunk's room of a lane's centre line is dropped (the groves planted across 12th Ave at W 52nd-54th
   // and W 44th-45th, where the park outlines reach over the highway)
   {

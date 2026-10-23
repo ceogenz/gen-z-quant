@@ -1,4 +1,4 @@
-// WAGMI City: the fight's buttons, read while Quant is on foot (a GTA / Arkham mix, keyboard first, the mouse too):
+// Gen Z Quant: the fight's buttons, read while Quant is on foot (a GTA / Arkham mix, keyboard first, the mouse too):
 //   LMB or J  strike (the light combo; at a man on the ground, nothing: the heavy finishes him)
 //   RMB or K  heavy (a kick or an uppercut; the takedown when the combo meter is full; at a man on the ground, the finisher)
 //   Q or L    counter (while a man's cue shows over his head)

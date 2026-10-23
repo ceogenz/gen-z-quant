@@ -1,9 +1,9 @@
-// WAGMI City: the opening cutscene and the first mission's start. Installed by game.js.
+// Gen Z Quant: the opening cutscene and the first mission's start. Installed by game.js.
 // ?nointro: no cutscene, no mission: the game as it starts today, but on foot beside the car.
 // ?m1=car|drive|fight|search: Mission 1 from that checkpoint (no cutscene).   ?nogate: no start gate (captures).
 //
 // The opening, E 37th St at golden hour (docs/MISSIONS.md 5.2, with ZK's call moved up to it), 81 s:
-//   1 aerial over Murray Hill to the Empire State: WAGMI CITY      2 E 37th St from the Madison end: Murray Hill
+//   1 aerial over Murray Hill to the Empire State: GEN Z QUANT      2 E 37th St from the Madison end: Murray Hill
 //   3 the door: Moon trots out, Quant follows on his phone          4 the comments; Moon tugs for the car (her eye level)
 //   5 the van turns in from Madison, tyres screaming                 6 behind Quant: the door rips open, the Degens come on
 //   7 over Bagsy's shoulder: 'Sign my bags?'                         8 Stops scoops Moon up and runs for the van

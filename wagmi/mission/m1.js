@@ -1,4 +1,4 @@
-// WAGMI City: Mission 1 · Dognapped (docs/MISSIONS.md 5), after the opening cutscene (wagmi/intro.js).
+// Gen Z Quant: Mission 1 · Dognapped (docs/MISSIONS.md 5), after the opening cutscene (wagmi/intro.js).
 //   car     'Get in your car.'                       checkpoint 1 (Quant at his mark, the roadster at the curb)
 //   drive   'Follow Moon's tag to Chelsea Park.'     the GPS, Juno on the phone, Moon's tag on the radar
 //   arrival 'The swap' (a scene): Moon driven off in a black SUV past him, the Degens cross the lawn for him
@@ -207,7 +207,7 @@ function createMission(W, { keep = false } = {}) {
         if (callAt != null && !called && t >= callAt) { called = true; junoCall(tk); }
         const p = me();
         if (W.cast && !W.cast.van.group.visible && dist(p, DEST.x, DEST.z) < 320) setVan(W.cast, true);
-        for (const [name, test] of places) if (!seen.has(name) && test(p)) { seen.add(name); ui.place(name, 'WAGMI City', 3); }
+        for (const [name, test] of places) if (!seen.has(name) && test(p)) { seen.add(name); ui.place(name, 'New York', 3); }
         nav.step();
       });
       await wait(() => (inCar() ? dist(car.position, DEST.x, DEST.z) < 6 && Math.abs(car.speed) < 8 : dist(P.position, DEST.x, DEST.z) < 6));
@@ -404,7 +404,7 @@ function createMission(W, { keep = false } = {}) {
         if (engine) engine.set(clamp(sS.speed(t) / 30), p ? 0.5 * clamp(16 / Math.max(5, Math.hypot(p.x - D.camera.pos[0], p.z - D.camera.pos[2]))) : 0);
       };
       cleanup = () => { suv.group.visible = false; C.moon.group.visible = false; engine?.stop(0.4); };
-      cues.push([0.2, () => ui.place('Chelsea Park', 'Chelsea · WAGMI City', 3)]);
+      cues.push([0.2, () => ui.place('Chelsea Park', 'Chelsea · New York', 3)]);
       cues.push([0.45, () => sfx.play('thunk', { gain: 0.45, f: 70 })]);
       cues.push([0.85, () => { engine = sfx.engine(); sfx.play('squeal', { gain: 0.42, dur: 0.6, p: -0.3 }); }]);
       cues.push([1.4, () => sfx.play('bark', { gain: 0.22, n: 2, p: -0.4 })]);

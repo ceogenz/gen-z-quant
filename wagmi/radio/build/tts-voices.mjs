@@ -1,4 +1,4 @@
-// WAGMI City: the synthesised voices (Node data, for the voice build). The candidates the owner auditioned for Quant and
+// Gen Z Quant: the synthesised voices (Node data, for the voice build). The candidates the owner auditioned for Quant and
 // Juno, by name (quant-A .. quant-F, juno-A .. juno-F), and for the side characters (bagsy-A/B, lev-A/B, gears-A .. gears-E,
 // fiona-A/B, fomo-A/B, wick-A/B); the one picked for a speaker is recorded by `voices.mjs --tts <name>,..` in
 // wagmi/radio/build/tts/picks.json, and wagmi/radio/build/tts.py renders that speaker's lines with it (see docs/VOICE-LINES.md).

@@ -1,4 +1,4 @@
-WAGMI City: notices and credits
+GEN Z QUANT: notices and credits
 ================================
 
 Slop New York
@@ -38,7 +38,7 @@ Props (street fight)
 
 Characters (assets/characters)
 ------------------------------
-  - quant.glb, gears.glb, juno.glb, fiona.glb: original characters made for WAGMI City (invented people;
+  - quant.glb, gears.glb, juno.glb, fiona.glb: original characters made for Gen Z Quant (invented people;
     nobody is modelled on a real person), built from MakeHuman's base body, clothes and hair
     (http://www.makehuman.org, CC0-1.0), then shaped, dressed, recoloured and texture-baked for the game.
     Juno's headband, glasses and headphones, Gears' beard and cap and Fiona's megaphone and shades are
@@ -130,7 +130,7 @@ Engine sounds
       (via Wikimedia Commons: https://commons.wikimedia.org/wiki/File:Maserati_GranTurismo_S_Exhaust.ogg)
     licensed CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/). Changed: trimmed, pitch-flattened
     to constant engine speeds, looped, levelled and re-encoded to AAC.
-  - The gearbox, the shifts, the pops and the mix (wagmi/audio/supercar.js) are original to WAGMI City.
+  - The gearbox, the shifts, the pops and the mix (wagmi/audio/supercar.js) are original to Gen Z Quant.
   - The traffic's engines and the crash's metal (wagmi/audio/motors.js, wagmi/audio/crunch.js): engine and
     crash synthesis ported from Slop New York by Mr.doob (MIT), commits 0e5bbfb and 7772c09.
 

@@ -1146,7 +1146,7 @@ function createLoftedCarMaterial(spec, fixedColorHex = null) {
   body = mix(body, color(0x111417).mul(slats), max(intake, grille));
   body = mix(body, mix(mix(color(0x23292f), color(0xdfe9f2), headlightLens), color(0xffffff), drl), headlight);
   // Tail: diffuser, reflectors, wraparound lamps (amber outer turn signal), plate recess; plates; dark underbody
-  // (WAGMI City: the amber at the lamps' outer edge ported from Slop New York by Mr.doob, MIT, commit 168c3a4)
+  // (Gen Z Quant: the amber at the lamps' outer edge ported from Slop New York by Mr.doob, MIT, commit 168c3a4)
   body = mix(body, color(0x15181b), diffuser);
   body = mix(body, color(0x7a0a10), reflector);
   body = mix(body, mix(color(0x8c0a12), color(0xc24d10), turnRear), taillight);

@@ -1,4 +1,4 @@
-// WAGMI City: New York's own sound, always on (the amb bus), shaped by where the camera is (where: traffic 0..1, the
+// Gen Z Quant: New York's own sound, always on (the amb bus), shaped by where the camera is (where: traffic 0..1, the
 // cars about; crowd 0..1, the people about; park 0..1; avenue 0..1, near an avenue and its subway line):
 //   a bed      the low roar of traffic blocks away, steady; the block's engines (a few cars and trucks down the street,
 //              idling at the light, pulling away up through a gear, gone, the next one along); the city's hum (the

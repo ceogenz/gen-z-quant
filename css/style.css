@@ -1451,7 +1451,7 @@ body.touch-enabled .pop-item { min-height: 44px; }
   }
 }
 
-/* ---- WAGMI City: a game pad's buttons in place of the key caps (wagmi/pad.js: kbd.wgp, while a pad is the last
+/* ---- Gen Z Quant: a game pad's buttons in place of the key caps (wagmi/pad.js: kbd.wgp, while a pad is the last
    thing used, body.wg-pad). Sized from the key cap's own font, so they fit wherever a key cap was ---- */
 #wg-prompt kbd:not(.wgp) { all: unset; }
 kbd.wgp {

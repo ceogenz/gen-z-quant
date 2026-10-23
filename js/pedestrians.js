@@ -1426,7 +1426,7 @@ class PersonRig {
   }
 
   /**
-   * Knocked flying (WAGMI City, wagmi/street): the whole body turned by `q` (world; +Y head, +Z front, +X its left)
+   * Knocked flying (Gen Z Quant, wagmi/street): the whole body turned by `q` (world; +Y head, +Z front, +X its left)
    * about the pelvis joint at `pos`. `flail` 0..1: limbs flung out, windmilling and kicking (in the air) .. limp,
    * spread a little (lying); `curl` 0..1: knees and arms drawn in (getting up); `t` the clock they flail by. The walk
    * picks up afresh after it (reset).

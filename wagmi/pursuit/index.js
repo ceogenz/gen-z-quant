@@ -1,4 +1,4 @@
-// WAGMI City: heat and pursuit (cars that chase and ram Quant, a GTA heat meter) and the car's thruster abilities. Installed by game.js.
+// Gen Z Quant: heat and pursuit (cars that chase and ram Quant, a GTA heat meter) and the car's thruster abilities. Installed by game.js.
 //   cars.js       the chase cars: the Degens' black SUVs and sedans on acid-green rims, the police's NYPD cruisers
 //   nav.js        their way through the streets (the traffic's road graph, A* corner to corner) and their sight
 //   hud.js        the HEAT meter (top-right) and the radar's search circle, red blips and pulsing rim

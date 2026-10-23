@@ -1,4 +1,4 @@
-// WAGMI City: a crash's metal. Ported from Slop New York by Mr.doob (MIT), commit 7772c09 (js/audio-events.js:
+// Gen Z Quant: a crash's metal. Ported from Slop New York by Mr.doob (MIT), commit 7772c09 (js/audio-events.js:
 // crashBody, crashMetal, crashDebris and the crash in playEvent), three takes of each layer baked once:
 //   body    the bumper and body taking it: band-limited noise, a broad damped thump and a second contact just after
 //   metal   the sheet metal buckling: uneven creases driving four inharmonic panel modes, under a crushed scrape

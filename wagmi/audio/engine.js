@@ -1,4 +1,4 @@
-// WAGMI City: play() and loop() over the mixer. A sound with a world position is placed against the camera (and kept
+// Gen Z Quant: play() and loop() over the mixer. A sound with a world position is placed against the camera (and kept
 // placed while it lasts: loops are re-placed every frame); one without plays straight into its bus. Each name has a
 // voice limit (the oldest of it gives way). Unknown names stay silent.
 import { SOUNDS, META } from './sounds.js';

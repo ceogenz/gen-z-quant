@@ -1,4 +1,4 @@
-// WAGMI City: the Degens' van. A beat-up black high-roof panel van with no maker's name: a short sloped nose, a raked
+// Gen Z Quant: the Degens' van. A beat-up black high-roof panel van with no maker's name: a short sloped nose, a raked
 // windscreen, a sliding side door on the right (curb) side that rolls back along its rail, two rear doors. On both
 // sides an acid-green stripe, 'HODL Moving Co.' and 'We never let go.', a sprayed tag, and the grime of a hard life.
 //

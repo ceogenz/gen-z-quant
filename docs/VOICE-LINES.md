@@ -1,4 +1,4 @@
-# WAGMI City: voice lines
+# Gen Z Quant: voice lines
 
 Every spoken line in the game, for a voice service or actors. Generated from the game's own source by
 `node wagmi/radio/build/voices.mjs` (do not edit by hand: change the words in the game, then rebuild).

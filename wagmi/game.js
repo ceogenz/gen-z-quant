@@ -1,4 +1,4 @@
-// WAGMI City: the game on top of the city. Waits for the city app (window.__NYC_APP), then
+// Gen Z Quant: the game on top of the city. Waits for the city app (window.__NYC_APP), then
 //  - puts Quant (assets/characters/quant.glb, every clip) in place of the procedural walker, his idle, walk, jog, run
 //    and sprint blended from his speed and his jump from the air under him;
 //  - puts Quant's car (wagmi/roadster.js) in place of the taxi, faster, its rocket package firing on the boost;

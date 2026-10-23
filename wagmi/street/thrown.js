@@ -1,4 +1,4 @@
-// WAGMI City: a person knocked flying (or diving out of the way): the body as one rigid piece, its pelvis joint's place,
+// Gen Z Quant: a person knocked flying (or diving out of the way): the body as one rigid piece, its pelvis joint's place,
 // its turn, velocity and spin, under gravity, off the walls, onto the street with a bounce or two and a slide; lying
 // there, then up again. The limbs fly about in the air, go limp on the ground and draw in to get up
 // (PersonRig.tumble in js/pedestrians.js poses them). A dive is the same with less in it.

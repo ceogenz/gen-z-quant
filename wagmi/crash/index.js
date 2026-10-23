@@ -1,4 +1,4 @@
-// WAGMI City: the car's weight in the world: its size on screen, and crashes into cars, street furniture and walls. Installed by game.js.
+// Gen Z Quant: the car's weight in the world: its size on screen, and crashes into cars, street furniture and walls. Installed by game.js.
 //   fx.js      sparks, debris (glass, plastic, paint) and a burst hydrant's water
 //   props.js   the street furniture (js/street-details.js breakables): poles snap and fall, small things fly, trees stand
 //   wrecks.js  the city's cars knocked out of their lanes (js/traffic.js v.wreck): sliding, spinning, a pile-up, honking

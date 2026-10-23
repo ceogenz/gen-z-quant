@@ -1,4 +1,4 @@
-// WAGMI City: the city's cars knocked out of their lanes (js/traffic.js v.wreck). Hit hard, a car is taken off its lane
+// Gen Z Quant: the city's cars knocked out of their lanes (js/traffic.js v.wreck). Hit hard, a car is taken off its lane
 // and moved here as a body on the ground: it slides (its tyres scrubbing sideways far harder than rolling on), spins down,
 // rocks on its springs and stops; it bounces off the buildings and the others, shoving and wrecking those it hits hard
 // enough (a pile-up), and knocks the street furniture over. Its driver leans on the horn. Stopped a while, square enough

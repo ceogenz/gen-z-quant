@@ -1,4 +1,4 @@
-// WAGMI City: the streets: crowds on the sidewalks, people knocked flying by cars, ground under parks. Installed by game.js.
+// Gen Z Quant: the streets: crowds on the sidewalks, people knocked flying by cars, ground under parks. Installed by game.js.
 //   crowd.js   the street crowd: several times the city's own walkers on the sidewalks round Quant, corners and crossings
 //   thrown.js  a person knocked flying: a rigid tumble, limbs flailing, a bounce and a slide, lying there, up again
 // Quant's car (or whatever he drives) against people on foot, the crowd's and the city's own (js/traffic.js, taken over

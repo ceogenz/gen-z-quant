@@ -6,7 +6,7 @@
 //   stop for the signals street-details.js shows, give way to oncoming traffic when turning left, to the avenue at
 //   unsignalized corners and to pedestrians on crosswalks, and never enter an intersection they can't clear.
 // - 340 pedestrians stroll the sidewalks and cross at signalized crosswalks on the WALK signal.
-// - Vehicles and pedestrians are only ever moved while out of the camera's view, so nothing pops in or out (WAGMI City:
+// - Vehicles and pedestrians are only ever moved while out of the camera's view, so nothing pops in or out (Gen Z Quant:
 //   or behind a building; far cars are recycled round the player, the roads round the corners ahead first: ported from
 //   Slop New York by Mr.doob, MIT, commit 7fdaf15).
 // - The player's vehicle or character pushes and is pushed by the traffic (SAT contact, impulses, sparks).
@@ -39,8 +39,8 @@ const {
 const { PersonCrowd, PersonRig } = window.NYC;
 const { mergeGeometries } = window.NYC.Addons;
 
-const NUM_CARS = 250; // (WAGMI City: was 200, side streets stood empty)
-const NUM_BUSES = 24; // (WAGMI City: 32 bunched into columns and walls of buses round the player)
+const NUM_CARS = 250; // (Gen Z Quant: was 200, side streets stood empty)
+const NUM_BUSES = 24; // (Gen Z Quant: 32 bunched into columns and walls of buses round the player)
 const NUM_PEDS = 340;
 
 // Intelligent Driver Model: max acceleration, comfortable braking, time headway, standstill gap; and the sideways
@@ -51,7 +51,7 @@ const LOOKAHEAD = 70; // metres a driver looks ahead for vehicles, stop lines an
 
 // Vehicles further than VEHICLE_RADIUS from the camera and out of its view move to a free lane 100-300 m away,
 // also out of view; pedestrians likewise beyond PED_RADIUS, to 60-260 m away. After a teleport, everything
-// further than NEAR_RADIUS is placed around the new spot. (WAGMI City, ported from Slop New York by Mr.doob, MIT, commit
+// further than NEAR_RADIUS is placed around the new spot. (Gen Z Quant, ported from Slop New York by Mr.doob, MIT, commit
 // 7fdaf15: a few vehicles a frame, round the whole pool, so the far ones always come back and the roads ahead of a
 // driver don't empty; to 100-350 m away, the roads round the corners ahead first. Out of view here means out of the
 // frustum or behind a building; upstream also lets a car be placed in plain view further than FAR_VIEW_SPAWN m from
@@ -62,7 +62,7 @@ const NEAR_RADIUS = 350;
 const FAR_VIEW_SPAWN = Infinity;
 // A vehicle that has stood still this long (s, longer than a red and the queue behind it) is in a jam: out of view it is
 // put somewhere else. Buses are placed at least BUS_SPACING m from one another.
-const JAM_WAIT = 20; // (WAGMI City: was 45: a jam out of view clears sooner)
+const JAM_WAIT = 20; // (Gen Z Quant: was 45: a jam out of view clears sooner)
 const BUS_SPACING = 110;
 
 function createBusDestinationTexture() {
@@ -414,7 +414,7 @@ function createTrafficSystem(scene, sidewalks, obstacles) {
   // 4. WHO IS WHERE: LANE OCCUPANCY, INTERSECTIONS, VIEW, PLAYER
   // =========================================================================
   let clock = 0;
-  let tick = 0; // (WAGMI City: update()s so far: place() stamps a vehicle with it, one owner per vehicle per frame)
+  let tick = 0; // (Gen Z Quant: update()s so far: place() stamps a vehicle with it, one owner per vehicle per frame)
   let avePhase = 'green';
   let stPhase = 'red';
   let aveWalk = true;
@@ -423,13 +423,13 @@ function createTrafficSystem(scene, sidewalks, obstacles) {
   let focusX = 0;
   let focusZ = 140;
   const player = { active: false, entity: null, x: 0, z: 0, vx: 0, vz: 0, halfW: 0.86, halfL: 2.18, push: 0.5 };
-  // (WAGMI City: Quant's car, parked where he left it while he is on foot. The traffic brakes for it, goes round it and
+  // (Gen Z Quant: Quant's car, parked where he left it while he is on foot. The traffic brakes for it, goes round it and
   // is pushed off it like off the player, but never moves it)
   const parked = { active: false, x: 0, z: 0, yaw: 0, halfW: 0.95, halfL: 2.25 };
-  // (WAGMI City: the game's own moving cars, a chase's (wagmi/pursuit): { x, z, yaw, halfW, halfL, vx, vz } kept up to
+  // (Gen Z Quant: the game's own moving cars, a chase's (wagmi/pursuit): { x, z, yaw, halfW, halfL, vx, vz } kept up to
   // date by the game in trafficSystem.blockers. The traffic brakes for them and goes round them as for the parked car)
   const blockers = [];
-  // (WAGMI City: Quant's car's body for the traffic's moves: never driven into, see blockedAhead and separate)
+  // (Gen Z Quant: Quant's car's body for the traffic's moves: never driven into, see blockedAhead and separate)
   const playerBody = { on: false, x: 0, z: 0, yaw: 0, yawOffset: 0, bodyW: 1, bodyL: 2.4 };
   let gapSpeed = 0; // the speed of whatever playerGap() last found nearest ahead (the player, or 0: the parked car)
 
@@ -564,7 +564,7 @@ function createTrafficSystem(scene, sidewalks, obstacles) {
 
   // Edges and signalized intersections around the focus, to place vehicles and pedestrians on
   const nearEdges = [];
-  // (WAGMI City: hold zones, rects { minX, maxX, minZ, maxZ } a cutscene keeps clear: nothing is placed in one, no
+  // (Gen Z Quant: hold zones, rects { minX, maxX, minZ, maxZ } a cutscene keeps clear: nothing is placed in one, no
   // car turns onto a road through one, a car or pedestrian found in one is put somewhere else out of view, and
   // pedestrians turn back at its edge. hold([...]) sets them, hold([]) lets the traffic back)
   const holds = [];
@@ -598,7 +598,7 @@ function createTrafficSystem(scene, sidewalks, obstacles) {
   const nearSignals = [];
   let nearX = Infinity;
   let nearZ = Infinity;
-  // (WAGMI City, from 7fdaf15) In view and nearer the camera than `distance`
+  // (Gen Z Quant, from 7fdaf15) In view and nearer the camera than `distance`
   function nearView(x, z, radius, distance) {
     return hasView && Math.hypot(x - camX, camY, z - camZ) < distance && visible(x, z, radius);
   }
@@ -609,7 +609,7 @@ function createTrafficSystem(scene, sidewalks, obstacles) {
     nearZ = focusZ;
     nearEdges.length = 0;
     nearSignals.length = 0;
-    // (WAGMI City, from 7fdaf15: a road by its nearest point, so a long one beside the player counts)
+    // (Gen Z Quant, from 7fdaf15: a road by its nearest point, so a long one beside the player counts)
     for (const e of edges) {
       const s = clamp((focusX - e.sx) * e.dx + (focusZ - e.sz) * e.dz, 0, e.len);
       const dx = e.sx + e.dx * s - focusX;
@@ -617,7 +617,7 @@ function createTrafficSystem(scene, sidewalks, obstacles) {
       if (dx * dx + dz * dz < NEAR_RADIUS * NEAR_RADIUS) nearEdges.push(e);
     }
     for (const n of nodes) if (n.signal && Math.hypot(n.x - focusX, n.z - focusZ) < NEAR_RADIUS) nearSignals.push(n);
-    // (WAGMI City: the side streets feedSideStreets keeps from standing empty: any within FEED_FAR m of anywhere in the
+    // (Gen Z Quant: the side streets feedSideStreets keeps from standing empty: any within FEED_FAR m of anywhere in the
     // next 40 m)
     feedEdges.length = 0;
     for (const e of nearEdges) if (e.axis !== 'ave' && Math.hypot(e.mx - focusX, e.mz - focusZ) < FEED_FAR + 40 + e.len * 0.5) feedEdges.push(e);
@@ -742,7 +742,7 @@ function createTrafficSystem(scene, sidewalks, obstacles) {
   }
 
   // Where to go at the end of the current edge: mostly straight on, sometimes a turn (buses keep to wide roads). With
-  // `fromLane`, only moves the current lane allows. (WAGMI City, from 7fdaf15: no more drifting towards the camera
+  // `fromLane`, only moves the current lane allows. (Gen Z Quant, from 7fdaf15: no more drifting towards the camera
   // when far from it; far vehicles are recycled instead, and the drift kept them from going far)
   const weights = [];
   function chooseMove(v, fromLane) {
@@ -757,7 +757,7 @@ function createTrafficSystem(scene, sidewalks, obstacles) {
       } else if (Math.abs(nearestLane(m, v.lane) - v.lane) * 22 > e.len - v.s) {
         w *= 0.02; // too little road left to change lanes for it
       }
-      if (heldEdges.size && heldEdges.has(m.to)) w *= 1e-6; // (WAGMI City: a hold zone; only when there is no other way)
+      if (heldEdges.size && heldEdges.has(m.to)) w *= 1e-6; // (Gen Z Quant: a hold zone; only when there is no other way)
       weights[k] = w;
       total += w;
     }
@@ -823,7 +823,7 @@ function createTrafficSystem(scene, sidewalks, obstacles) {
       for (const list of a.occ) {
         const lead = leadOf(list);
         if (lead && !canStop(lead, a, v.wait > 8)) return true;
-        // (WAGMI City: and to one standing at its line, except in the side road's turn (the courtesy, below): else a
+        // (Gen Z Quant: and to one standing at its line, except in the side road's turn (the courtesy, below): else a
         // steady stream across, each car going while the avenue's stood, kept its box busy and its queue there for good)
         if (lead && !(n.courtesy > clock) && a.len - lead.s - lead.v.half < 3) return true;
       }
@@ -955,14 +955,14 @@ function createTrafficSystem(scene, sidewalks, obstacles) {
       return false;
     }
     if (phase === 'red' || (phase === 'amber' && stoppable)) return false;
-    // (WAGMI City: waited ~18 s at the line for a way in the rules never give it (the Village's diagonal corners, where
+    // (Gen Z Quant: waited ~18 s at the line for a way in the rules never give it (the Village's diagonal corners, where
     // each arm can be waiting on another): it goes, slowly, its way kept physically clear by blockedAhead)
     if (v.wait > 18 && d < 3) {
       v.out = j;
       v.yielding = false;
       return true;
     }
-    // (WAGMI City: at a corner without signals, a side road's driver kept at the line by the avenue's traffic filling
+    // (Gen Z Quant: at a corner without signals, a side road's driver kept at the line by the avenue's traffic filling
     // the box asks for the avenue's courtesy too (see below), not only one waiting for a gap in it)
     if (!n.signal && e.axisIndex !== 0 && v.wait > 6 && d < 3 && !(n.courtesyNext > clock)) {
       n.courtesy = clock + 8;
@@ -1031,7 +1031,7 @@ function createTrafficSystem(scene, sidewalks, obstacles) {
       let best = v.blocked > 1.5 ? -Infinity : laneAcc(v, v.lane) + (v.speed > 2 ? 0.6 : 1.2);
       for (let t = v.lane - 1; t <= v.lane + 1; t += 2) {
         if (t < 0 || t >= e.lanes.length || v.move.out[t] < 0 || !laneSafe(v, t, -3)) continue;
-        // (WAGMI City: a bus keeps to the curb lane, the bus lane, pulling out only round something slow, and never
+        // (Gen Z Quant: a bus keeps to the curb lane, the bus lane, pulling out only round something slow, and never
         // alongside another bus: no wall of buses side by side at a light)
         if (v.bus && e.occ[t].some((o) => o.v.bus && Math.abs(o.s - v.s) < 16)) continue;
         const acc = laneAcc(v, t) + (v.bus ? (t > v.lane ? 0.8 : -0.8) : 0);
@@ -1125,7 +1125,7 @@ function createTrafficSystem(scene, sidewalks, obstacles) {
       worst = Math.min(follow(v, f.occ[v.out], vs), follow(v, e.occ[v.lane], e.len + v.cs), signalAhead(v, f, f.len - vs - v.half));
       // someone crossing the way out: wait for them inside the intersection, short of the 2.5 m crosswalk
       const d = v.conn.len - 3 - v.cs - v.half;
-      // (WAGMI City: stood inside 25 s already, for walkers who keep coming or a gap that doesn't: it edges on out)
+      // (Gen Z Quant: stood inside 25 s already, for walkers who keep coming or a gap that doesn't: it edges on out)
       const peds = v.wait > 25 ? null : pedsOut(v, d);
       if (v.yielding && v.cs < v.yieldAt && v.wait <= 25 && holdsOn(v, peds)) {
         worst = Math.min(worst, stopAt(v, v.yieldAt - v.cs, 0.5)); // waiting inside to turn
@@ -1145,7 +1145,7 @@ function createTrafficSystem(scene, sidewalks, obstacles) {
     }
     const acc = Math.min(freeAcc(v) + worst, (cap - v.speed) * 2);
     v.acc = clamp(acc, -9, v.driver.a);
-    // (WAGMI City: stood inside an intersection 25 s with nobody right ahead (a bend its length can't take, a hold that
+    // (Gen Z Quant: stood inside an intersection 25 s with nobody right ahead (a bend its length can't take, a hold that
     // never lets go): it creeps on out of it, at a walk (blockedAhead still keeps it out of anything in its way)
     if (v.conn && v.wait > 25 && v.gap > 4) {
       v.acc = Math.max(v.acc, 0.6);
@@ -1233,14 +1233,14 @@ function createTrafficSystem(scene, sidewalks, obstacles) {
         if (!list) continue;
         for (const o of list) {
           if (o === v || Math.abs(o.x - nx) > o.bodyL + v.bodyL + 0.5 || Math.abs(o.z - nz) > o.bodyL + v.bodyL + 0.5) continue;
-          if (v.ghost > 0 && o.speed < 0.5 && !o.wreck) continue; // (WAGMI City: nosing through a deadlock, see drive)
+          if (v.ghost > 0 && o.speed < 0.5 && !o.wreck) continue; // (Gen Z Quant: nosing through a deadlock, see drive)
           if (!inFront(v, o) || (inFront(o, v) && v.id < o.id)) continue;
           const after = bodyPen(v, nx, nz, o);
           if (after > 0.02 && after > bodyPen(v, v.x, v.z, o) + 1e-4) return true;
         }
       }
     }
-    // (WAGMI City: nor into Quant's car, driven or parked, whatever its lane thinks: it is never driven into)
+    // (Gen Z Quant: nor into Quant's car, driven or parked, whatever its lane thinks: it is never driven into)
     const pb = playerBody;
     if (pb.on && Math.abs(pb.x - nx) < pb.bodyL + v.bodyL + 0.5 && Math.abs(pb.z - nz) < pb.bodyL + v.bodyL + 0.5 && inFront(v, pb)) {
       const after = bodyPen(v, nx, nz, pb);
@@ -1277,7 +1277,7 @@ function createTrafficSystem(scene, sidewalks, obstacles) {
         }
       }
     }
-    // (WAGMI City) ...and out of Quant's car, driven or parked: it has had its turn (wagmi/crash meets the traffic in
+    // (Gen Z Quant) ...and out of Quant's car, driven or parked: it has had its turn (wagmi/crash meets the traffic in
     // its own steps and is moved there), so what the traffic's moves since put into it is eased out of it, the vehicle
     // taking all of it (up to half a metre a frame)
     const pb = playerBody;
@@ -1295,7 +1295,7 @@ function createTrafficSystem(scene, sidewalks, obstacles) {
   }
 
   function drive(v, dt) {
-    // (WAGMI City: held 10 s by something in front of it that doesn't move off either (two or more of them nose to nose
+    // (Gen Z Quant: held 10 s by something in front of it that doesn't move off either (two or more of them nose to nose
     // in a junction, a cycle of queues round the Village's diagonal corners), it noses on through the stopped ones at a
     // crawl for a few seconds; separate() eases them apart. Never through Quant's car)
     if (v.blocked > 10) { v.ghost = 4; v.blocked = 0; }
@@ -1448,7 +1448,7 @@ function createTrafficSystem(scene, sidewalks, obstacles) {
     }
   }
 
-  // (WAGMI City: a wreck handed back to its lane where it stands, wagmi/crash: along and across the lane by how far it is
+  // (Gen Z Quant: a wreck handed back to its lane where it stands, wagmi/crash: along and across the lane by how far it is
   // from where the lane has it, turned by how far it is turned from it; true if that is near enough to drive off from)
   function unwreck(v, x, z, yaw) {
     locate(v);
@@ -1595,7 +1595,7 @@ function createTrafficSystem(scene, sidewalks, obstacles) {
     if (approachSpeed > 1.8) spawnCollisionSparks(contactX, v.bus ? 0.65 : 0.58, contactZ, nx, nz, approachSpeed);
   }
 
-  // (WAGMI City) Pushed off Quant's parked car, which stays put
+  // (Gen Z Quant) Pushed off Quant's parked car, which stays put
   function pushOffParked(v, rotY, halfW, halfL) {
     const relX = parked.x - v.x;
     const relZ = parked.z - v.z;
@@ -1617,7 +1617,7 @@ function createTrafficSystem(scene, sidewalks, obstacles) {
   }
 
   function place(v, e, lane, s) {
-    v.placedAt = tick; // (WAGMI City)
+    v.placedAt = tick; // (Gen Z Quant)
     v.edge = e;
     v.lane = lane;
     v.s = s;
@@ -1639,7 +1639,7 @@ function createTrafficSystem(scene, sidewalks, obstacles) {
     occupy(e.occ[lane], v, s);
   }
 
-  // (WAGMI City) A car placed round a corner ahead, on a road ending on the road the camera looks down (its far junction
+  // (Gen Z Quant) A car placed round a corner ahead, on a road ending on the road the camera looks down (its far junction
   // 40 m or more ahead, within 20 m of that line), turns into it, either way, 3 times in 4: traffic coming out of the
   // side roads ahead of a driver, not placed in his view
   function turnIn(v) {
@@ -1658,7 +1658,7 @@ function createTrafficSystem(scene, sidewalks, obstacles) {
     }
   }
 
-  // Put v in a free spot of a random lane rMin..rMax metres from the focus, out of view if `hidden` (WAGMI City: or
+  // Put v in a free spot of a random lane rMin..rMax metres from the focus, out of view if `hidden` (Gen Z Quant: or
   // behind a building; in plain view past FAR_VIEW_SPAWN m only after 8 tries); `ahead`, the first 8 tries 60 m or
   // more ahead of the camera. (From 7fdaf15: on a long road, a spot within rMax of the focus along it)
   function spawnVehicle(v, rMin, rMax, hidden, ahead = false) {
@@ -1679,7 +1679,7 @@ function createTrafficSystem(scene, sidewalks, obstacles) {
       if (hidden && visible(x, z, v.half + 4) && !occluded(x, z) && (attempt < 8 || nearView(x, z, v.half + 4, FAR_VIEW_SPAWN))) continue;
       if (player.active && Math.hypot(x - player.x, z - player.z) < 25) continue;
       if (parked.active && Math.hypot(x - parked.x, z - parked.z) < 25) continue;
-      if (blockers.some((k) => Math.hypot(x - k.x, z - k.z) < 25)) continue; // (WAGMI City)
+      if (blockers.some((k) => Math.hypot(x - k.x, z - k.z) < 25)) continue; // (Gen Z Quant)
       if (v.bus && buses.some((b) => b !== v && b.edge && Math.hypot(b.x - x, b.z - z) < BUS_SPACING)) continue; // (no bus convoys)
       if (!laneClear(e.occ[lane], s, v.half + 8)) continue;
       place(v, e, lane, s);
@@ -1689,7 +1689,7 @@ function createTrafficSystem(scene, sidewalks, obstacles) {
     return false;
   }
 
-  // (WAGMI City) The side streets round the player kept from standing empty: placed only where the camera can't see,
+  // (Gen Z Quant) The side streets round the player kept from standing empty: placed only where the camera can't see,
   // most of a side street off an avenue is out of sight behind the buildings on its corners, never in the frustum's
   // side planes, so the streets ahead of a driver emptied as he drove. Every FEED_TICK s, the side-street roads (both
   // ways) within FEED_FAR m of the player with fewer cars than their length wants (1, 2 from 90 m, 3 from 160, 4 from 230) get
@@ -1885,7 +1885,7 @@ function createTrafficSystem(scene, sidewalks, obstacles) {
       const z = track.az + track.uz * t;
       const d = Math.hypot(x - focusX, z - focusZ);
       if (d < rMin || d > rMax || (hidden && visible(x, z, 2))) continue;
-      if (holds.length && held(x, z, 1)) continue; // (WAGMI City: a hold zone)
+      if (holds.length && held(x, z, 1)) continue; // (Gen Z Quant: a hold zone)
       if (crosswalk && track.node.curb.some((q) => Math.hypot(q.x - x, q.z - z) < QUEUE_GAP)) continue;
       Object.assign(p, track);
       p.t = t;
@@ -1950,7 +1950,7 @@ function createTrafficSystem(scene, sidewalks, obstacles) {
       t = p.t;
       p.v = 0;
     }
-    // (WAGMI City: ...or at the edge of a hold zone)
+    // (Gen Z Quant: ...or at the edge of a hold zone)
     if (holds.length && held(p.ax + p.ux * t, p.az + p.uz * t, 0.5) && !held(p.x, p.z, 0.5)) {
       t = p.t;
       p.dir = -p.dir;
@@ -2281,7 +2281,7 @@ function createTrafficSystem(scene, sidewalks, obstacles) {
   // =========================================================================
   let lastFocusX = Infinity;
   let lastFocusZ = Infinity;
-  let vehicleCursor = 0; // (WAGMI City, from 7fdaf15)
+  let vehicleCursor = 0; // (Gen Z Quant, from 7fdaf15)
 
   function update(dt, elapsed, focusPos = null, playerEntity = null, activeMode = 'car', camera = null) {
     clock = elapsed;
@@ -2309,7 +2309,7 @@ function createTrafficSystem(scene, sidewalks, obstacles) {
       player.vx = Math.sin(heading) * speed + (playerEntity.vx || 0);
       player.vz = Math.cos(heading) * speed + (playerEntity.vz || 0);
     }
-    // (WAGMI City: Quant's car, standing where he left it)
+    // (Gen Z Quant: Quant's car, standing where he left it)
     const pc = activeMode !== 'car' && window.__NYC_APP && window.__NYC_APP.controllerManager && window.__NYC_APP.controllerManager.entities.car;
     parked.active = !!(pc && pc.mesh && pc.mesh.visible && pc.position.y < 2.6);
     if (parked.active) {
@@ -2321,7 +2321,7 @@ function createTrafficSystem(scene, sidewalks, obstacles) {
         parked.halfL = (pc.body.z1 - pc.body.z0) / 2;
       }
     }
-    // (WAGMI City: Quant's car's body, driven or parked, for blockedAhead and separate: its box round its own middle)
+    // (Gen Z Quant: Quant's car's body, driven or parked, for blockedAhead and separate: its box round its own middle)
     {
       const qc = activeMode === 'car' ? playerEntity : parked.active ? pc : null;
       const B = qc && qc.body;
@@ -2339,7 +2339,7 @@ function createTrafficSystem(scene, sidewalks, obstacles) {
     player.push = activeMode === 'cyclist' ? 0.82 : activeMode === 'person' ? 0.88 : 0.50;
 
     // 1. Cars & buses
-    // (WAGMI City, ported from Slop New York by Mr.doob, MIT, commit 7fdaf15: 4 vehicles a frame, round the pool, further
+    // (Gen Z Quant, ported from Slop New York by Mr.doob, MIT, commit 7fdaf15: 4 vehicles a frame, round the pool, further
     // than VEHICLE_RADIUS, put 100..NEAR_RADIUS m away, while he drives the roads round the corners ahead first (standing,
     // that would feed one street until it jammed); not a wreck (wagmi/crash has it), nor one in plain view nearer than
     // 1200 m, which would vanish. After a jump, everything far, anywhere)
@@ -2363,7 +2363,7 @@ function createTrafficSystem(scene, sidewalks, obstacles) {
     nypdDrawn = 0;
     visibleBuses = 0;
     let budget = jump ? Infinity : 4;
-    if (!jump && activeMode !== 'helicopter') feedSideStreets(dt); // (WAGMI City)
+    if (!jump && activeMode !== 'helicopter') feedSideStreets(dt); // (Gen Z Quant)
     buildGrid();
     for (let i = 0; i < vehicles.length; i++) {
       const v = vehicles[i];
@@ -2371,20 +2371,20 @@ function createTrafficSystem(scene, sidewalks, obstacles) {
       if (!v.edge) {
         // (not placed yet: the recycling above places it)
       } else if (heldEdges.size && (heldEdges.has(v.edge) || held(v.x, v.z, v.half + 1))) {
-        if (!spawnVehicle(v, 120, NEAR_RADIUS, true)) spawnVehicle(v, 120, 900, false); // (WAGMI City: a hold zone)
+        if (!spawnVehicle(v, 120, NEAR_RADIUS, true)) spawnVehicle(v, 120, 900, false); // (Gen Z Quant: a hold zone)
       } else if (v.placedAt === tick) {
-        // (WAGMI City: placed this frame already)
+        // (Gen Z Quant: placed this frame already)
       } else if (budget > 0 && v.wait > JAM_WAIT && !visible(v.x, v.z, v.half + 2) && spawnVehicle(v, 100, 300, true)) {
         budget--; // stuck in a jam out of view: somewhere else
       } else if (budget > 0 && v.bus && !v.wreck && d > 60 && !visible(v.x, v.z, v.half + 2) &&
         buses.some((b) => b !== v && b.edge && b.id < v.id && Math.abs(b.x - v.x) + Math.abs(b.z - v.z) < 45) && spawnVehicle(v, 100, 300, true)) {
-        budget--; // (WAGMI City) a bus bunched up with another, out of view: somewhere else
+        budget--; // (Gen Z Quant) a bus bunched up with another, out of view: somewhere else
       }
       if (!v.edge) continue;
 
       v.prevX = v.x;
       v.prevZ = v.z;
-      // (WAGMI City: wrecked, wagmi/crash moves it, sliding, spinning, standing there, until it hands it back to its lane;
+      // (Gen Z Quant: wrecked, wagmi/crash moves it, sliding, spinning, standing there, until it hands it back to its lane;
       // and in the car that crashes itself, playerEntity.crash, the crash meets the traffic, not collideWithPlayer)
       if (v.wreck && !v.wreck(v, dt)) v.wreck = null;
       if (!v.wreck) {
@@ -2455,13 +2455,13 @@ function createTrafficSystem(scene, sidewalks, obstacles) {
     pedCrowd.begin();
     for (let i = 0; i < NUM_PEDS; i++) {
       const p = peds[i];
-      // (WAGMI City: knocked down by a car, wagmi/street moves and draws them until it hands them back out of view)
+      // (Gen Z Quant: knocked down by a car, wagmi/street moves and draws them until it hands them back out of view)
       if (p.away) { if (p.away(p)) continue; p.away = null; if (!spawnPed(p, 60, NEAR_RADIUS, true)) spawnPed(p, 60, 900, false); }
       const d = p.placed ? Math.hypot(p.x - focusX, p.z - focusZ) : Infinity;
       if (!p.placed || (jump && d > NEAR_RADIUS)) {
         spawnPed(p, 0, NEAR_RADIUS, false);
       } else if (holds.length && held(p.x, p.z, 0.5)) {
-        if (!spawnPed(p, 60, NEAR_RADIUS, true)) spawnPed(p, 60, 900, false); // (WAGMI City: a hold zone)
+        if (!spawnPed(p, 60, NEAR_RADIUS, true)) spawnPed(p, 60, 900, false); // (Gen Z Quant: a hold zone)
       } else if (pedBudget > 0 && (d > 1000 || (d > PED_RADIUS && !visible(p.x, p.z, 2))) && spawnPed(p, 60, 260, true)) {
         pedBudget--;
       }
@@ -2487,10 +2487,10 @@ function createTrafficSystem(scene, sidewalks, obstacles) {
     buses,
     peds,
     network,
-    hold, // (WAGMI City)
-    unwreck, // (WAGMI City)
-    blockers, // (WAGMI City)
-    feedStats // (WAGMI City)
+    hold, // (Gen Z Quant)
+    unwreck, // (Gen Z Quant)
+    blockers, // (Gen Z Quant)
+    feedStats // (Gen Z Quant)
   };
 }
 
@@ -2704,7 +2704,7 @@ function createHighwayTraffic(scene, lanes) {
         }
       }
     }
-    // (WAGMI City) Never into Quant's car (wagmi/crash meets these in its own steps): one its move put into it since is
+    // (Gen Z Quant) Never into Quant's car (wagmi/crash meets these in its own steps): one its move put into it since is
     // set back (or on) along its lane out of it, at the car's pace along it
     const qb = entity && mode === 'car' && entity.body;
     if (qb) {
@@ -2875,7 +2875,7 @@ function createHighwayTraffic(scene, lanes) {
     }
   }
 
-  // (WAGMI City) For what runs into them, Quant's car (wagmi/crash): where a car is, { x, y, z, yaw, hw, hl, c } (its
+  // (Gen Z Quant) For what runs into them, Quant's car (wagmi/crash): where a car is, { x, y, z, yaw, hw, hl, c } (its
   // body's half width & length), or null down in the underpass; the cars within r of (x, z); knock(c, dv): a blow along
   // its lane, its speed changed by dv (never below 0: it stops, and the IDM brings it back up)
   function place(c, out = {}) {

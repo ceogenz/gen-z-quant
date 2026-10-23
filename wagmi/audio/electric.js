@@ -1,4 +1,4 @@
-// WAGMI City: Quant's car ALL ELECTRIC (the quiet mode, drivemode.js): no exhaust, no gearbox, no pops. One motor
+// Gen Z Quant: Quant's car ALL ELECTRIC (the quiet mode, drivemode.js): no exhaust, no gearbox, no pops. One motor
 // geared straight to the wheels, so everything it says follows the road speed smoothly, up and down:
 //   whine     the motor and its reduction gear: three orders of the motor's speed (its poles, twice that, the gear's
 //             teeth high and faint), louder with the torque it makes, pulling (on the throttle) or giving back (the

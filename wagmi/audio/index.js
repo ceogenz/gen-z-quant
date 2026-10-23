@@ -1,4 +1,4 @@
-// WAGMI City: the city's sound: one mixer for everything, NYC ambience, car and traffic sound, sirens, hits (WAGMI.audio). Installed by game.js.
+// Gen Z Quant: the city's sound: one mixer for everything, NYC ambience, car and traffic sound, sirens, hits (WAGMI.audio). Installed by game.js.
 //   WAGMI.audio.play(name, { pos: [x, y, z], vol, rate, ...its own })   a one-shot (sounds.js), placed if pos is given
 //   WAGMI.audio.loop(name, { pos, vol, rate }) -> { set({ pos, vol, rate, ... }), stop(secs) }   a loop (loops.js)
 //   WAGMI.audio.duck(bus, amount, secs)   dip a bus ('music', 'amb', 'sfx', 'voice') by amount for secs

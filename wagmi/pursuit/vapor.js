@@ -1,4 +1,4 @@
-// WAGMI City: cold-gas vapour and a wreck's smoke. Soft puffs, one instanced mesh (always drawn: one tiny instance under
+// Gen Z Quant: cold-gas vapour and a wreck's smoke. Soft puffs, one instanced mesh (always drawn: one tiny instance under
 // the street when idle, so its pipeline is built at the start and the first puff doesn't stall). Each puff is shot out at
 // a speed, slowed hard by the air, grows and fades; white nitrogen vapour or dark engine smoke (k 0..1).
 //   const v = createVapor(scene);  v.puff(x, y, z, vx, vy, vz, { r, grow, life, k, a });  v.update(dt)

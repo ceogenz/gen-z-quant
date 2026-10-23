@@ -1,4 +1,4 @@
-// WAGMI City: street fighting: Quant against the Degens, freeflow, inside the open city. Fists, kicks, counters, rolls and
+// Gen Z Quant: street fighting: Quant against the Degens, freeflow, inside the open city. Fists, kicks, counters, rolls and
 // slams; bats, bottles and trash cans off the street (items.js). No guns, no knives. Installed by game.js.
 //   enemy.js  a Degen: thug.glb dressed in the gang's black and acid green, his clips, his AI (circle, step in, swing)
 //   quant.js  Quant's moves and his footwork in a fight (through the control hook in js/controllers.js updatePerson)

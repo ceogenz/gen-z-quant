@@ -474,7 +474,7 @@ function buildStreetDetails(scene) {
     }
   }
 
-  // (WAGMI City: the instanced meshes drawing each matrix list, for the breakables below)
+  // (Gen Z Quant: the instanced meshes drawing each matrix list, for the breakables below)
   const instOf = new Map();
   function addMatrixArrayInstanced(geo, mat, matrices, castShadow = true) {
     if (matrices.length === 0) return;
@@ -1071,7 +1071,7 @@ function buildStreetDetails(scene) {
   group.add(treeField.group);
 
   // =========================================================================
-  // 7B. (WAGMI City) CURBSIDE PROPS, AND WHAT A CAR KNOCKS OVER (window.NYC.breakables, wagmi/crash)
+  // 7B. (Gen Z Quant) CURBSIDE PROPS, AND WHAT A CAR KNOCKS OVER (window.NYC.breakables, wagmi/crash)
   // =========================================================================
   // Along the curbs of the blocks the streetlights line (section 2): a green wire litter basket by the start of every
   // block face, a hydrant a third of the way along the avenue faces (and halfway along the long street faces), and a
@@ -1296,7 +1296,7 @@ function buildStreetDetails(scene) {
     let cobraCount = 0;
     for (let i = 0; i < cobraLampSites.length; i++) {
       const s = cobraLampSites[i];
-      if (s.out) continue; // (WAGMI City: knocked down, wagmi/crash)
+      if (s.out) continue; // (Gen Z Quant: knocked down, wagmi/crash)
       const dx = s.x - cx;
       const dz = s.z - cz;
       const d2 = dx * dx + dz * dz + cy * cy;
@@ -1332,7 +1332,7 @@ function buildStreetDetails(scene) {
     let ptCount = 0;
     for (let i = 0; i < streetPointSites.length; i++) {
       const s = streetPointSites[i];
-      if (s.out) continue; // (WAGMI City: knocked down, wagmi/crash)
+      if (s.out) continue; // (Gen Z Quant: knocked down, wagmi/crash)
       const dx = s.x - cx;
       const dz = s.z - cz;
       const d2 = dx * dx + dz * dz + cy * cy;
@@ -1367,8 +1367,8 @@ function buildStreetDetails(scene) {
   }
 
   scene.add(group);
-  window.NYC.streetFootprints = footprints; // (WAGMI City: the street crowd steps round them, wagmi/street)
-  window.NYC.breakables = breakables; // (WAGMI City: what a car knocks over, wagmi/crash)
+  window.NYC.streetFootprints = footprints; // (Gen Z Quant: the street crowd steps round them, wagmi/street)
+  window.NYC.breakables = breakables; // (Gen Z Quant: what a car knocks over, wagmi/crash)
   return { group, footprints, signalClock, update };
 }
 

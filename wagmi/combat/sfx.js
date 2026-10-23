@@ -1,4 +1,4 @@
-// WAGMI City: the fight's sounds, made on the spot with WebAudio (no files). Nothing plays before the player's first key
+// Gen Z Quant: the fight's sounds, made on the spot with WebAudio (no files). Nothing plays before the player's first key
 // or click (the browser's rule); then every sound is built from noise and oscillators:
 //   punch / kick / body   a slap of skin or cloth over a falling low thump (a kick deeper, a body blow deeper still)
 //   bat                   the knock of ash: a few wooden partials ringing briefly, over the thump of the body it meets

@@ -1,4 +1,4 @@
-// WAGMI City: one of the Degens (assets/characters/thug.glb, dressed by dressDegen) as a street fighter.
+// Gen Z Quant: one of the Degens (assets/characters/thug.glb, dressed by dressDegen) as a street fighter.
 // The thug's own brawler clips (thugIdle, thugPunch1/2, thugKick, bruteSlam, three stumbles, thugKnockdown, thugGetUp,
 // hitReact) and the rig's walk / jog / run / sprint. Stumbles, the knockdown and the get-up carry root motion (rootDelta): the
 // body travels with the feet, never slides or snaps back.

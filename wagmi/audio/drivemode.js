@@ -1,4 +1,4 @@
-// WAGMI City: how Quant's car drives: 'engine' (the V8, the default) or 'electric' (ALL ELECTRIC: the quiet mode, no
+// Gen Z Quant: how Quant's car drives: 'engine' (the V8, the default) or 'electric' (ALL ELECTRIC: the quiet mode, no
 // exhaust). The game's side of it, put on WAGMI as soon as the game is up (wagmi/game.js, which also binds Q at the
 // wheel to toggleDriveMode and shows the mode in a badge in the speed panel; even with ?noaudio):
 //   WAGMI.car.driveMode                      'engine' | 'electric' (setting it switches too)

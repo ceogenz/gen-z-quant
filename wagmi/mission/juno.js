@@ -1,4 +1,4 @@
-// WAGMI City: Juno, a real person (23 Oct). Quant's friend, a teenage on-chain sleuth: her own model
+// Gen Z Quant: Juno, a real person (23 Oct). Quant's friend, a teenage on-chain sleuth: her own model
 // (assets/characters/juno.glb, made the way Gears' and Quant's are, from a MakeHuman-built human: dark skin, a big curly puff
 // held up by a light-blue headband, round glasses, an oversized light-blue hoodie, loose dark jeans, white trainers,
 // headphones round her neck; idle, talk, phone, sit, sitTalk, wave, arms, shrug, walk, pickup; a 'jaw' morph so her

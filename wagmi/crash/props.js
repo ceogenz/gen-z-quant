@@ -1,4 +1,4 @@
-// WAGMI City: the street furniture a car runs into (js/street-details.js window.NYC.breakables, with the plazas' and
+// Gen Z Quant: the street furniture a car runs into (js/street-details.js window.NYC.breakables, with the plazas' and
 // parks' benches, lampposts and granite from js/city-grid.js). Poles and lamps snap at the foot and fall the way they
 // were hit, turning faster as they go, onto the street or onto their own arm, their light out; the small things (and
 // the benches) fly, tumbling, bounce off the ground and the buildings and lie flat where they stop; a hydrant goes up in

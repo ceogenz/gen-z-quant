@@ -1,4 +1,4 @@
-// WAGMI City: Mission 3 · Pump and Dump (docs/MISSIONS.md 4.4, as built), and the way into it after Mission 2. Installed
+// Gen Z Quant: Mission 3 · Pump and Dump (docs/MISSIONS.md 4.4, as built), and the way into it after Mission 2. Installed
 // by game.js after m2.js; Mission 2's way on (the G at Gears' garage) is taken over by ours (m3-save.js watchStory).
 //   garage  (a scene, midday, the next day) the Static Garage on W 22nd St: Gears under Quant's car ("Cold-gas
 //           thrusters..."), Juno's video call: the $MOON2 launch stream, Fiona on the megaphone, Moon on the banner
@@ -301,7 +301,7 @@ export function toPete(W, { quick = false } = {}) {
     letter: 'P', at: P_AT, name: 'Pete · Sara D. Roosevelt Park', objective: ['Meet ', { Pete: 'blue' }, ' at ', { 'Sara D. Roosevelt Park': 'yellow' }, '.'],
     sign: ['MISSION 4', 'COMING SOON'],
     note: ['Unknown number', 'sara roosevelt park. by the benches. take your time. -P'],
-    onArrive: () => { W.ui?.place('Sara D. Roosevelt Park', 'Lower East Side · WAGMI City', 3); W.ui?.help(['Mission 4 is coming soon. ', { Pete: 'blue' }, ' will meet you here.'], 9); },
+    onArrive: () => { W.ui?.place('Sara D. Roosevelt Park', 'Lower East Side · New York', 3); W.ui?.help(['Mission 4 is coming soon. ', { Pete: 'blue' }, ' will meet you here.'], 9); },
   });
   if (!quick) W.ui?.help(['A new mission is available. Go to the ', { P: 'yellow' }, ' on the Radar.'], 9);
 }

@@ -1,4 +1,4 @@
-// WAGMI City: the car radio (stations, the WAGMI theme) and the cast's voices (WAGMI.radio, WAGMI.voice). Installed by game.js.
+// Gen Z Quant: the car radio (stations, the WAGMI theme) and the cast's voices (WAGMI.radio, WAGMI.voice). Installed by game.js.
 //   radio.js     the stations (stations.js), R next station · T radio off / on in the car, the station card
 //   voices.js    the spoken lines (assets/voice), played as the subtitles show them
 //   build/       Node tools (not loaded here): the voice build, the music it was composed with

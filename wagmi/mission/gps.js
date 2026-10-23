@@ -1,4 +1,4 @@
-// WAGMI City: the GPS and the mission blips. The quickest legal route is an A* search over the traffic's road graph
+// Gen Z Quant: the GPS and the mission blips. The quickest legal route is an A* search over the traffic's road graph
 // (__NYC_APP.trafficSystem.network: lane edges joined by the turns the graph allows, so one-way streets are kept),
 // edge to edge, re-planned every second and whenever the player strays 25 m off it. The route (yellow on a dark casing),
 // the destination and the blips are drawn on the radar and the full map over the city's own layers, in place of its

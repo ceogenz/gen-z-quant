@@ -1,4 +1,4 @@
-// WAGMI City: who speaks how (the voice build's cast, the line sheet's directions).
+// Gen Z Quant: who speaks how (the voice build's cast, the line sheet's directions).
 // voice / rate (words a minute) / pbas: the macOS placeholder (say -v '?' lists them); fx 'zk': ZK's voice changer,
 // baked into his files; call: the sound the game puts on the line live ('phone' a handset, 'video' a laptop call).
 export const CAST = {

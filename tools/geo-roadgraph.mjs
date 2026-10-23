@@ -8,7 +8,7 @@ import { CUT_Z } from './geo-blocks.mjs';
 
 const MERGE = 1.0; // m: piece ends this close are the same node
 const NORTHERN_ROADS = new Set(['BROADWAY', 'RIVERSIDE DR', 'ST NICHOLAS AVE', 'COLUMBUS CIR']);
-// (WAGMI City) The two pieces of Columbus Circle's ring that would carry cars over the raised plaza on its south-east
+// (Gen Z Quant) The two pieces of Columbus Circle's ring that would carry cars over the raised plaza on its south-east
 // side (1.2 m up), by their ends [x, z, x, z] (world m): left out. (NORTHERN_ROADS and minZ: ported from Slop New York by Mr.doob,
 // MIT, commit 12593c9)
 const SKIP_PIECES = [[-847.7, -1413.1, -835.3, -1406.3], [-835.3, -1406.3, -824.4, -1391.5]];

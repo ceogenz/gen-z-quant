@@ -1,4 +1,4 @@
-// WAGMI City: the mixer under every sound in the game. One context, four buses into a master and a limiter:
+// Gen Z Quant: the mixer under every sound in the game. One context, four buses into a master and a limiter:
 //   sfx    hits, horns, doors, footsteps, jingles (and the fight's and the cutscenes' own synths, routed in)
 //   amb    the city: its bed, the traffic, the sirens; muffled while Quant is inside his car
 //   music  the radio;  voice  the cast's lines

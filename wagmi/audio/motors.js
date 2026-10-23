@@ -1,4 +1,4 @@
-// WAGMI City: the traffic's engines. Ported from Slop New York by Mr.doob (MIT), commit 0e5bbfb (js/audio-synthesis.js:
+// Gen Z Quant: the traffic's engines. Ported from Slop New York by Mr.doob (MIT), commit 0e5bbfb (js/audio-synthesis.js:
 // combustionBuffers, createMotorVoice), the car, SUV and bus voices only, played into whatever the caller gives (our
 // mixer places them, holds them for the pause, muffles them inside the car).
 //   A voice is a real engine's firing: a loop of twenty four-stroke cycles of exhaust pulses (each cylinder its own

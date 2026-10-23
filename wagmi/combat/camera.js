@@ -1,4 +1,4 @@
-// WAGMI City: the fight's camera, a layer over the city's chase camera (js/cameras.js is not touched: its update is
+// Gen Z Quant: the fight's camera, a layer over the city's chase camera (js/cameras.js is not touched: its update is
 // wrapped at run time). In a fight the view keeps its own yaw instead of swinging behind Quant every time he turns to
 // a man (the chase camera's orbit is set to it); the player still drags it round. It pulls back and lifts with the
 // spread of the fight, shifts toward the crowd, drifts round to a man winding up off screen (when the mouse is idle),

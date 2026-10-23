@@ -147,7 +147,7 @@ class ThirdPersonControllerManager {
       backward: ['KeyS', 'ArrowDown'],
       left: ['KeyA', 'ArrowLeft'],
       right: ['KeyD', 'ArrowRight'],
-      up: ['Space'], // (WAGMI City: E is the fight's grab now, no longer a second jump key)
+      up: ['Space'], // (Gen Z Quant: E is the fight's grab now, no longer a second jump key)
       down: ['KeyQ', 'KeyC'],
       boost: ['ShiftLeft', 'ShiftRight']
     };
@@ -747,7 +747,7 @@ class ThirdPersonControllerManager {
 
   getGroundHeight(x, z, mode = 'person') {
     // Inside Central Park (5th Ave to Central Park West, 59th St to 110th St); the Reservoir's running track stands
-    // above the lawns (WAGMI City: window.NYC.cpTrack, city-grid.js)
+    // above the lawns (Gen Z Quant: window.NYC.cpTrack, city-grid.js)
     const cp = CENTRAL_PARK_BOUNDS;
     if (x > cp.minX && x < cp.maxX && z > cp.minZ && z < cp.maxZ) {
       return window.NYC.cpTrack && inRing(window.NYC.cpTrack, x, z) ? 1.56 : 1.24;
@@ -760,7 +760,7 @@ class ThirdPersonControllerManager {
     return this.isPointOnSidewalk(x, z) ? ISLAND_BOUNDS.sidewalkHeight : 0.0;
   }
 
-  // (WAGMI City) In Central Park's water: the Lake, the Reservoir, the ponds (window.NYC.cpWater, city-grid.js)
+  // (Gen Z Quant) In Central Park's water: the Lake, the Reservoir, the ponds (window.NYC.cpWater, city-grid.js)
   inParkWater(x, z) {
     const cp = CENTRAL_PARK_BOUNDS;
     if (!(x > cp.minX && x < cp.maxX && z > cp.minZ && z < cp.maxZ)) return false;
@@ -980,7 +980,7 @@ class ThirdPersonControllerManager {
             carEntity.pitchVel = (carEntity.pitchVel || 0) + (sinH * nx + cosH * nz) * Math.min(14.0, vn) * 0.16;
             carEntity.rollVel = (carEntity.rollVel || 0) - sideDot * Math.min(14.0, vn) * 0.22;
             carEntity.heaveVel = (carEntity.heaveVel || 0) + Math.min(1.4, vn * 0.11);
-            // (WAGMI City: the crash's feel, wagmi/crash: how hard it hit, the wall's normal, how square on, where, and
+            // (Gen Z Quant: the crash's feel, wagmi/crash: how hard it hit, the wall's normal, how square on, where, and
             // what: a park's iron fence rings)
             if (carEntity.crash) carEntity.crash.wall(vn, nx, nz, headOn, pos.x - nx * extX * 0.92, pos.z - nz * extZ * 0.92, c);
             if (vn > 2.2) {
@@ -1018,7 +1018,7 @@ class ThirdPersonControllerManager {
   poseCharacters(dt) {
     const p = this.entities.person;
     const air = p.position.y - this.getGroundHeight(p.position.x, p.position.z, 'person');
-    // (WAGMI City: a player model of its own animates itself; the procedural walker only without one)
+    // (Gen Z Quant: a player model of its own animates itself; the procedural walker only without one)
     if (p.model) p.model.update(dt, p, air > 0.02 ? air : 0);
     else {
       p.rig.update(dt, p.position.x, p.position.z, p.heading, personGround, this, air > 0.02 ? air : 0);
@@ -1044,7 +1044,7 @@ class ThirdPersonControllerManager {
     if (this.activeMode === 'person') {
       this.updatePerson(dt, elapsed);
     } else if (this.entities.person.inVehicle) {
-      // (WAGMI City: the player is in the car, the body put away until they get out)
+      // (Gen Z Quant: the player is in the car, the body put away until they get out)
       this.entities.person.speed = 0;
     } else {
       // Keep the sidewalk pedestrian walking naturally when not actively controlled
@@ -1092,7 +1092,7 @@ class ThirdPersonControllerManager {
 
   updatePerson(dt) {
     const p = this.entities.person;
-    // (WAGMI City: in a fight, or in the middle of a move, the fight moves him itself: footwork facing his man,
+    // (Gen Z Quant: in a fight, or in the middle of a move, the fight moves him itself: footwork facing his man,
     // camera-relative, lunges, rolls; with the same collision and ground as below. True when it did)
     if (p.control && p.control(dt, this.keys, this)) return;
     const maxWalk = this.keys.boost ? 8.2 : 4.4;
@@ -1111,9 +1111,9 @@ class ThirdPersonControllerManager {
     p.position.x += Math.sin(p.heading) * p.speed * dt;
     p.position.z += Math.cos(p.heading) * p.speed * dt;
     this.resolveHorizontalCollision(p.position, 0.48, p.position.y + 1.0);
-    // (WAGMI City: what else is solid to him, his parked car)
+    // (Gen Z Quant: what else is solid to him, his parked car)
     if (p.collide) p.collide(p.position, 0.48);
-    // (WAGMI City: Central Park's water is the edge of the path: along it, never into it)
+    // (Gen Z Quant: Central Park's water is the edge of the path: along it, never into it)
     if (this.inParkWater(p.position.x, p.position.z)) {
       if (!this.inParkWater(p.position.x, wasZ)) p.position.z = wasZ;
       else if (!this.inParkWater(wasX, p.position.z)) p.position.x = wasX;
@@ -1132,7 +1132,7 @@ class ThirdPersonControllerManager {
     }
   }
 
-  // (WAGMI City) Keyboard steering for a car with c.handling { rMin, yawMax, grip, rampIn: [slow, fast], rampOut, vRef }:
+  // (Gen Z Quant) Keyboard steering for a car with c.handling { rMin, yawMax, grip, rampIn: [slow, fast], rampOut, vRef }:
   //  - the key moves a steer (c.steerK, -1..1) at a steady slew: to full lock in rampIn s (the first at walking pace,
   //    the second from vRef m/s up), so a tap turns it a little and a hold all the way; let go (or the other key) it
   //    comes back to the middle in rampOut s, quicker than it went;
@@ -1161,7 +1161,7 @@ class ThirdPersonControllerManager {
 
   updateCar(dt) {
     const c = this.entities.car;
-    // (WAGMI City: a car may bring its own pace: topSpeed, boostSpeed, accel, boostAccel)
+    // (Gen Z Quant: a car may bring its own pace: topSpeed, boostSpeed, accel, boostAccel)
     const maxSpeed = this.keys.boost ? (c.boostSpeed ?? 36.0) : (c.topSpeed ?? 23.5);
     const accel = this.keys.boost ? (c.boostAccel ?? 21.0) : (c.accel ?? 14.0);
 
@@ -1181,7 +1181,7 @@ class ThirdPersonControllerManager {
     if (this.keys.left) steerInput = this.keys.left;
     if (this.keys.right) steerInput = -this.keys.right;
 
-    // (WAGMI City: a car with its own handling, c.handling, steers for a keyboard: see steerHandled)
+    // (Gen Z Quant: a car with its own handling, c.handling, steers for a keyboard: see steerHandled)
     let yawFull = 0;
     if (c.handling) {
       yawFull = this.steerHandled(c, steerInput, dt);
@@ -1211,7 +1211,7 @@ class ThirdPersonControllerManager {
       this.resolveHorizontalCollision(c.position, 1.35, 1.0, c);
       if (c.crash) c.crash.step(dt / steps);
     }
-    // (WAGMI City: nor does it drive into Central Park's water: stopped at its edge)
+    // (Gen Z Quant: nor does it drive into Central Park's water: stopped at its edge)
     if (this.inParkWater(c.position.x, c.position.z)) { c.position.x = prevX; c.position.z = prevZ; c.speed *= -0.15; c.vx = c.vz = 0; }
     c.vx *= tireGripDamp;
     c.vz *= tireGripDamp;

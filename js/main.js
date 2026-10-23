@@ -136,7 +136,7 @@ async function initApp() {
 
   // 5. TSL RenderPipeline with Half-Res Screen Space Reflections (SSRNode), Bloom & Filmic Toning
   //    Fade out distant and matte surfaces so SSR spends its rays on visible glossy reflections.
-  //    (WAGMI City: the matte cut-off, binary refine and reflection mask ported from Slop New York by Mr.doob, MIT, commit d837961)
+  //    (Gen Z Quant: the matte cut-off, binary refine and reflection mask ported from Slop New York by Mr.doob, MIT, commit d837961)
   const scenePass = pass(scene, cameraSystem.camera);
   // The multisampled colour attachments (output, normal, metalRough) only need resolving, never storing: discarding
   // them spares the GPU writing 3 x 4 samples per pixel to memory every frame (transient, memoryless attachments where
@@ -214,7 +214,7 @@ async function initApp() {
     cyclist: [[['W', 'S'], 'Pedal / Brake'], [['A', 'D'], 'Lean & Turn'], [['Shift'], 'Sprint'], [['Drag'], 'Orbit']],
     helicopter: [[['W', 'S'], 'Pitch'], [['A', 'D'], 'Yaw'], [['Space', 'E'], 'Ascend'], [['Q', 'C'], 'Descend'], [['Shift'], 'Boost']]
   };
-  // (WAGMI City) ...and the same guide on a game pad, when a pad was the last thing used (wagmi/pad.js: setHintInput): the
+  // (Gen Z Quant) ...and the same guide on a game pad, when a pad was the last thing used (wagmi/pad.js: setHintInput): the
   // buttons by their standard names, drawn as that pad's own (kbd data-pad)
   const controlHintsPad = {
     person: [[['LS'], 'Move'], [['RS'], 'Look'], [['L3'], 'Sprint'], [['A'], 'Jump']],
@@ -246,7 +246,7 @@ async function initApp() {
     elControlsHint.replaceChildren(...items);
   }
 
-  // (WAGMI City) the guide in the pad's buttons (true) or the keyboard's (false)
+  // (Gen Z Quant) the guide in the pad's buttons (true) or the keyboard's (false)
   function setHintInput(pad) {
     if (hintPad === !!pad) return;
     hintPad = !!pad;

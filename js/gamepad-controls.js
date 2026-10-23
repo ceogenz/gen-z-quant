@@ -2,7 +2,7 @@
 // js/gamepad-controls.js
 // Gamepad controls: a 'standard' mapped pad (Xbox, PlayStation and most others) through the browser's Gamepad API.
 // Ported from Slop New York by Mr.doob, MIT, commit 9c39d20.
-// (WAGMI City: a game layer can take the pad over, attach(layer), wagmi/pad.js. The layer then polls it from its own
+// (Gen Z Quant: a game layer can take the pad over, attach(layer), wagmi/pad.js. The layer then polls it from its own
 // frame loop (so the pad still works while the pause menu holds the city's) and reads it through its own map instead
 // of the sandbox's below: no travel-mode swap on the shoulders, no camera cycle on Y, no map on Start)
 const { isTypingInField } = window.NYC;
@@ -96,7 +96,7 @@ class GamepadControls {
     this.reset();
   }
 
-  // (WAGMI City) layer: { read(state), reset(), idle() }; read gets { pad, edges, held, value(i), stick(offset), dt } each
+  // (Gen Z Quant) layer: { read(state), reset(), idle() }; read gets { pad, edges, held, value(i), stick(offset), dt } each
   // frame the pad is there and the page has the focus, idle() each frame it hasn't
   attach(layer) {
     this.layer = layer || null;

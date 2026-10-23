@@ -1,4 +1,4 @@
-// WAGMI City: the traffic's sound, read off the city's own cars and buses (js/traffic.js: x, z, yaw, speed, acc, vx, vz,
+// Gen Z Quant: the traffic's sound, read off the city's own cars and buses (js/traffic.js: x, z, yaw, speed, acc, vx, vz,
 // bus, isNYPD, isTaxi, isSUV, pAhead / pRight: where the player is against it) and the shore highways' cars (their
 // place(c): x, z, yaw; c.v, c.acc, c.kind), no hooks inside them:
 //  - the nearest eight of them (a bus counts as nearer) each get a real engine (motors.js, after Slop New York: a car's,

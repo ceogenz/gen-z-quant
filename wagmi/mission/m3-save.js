@@ -1,4 +1,4 @@
-// WAGMI City: the progress save, small. After each MISSION PASSED the story so far goes to localStorage:
+// Gen Z Quant: the progress save, small. After each MISSION PASSED the story so far goes to localStorage:
 //   { v: 1, done: ['m1', 'm2', ...], unlocks: { fists, cans, bats, thrusters }, followers, at }
 // Every access is wrapped: with no storage (a private window, blocked site data) the game plays the same, unsaved.
 //   readSave()                the save, or null
@@ -103,7 +103,7 @@ export async function resume(W, hold) {
   ui.cine(false); ui.gameTitle?.(false); ui.story(true);
   applyUnlocks(W);
   await toNext(W, { quick: true });
-  ui.place(next === 'm2' ? 'Bryant Park' : 'West Chelsea', next === 'm2' ? 'Midtown · WAGMI City' : 'Static Garage · WAGMI City', 3);
+  ui.place(next === 'm2' ? 'Bryant Park' : 'West Chelsea', next === 'm2' ? 'Midtown · New York' : 'Static Garage · New York', 3);
 }
 // the way on to the next mission (its blip, its route, its corona)
 export async function toNext(W, { quick = false } = {}) {

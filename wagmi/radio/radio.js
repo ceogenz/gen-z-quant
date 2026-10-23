@@ -1,4 +1,4 @@
-// WAGMI City: the car radio, GTA style. Every station keeps playing whether you listen or not (its own clock: tune in
+// Gen Z Quant: the car radio, GTA style. Every station keeps playing whether you listen or not (its own clock: tune in
 // and you land wherever it is); in Quant's car it plays full; on foot it carries on from the car, muffled and fading
 // with distance, and stops at 34 m; a cutscene takes it down to nothing; speech ducks it.
 //   R  next station · T  radio off / on (in the car). The station's card shows top centre as you get in or switch.

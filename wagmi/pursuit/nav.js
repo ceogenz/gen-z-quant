@@ -1,4 +1,4 @@
-// WAGMI City: how a chase car finds its way. The traffic's road graph (trafficSystem.network) read as streets between
+// Gen Z Quant: how a chase car finds its way. The traffic's road graph (trafficSystem.network) read as streets between
 // corners, both ways (a chase car drives a one-way street the wrong way if that is the short way to Quant), A* corner
 // to corner; and sight: a line between two points with no building across it.
 //   const nav = createNav(app);  nav.route(from {x, z, h}, to {x, z}) -> [[x, z], ...] (corners, then the target)

@@ -1,4 +1,4 @@
-// WAGMI City: Quant's side of the fight: his moves, how he moves in a fight, and his animation through game.js's layers.
+// Gen Z Quant: Quant's side of the fight: his moves, how he moves in a fight, and his animation through game.js's layers.
 // He fights freeflow, as in the games the owner named: every blow goes to a man (the one the stick or the camera points
 // at), closing the gap first: a run in on his own legs and a step into the blow (the strike clip only fades in for its
 // wind-up), or, from further, a flying kick. He lands where his fist or foot meets the man (the contact distances were

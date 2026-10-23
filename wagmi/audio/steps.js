@@ -1,4 +1,4 @@
-// WAGMI City: Quant's footsteps, timed off his own feet: a foot that lifts (7 cm over its low point) and comes back down
+// Gen Z Quant: Quant's footsteps, timed off his own feet: a foot that lifts (7 cm over its low point) and comes back down
 // is a step, so the sound lands with the animation whatever the gait (walk, jog, run, sprint, a fight's footwork). On
 // concrete a sneaker's thud and scuff, on grass a soft crunch; louder as he runs; a thud when he lands from a jump.
 export function createSteps(E) {

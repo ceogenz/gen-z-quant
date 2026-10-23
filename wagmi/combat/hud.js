@@ -1,4 +1,4 @@
-// WAGMI City: the fight's overlays (DOM, no pointer events), in the game's shared style: Barlow Condensed, white with a
+// Gen Z Quant: the fight's overlays (DOM, no pointer events), in the game's shared style: Barlow Condensed, white with a
 // soft shadow, yellow #FFC93C for the cues and key words, health green #4ADE80, danger red #EF4444, dark glass panels.
 //  - Quant's health: a GTA bar under the minimap (above it when there is no room), a white chunk trailing what he lost
 //  - over each Degen in the fight: his health, and his cue as he winds up (yellow: counter it; red: dodge it); dazed, the

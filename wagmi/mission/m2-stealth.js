@@ -1,4 +1,4 @@
-// WAGMI City: Mission 2's lookouts, stealth-lite. Three Degens of the fight's own (WAGMI.combat, a crew that won't
+// Gen Z Quant: Mission 2's lookouts, stealth-lite. Three Degens of the fight's own (WAGMI.combat, a crew that won't
 // wake by itself) stand watch at the yard: one at the gate sweeping 12th Ave, one walking the west row, one at the side
 // gate. Each sees down a cone (drawn on the ground, yellow going red) as far as the containers and walls let him:
 // in it, Quant fills his suspicion (faster close up, running, or in a car); a sprint near him is heard. Full: 'You were

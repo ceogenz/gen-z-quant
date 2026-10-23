@@ -1,4 +1,4 @@
-// WAGMI City: the game pad. Xbox, PlayStation and the other 'standard' pads, through js/gamepad-controls.js (ported
+// Gen Z Quant: the game pad. Xbox, PlayStation and the other 'standard' pads, through js/gamepad-controls.js (ported
 // from Slop New York by Mr.doob, MIT, commit 9c39d20). This layer takes the pad over from the sandbox's map (no travel
 // mode swap on the shoulders, no camera cycle on Y, no sandbox map on Start) and plays the game with it, GTA style:
 // the sticks and triggers go straight into the controls (js/controllers.js setGamepadInput, the camera's

@@ -1,4 +1,4 @@
-// WAGMI City: the credits, for the pause menu's Credits page (and anything else that lists them). NOTICE is the full
+// Gen Z Quant: the credits, for the pause menu's Credits page (and anything else that lists them). NOTICE is the full
 // legal text and assets/CREDITS.md the same list for people reading the repo; this is what the game shows.
 //   import { CREDITS, creditsHTML } from '../credits.js';
 //   CREDITS        [{ heading, lines: [{ what, who, note, licence, licenceUrl, src }] }], in the order to show them
@@ -11,7 +11,7 @@ const music = () => {
   const lines = [], seen = new Set();
   for (const s of STATIONS) for (const t of s.tracks) {
     if (seen.has(t.file)) continue; seen.add(t.file);
-    if (t.lic === 'original') { lines.push({ what: `"${t.title}"`, who: 'original to WAGMI City', note: s.name, licence: 'MIT', licenceUrl: null, src: null }); continue; }
+    if (t.lic === 'original') { lines.push({ what: `"${t.title}"`, who: 'original to Gen Z Quant', note: s.name, licence: 'MIT', licenceUrl: null, src: null }); continue; }
     const samples = (t.samples || []).map((x) => `"${x.title}" by ${x.artist}`).join(', ');
     // (by is the author's own wording, '"Full Title" [by] Who': split into the title and the rest)
     const m = /^"(.+?)"\s+(?:by\s+)?(.+)$/.exec(t.by || '');
@@ -27,7 +27,7 @@ const music = () => {
 export const CREDITS = [
   { heading: 'Music', lines: music() },
   { heading: 'Characters', lines: [
-    { what: 'Quant, Gears, Juno and Fiona', who: 'built from MakeHuman\'s body, clothes and hair', note: 'original characters for WAGMI City', licence: 'CC0 1.0', licenceUrl: LICENCES['CC0 1.0'], src: 'http://www.makehuman.org' },
+    { what: 'Quant, Gears, Juno and Fiona', who: 'built from MakeHuman\'s body, clothes and hair', note: 'original characters for Gen Z Quant', licence: 'CC0 1.0', licenceUrl: LICENCES['CC0 1.0'], src: 'http://www.makehuman.org' },
     { what: 'Motion capture', who: 'CMU Graphics Lab Motion Capture Database', note: 'free for all uses (the data may not be resold); created with funding from NSF EIA-0196217', licence: null, licenceUrl: null, src: 'http://mocap.cs.cmu.edu' },
   ] },
   { heading: 'Engine sounds', lines: [

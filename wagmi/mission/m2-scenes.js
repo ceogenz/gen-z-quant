@@ -1,4 +1,4 @@
-// WAGMI City: Mission 2's scenes, on the cutscene machinery (cine.js) the way Mission 1's are: a clock, the shots as
+// Gen Z Quant: Mission 2's scenes, on the cutscene machinery (cine.js) the way Mission 1's are: a clock, the shots as
 // functions of it, the cast posed from it, cues fired as it passes them; Space held skips.
 //   meet     (burnerMeet) Bryant Park at twilight: Juno in person at one of the park's tables with her laptop; Quant hands
 //            her the burner, she plugs it in and traces its twin to a van idling in Times Square (a cut to it), ~30 s
@@ -147,7 +147,7 @@ export function burnerScene(W, { U, say, van }) {
     ],
     cues: [
       [0.3, () => { ui.title('ACT I · BAGS', 'Burner', 2.8); sfx?.play('stinger', { gain: 0.35 }); W.audio?.play?.('missionStart'); }],
-      [1.2, () => ui.place('Bryant Park', 'Midtown · WAGMI City', 3.4)],
+      [1.2, () => ui.place('Bryant Park', 'Midtown · New York', 3.4)],
       [T.ring + 0.6, () => { sfx?.play('ring', { gain: 0.16, times: 1 }); W.audio?.play?.('phoneBuzz'); upAt = W.sceneClock?.t ?? T.ring; }],
       [T.call - 0.3, () => { U.call.show(); sfx?.play('ding', { gain: 0.08 }); }],
       [T.call + 0.2, (st) => {
@@ -261,7 +261,7 @@ export async function burnerMeet(W, { U, say, van, at = J_AT }) {
     ],
     cues: [
       [0.3, () => { ui.title('ACT I · BAGS', 'Burner', 2.8); sfx?.play('stinger', { gain: 0.35 }); W.audio?.play?.('missionStart'); }],
-      [1.2, () => ui.place('Bryant Park', 'Midtown · WAGMI City', 3.4)],
+      [1.2, () => ui.place('Bryant Park', 'Midtown · New York', 3.4)],
       [T.line0, (st) => {
         say(MEET_LINES, st, (who, i) => {
           const now = W.sceneClock?.t ?? 0; speaking = who; lineText = MEET_LINES[i]?.[2] || '';
@@ -357,7 +357,7 @@ export function crashScene(W, { levCar, lev, phone, say, at = CRASH }) {
       { t: T.run, cam: (t) => ({ pos: [drop[0] - 2.2, 0.6, drop[1] + 2.4], look: [lerp(drop[0], lx(t), 0.7), lerp(0.3, 1.2, clamp((t - T.run) / 1.5)), lerp(drop[1], lz(t), 0.7)], fov: 42, shake: 0.6 }) },
     ],
     cues: [
-      [0.1, () => { if (Math.hypot(at.x - CRASH.x, at.z - CRASH.z) < 2) ui.place('Greeley Square', 'Herald Square · WAGMI City', 3); }],
+      [0.1, () => { if (Math.hypot(at.x - CRASH.x, at.z - CRASH.z) < 2) ui.place('Greeley Square', 'Herald Square · New York', 3); }],
       [T.out - 0.2, () => W.audio?.play?.('doorOpen', { pos: [door[0], 1, door[1]] })],
       [T.out + 0.6, (st) => say([['Lev', ACID, 'My car! My beautiful leveraged car!']], st)],
       [T.drop, () => sfx?.play('thunk', { gain: 0.2, f: 300, ring: false })],

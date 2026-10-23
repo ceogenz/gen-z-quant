@@ -1,4 +1,4 @@
-"""WAGMI City: the synthesised voices' renderer (Python, run by wagmi/radio/build/voices.mjs; not loaded by the game).
+"""GEN Z QUANT: the synthesised voices' renderer (Python, run by wagmi/radio/build/voices.mjs; not loaded by the game).
 
     <venv>/bin/python -I wagmi/radio/build/tts.py <job.json>
 

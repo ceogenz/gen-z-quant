@@ -1,4 +1,4 @@
-// WAGMI City radio build tools (Node, not loaded by the game): WAV in and out, and a few measurements.
+// Gen Z Quant radio build tools (Node, not loaded by the game): WAV in and out, and a few measurements.
 import fs from 'node:fs';
 
 // read a PCM16 / float32 WAV: { sr, ch: [Float32Array, ...] }

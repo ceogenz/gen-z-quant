@@ -1,4 +1,4 @@
-// WAGMI City: Mission 2 · Burner (docs/MISSIONS.md 4.4, as built), and the way into it after Mission 1. Installed by
+// Gen Z Quant: Mission 2 · Burner (docs/MISSIONS.md 4.4, as built), and the way into it after Mission 1. Installed by
 // game.js; Mission 1's end calls handoff(W).
 //   hand-off  Juno's DM, 'Meet Juno at Bryant Park.', the route to the J, its corona at the park's 6th Ave entrance;
 //             free roam with the J always on the radar and a nudge from Juno when he wanders; into the corona (on foot,
@@ -354,7 +354,7 @@ function createMission(W, { keep = false } = {}) {
         if (d < 260) gps.blip('van', { x: vanD.pos.x, z: vanD.pos.z, kind: 'enemy', edge: true, name: 'The van' }); else gps.unblip('van');
         if (d < 160) S.chev.at(vanD.pos.x, vanD.pos.y + 3.4, vanD.pos.z, frameDt()); else S.chev.hide();
         // (Times Square reached: from here a restart puts him in his car behind the van, not back at the park)
-        if (!S.square && d < 160) { S.square = true; ui.place('Times Square', 'Midtown · WAGMI City', 3); findObj(); }
+        if (!S.square && d < 160) { S.square = true; ui.place('Times Square', 'Midtown · New York', 3); findObj(); }
         if (!inCar() && d < 60 && !footTold) { footTold = true; objective(['Get back in your ', { car: 'blue' }, '.'], null); blipCar(); }
         if (inCar() && footTold) { footTold = false; gps.unblip('car'); if (S.square) findObj(); else goObj(); }
         // (right on top of it: they know)
@@ -732,7 +732,7 @@ function createMission(W, { keep = false } = {}) {
       letter: 'G', at: G_AT, name: "Gears' garage · W 22nd St", objective: ['Go to ', { "Gears' garage": 'yellow' }, '.'],
       note: ['Juno', "gears' garage is in west chelsea, the G on your radar. he's expecting you."],
       onArrive: (b) => {
-        ui.place('Static Garage', 'West Chelsea · WAGMI City', 3.5);
+        ui.place('Static Garage', 'West Chelsea · New York', 3.5);
         ui.objective(null); W.gps?.clear();
         ui.help(['You made it to Gears. ', { 'Pete will DM you tomorrow.': 'yellow' }], 10);
         b.marker.hide();

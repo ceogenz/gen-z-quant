@@ -1,4 +1,4 @@
-// WAGMI City: the game's spoken lines, read out of its own source (Node, for the voice build and the line sheet).
+// Gen Z Quant: the game's spoken lines, read out of its own source (Node, for the voice build and the line sheet).
 //   wagmi/intro.js        the opening's LINES: ['Speaker', COLOUR, from, to, 'text'] (timed to the cutscene's clock)
 //   wagmi/mission/*.js    say([...]) lines: ['Speaker', COLOUR, 'text', pause?], and ui.sub('Speaker', 'text', ...)
 // Each line gets an id (scene-speaker-first-words), stable while its text is: change the words and it is a new line

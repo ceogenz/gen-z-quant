@@ -1,4 +1,4 @@
-// WAGMI City: the chase cars. The city's own lofted bodies (js/actor-models.js: BODY_SPECS, buildCarGeometry,
+// Gen Z Quant: the chase cars. The city's own lofted bodies (js/actor-models.js: BODY_SPECS, buildCarGeometry,
 // createLoftedCarMaterial), as Mission 1's black SUV is built (wagmi/mission/m1.js buildSUV):
 //   degens   gloss black SUVs and sedans on acid-green rims (#B6FF3B), an acid-green glow on the road under them
 //   police   the city's NYPD cruiser (the sedan in the white and blue livery) with its flashing roof bar

@@ -1,4 +1,4 @@
-// WAGMI City radio build tools (Node, not loaded by the game): the sample-level tools the voice and music builds share.
+// Gen Z Quant radio build tools (Node, not loaded by the game): the sample-level tools the voice and music builds share.
 import { biquad } from './wav.mjs';
 
 // read x at fractional positions (cubic Hermite)

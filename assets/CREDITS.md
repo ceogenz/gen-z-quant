@@ -1,6 +1,6 @@
-# WAGMI City credits
+# Gen Z Quant credits
 
-WAGMI City is MIT-licensed (see `LICENSE`). Some of what it uses is not ours and comes under its own licence. This file
+Gen Z Quant is MIT-licensed (see `LICENSE`). Some of what it uses is not ours and comes under its own licence. This file
 lists those works, and `NOTICE` has the full notices. In the game, the pause menu's **Credits** page shows the same list
 from `wagmi/credits.js`. Each radio track's credit is kept beside the track in `wagmi/radio/stations.js`.
 
@@ -53,7 +53,7 @@ game.
 
 ## Characters
 
-Quant, Gears, Juno and Fiona (`assets/characters/*.glb`) are original characters made for WAGMI City (invented people)
+Quant, Gears, Juno and Fiona (`assets/characters/*.glb`) are original characters made for Gen Z Quant (invented people)
 from [MakeHuman](http://www.makehuman.org)'s base body, clothes and hair (CC0 1.0). Their everyday clips come from the
 [CMU Graphics Lab Motion Capture Database](http://mocap.cs.cmu.edu) (free for all uses; the data itself may not be
 resold; created with funding from NSF EIA-0196217). Quant's freeflow fight moves are Spiderbench's (see below).

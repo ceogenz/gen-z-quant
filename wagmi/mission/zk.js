@@ -1,4 +1,4 @@
-// WAGMI City: ZK on a video call. His room is a little scene of its own, not the city's (a light added to the city
+// Gen Z Quant: ZK on a video call. His room is a little scene of its own, not the city's (a light added to the city
 // would cost every material in it a recompile): ZK standing at his microphone, tall, in a black tailored tracksuit with
 // acid-green piping, a hood, a mirrored chrome visor and a gold '0' on a chain; a neon ring on the wall behind his head,
 // red charts falling on the screens either side, lit by his ring light from the front and the screens from behind.

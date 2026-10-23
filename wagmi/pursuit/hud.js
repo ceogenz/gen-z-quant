@@ -1,4 +1,4 @@
-// WAGMI City: the chase on screen. The HEAT meter top-right, where GTA keeps its stars: five slots, the heat lit (the
+// Gen Z Quant: the chase on screen. The HEAT meter top-right, where GTA keeps its stars: five slots, the heat lit (the
 // Degens' skulls in acid green, the police's stars in white); seen, they glow and the radar's rim pulses (acid green,
 // or the police's red and blue); out of sight they blink, and out of the search circle they blink fast and go out one
 // by one as the escape runs down. On the radar (over the city's, under the GPS's route and blips): the search circle

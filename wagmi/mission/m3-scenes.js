@@ -1,4 +1,4 @@
-// WAGMI City: Mission 3's scenes, on the cutscene machinery (cine.js, run by Mission 2's runScene): a clock, the shots
+// Gen Z Quant: Mission 3's scenes, on the cutscene machinery (cine.js, run by Mission 2's runScene): a clock, the shots
 // as functions of it, the cast posed from it, cues fired as it passes them; Space held skips.
 //   night   the night after Mission 2, in the garage: Quant on the old couch, Moon's photo on his phone, lights out;
 //           NEXT MORNING (a clock runs the night through); the sun low through the door, him asleep sitting up, waking
@@ -161,7 +161,7 @@ export function garageScene(W, { U, say, gears, garage }) {
     ],
     cues: [
       [0.3, () => { ui.title('ACT II · DOWN BAD', 'Pump and Dump', 2.8); sfx?.play('stinger', { gain: 0.35 }); W.audio?.play?.('missionStart'); }],
-      [1.0, () => ui.place('Static Garage', 'West Chelsea · WAGMI City', 3.2)],
+      [1.0, () => ui.place('Static Garage', 'West Chelsea · New York', 3.2)],
       [T.inside - 0.1, () => { garage.inside(true); }],
       [1.3, (st) => {
         say(LINES, st, (who, i) => {
@@ -346,7 +346,7 @@ export function rallyScene(W, { say, fiona, rally, spotter, lawn = null, onRigs 
       ...(lawn ? [{ t: T.rigs, cam: (t) => ({ pos: keys([[T.rigs, back(5.4, 3.3, 1.2)], [T.end, back(4.2, 2.7, 0.9)]], 'out')(t), look: keys([[T.rigs, aim], [T.end, [lerp(aim[0], near[0], 0.5), 2.6, lerp(aim[2], near[1], 0.5)]]], 'inOut')(t), fov: 52, shake: 0.35 }) }] : []),
     ],
     cues: [
-      [0.2, () => ui.place('Washington Square', 'Greenwich Village · WAGMI City', 3.2)],
+      [0.2, () => ui.place('Washington Square', 'Greenwich Village · New York', 3.2)],
       [0.6, (st) => { W.voice?.fx?.('Fiona', 'phone'); say([['Fiona', PINK, 'Welcome to the launch of the century! Moon two!']], st); }],
       [5.9, (st) => say([['Fiona', PINK, 'Number go up! Number go UP!']], st)],
       [8.6, (st) => say([['Wick', ACID, "Yo. That's the coin kid. Protect the streams!"]], st)],
@@ -459,7 +459,7 @@ export function homeScene(W, { say, gears, garage }) {
       { line: 4, t: Infinity, cam: (t, t0) => ({ pos: drift([GX - 6, 1.8, 1599], [GX - 6.5, 2.4, 1597.5], 4)(t, t0), look: [GX - 0.2, 1.6, 1609], fov: 38, shake: 0.4 }) },
     ],
     cues: [
-      [0.2, () => W.ui.place('Static Garage', 'West Chelsea · WAGMI City', 3)],
+      [0.2, () => W.ui.place('Static Garage', 'West Chelsea · New York', 3)],
       [0.6, (st) => {
         say(LINES, st, (who, i) => {
           const now = W.sceneClock?.t ?? 0; for (const sh of def.shots) if (sh.line === i) sh.t = now;

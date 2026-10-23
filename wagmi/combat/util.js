@@ -1,4 +1,4 @@
-// WAGMI City: small shared helpers for the street fight (wagmi/combat/**).
+// Gen Z Quant: small shared helpers for the street fight (wagmi/combat/**).
 import * as THREE from 'three/webgpu';
 
 export const UP = new THREE.Vector3(0, 1, 0);

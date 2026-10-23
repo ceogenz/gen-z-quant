@@ -1,4 +1,4 @@
-// WAGMI City: the game's one-shot sounds, every one made on the spot from noise, oscillators, filters and envelopes.
+// Gen Z Quant: the game's one-shot sounds, every one made on the spot from noise, oscillators, filters and envelopes.
 // Each is fn(M, out, o, t) -> its length in seconds: it plays into `out` (already placed and set to o.vol), starting at
 // t; o.rate pitches it (and speeds it) where that makes sense. Names the whole team calls:
 //   pedHit       a body hitting a car: a deep thump through the bonnet's metal knock, cloth and a slap (o.speed m/s)

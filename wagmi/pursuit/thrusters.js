@@ -1,4 +1,4 @@
-// WAGMI City: the car's cold-gas thrusters (Mission 3's unlock; later missions use them too). Little puffs of nitrogen:
+// Gen Z Quant: the car's cold-gas thrusters (Mission 3's unlock; later missions use them too). Little puffs of nitrogen:
 //   boost  the rocket package on Shift (wagmi/game.js; always there)
 //   hop    SPACE: the perimeter ports fire straight down and the car hops ~2.5 m (1.1 s in the air), over a car or a
 //          barrier: it clears a sedan's roof for 0.7 s of it and an SUV's for 0.65 s (at 20 m/s, 13-14 m: SPACE about 8 m

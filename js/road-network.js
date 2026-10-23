@@ -93,7 +93,7 @@ function buildRoadNetwork(sidewalks, obstacles) {
     }
     return false;
   }
-  // (WAGMI City) ...and a park's raised paving or lawn under the point itself (the ground patches city-grid.js lays,
+  // (Gen Z Quant) ...and a park's raised paving or lawn under the point itself (the ground patches city-grid.js lays,
   // standing above the sidewalks' 0.22 m): a street drawn across a park's ground (Washington Square's four sides, whose
   // centrelines run inside the square's paving) is no road, so traffic and the GPS go round by the streets outside it
   const RAISED = 0.25;
@@ -353,7 +353,7 @@ function buildRoadNetwork(sidewalks, obstacles) {
     const parent = pos.map((_, i) => i);
     const find = (i) => (parent[i] === i ? i : (parent[i] = find(parent[i])));
     for (const l of links) if (l.len < 14) parent[find(l.a)] = find(l.b);
-    // (WAGMI City) North of Columbus Circle, Broadway's and the other divided roads' two one-way roadways run ~20 m apart
+    // (Gen Z Quant) North of Columbus Circle, Broadway's and the other divided roads' two one-way roadways run ~20 m apart
     // with nothing in the graph across them at the cross streets: a junction on one and the one beside it on the other
     // (same street, travelling the opposite way, side by side) are one too, so the cross streets still go straight across
     // and the road runs both ways down its middle (the mall city-config.js removed), as the divided roads below do
@@ -816,7 +816,7 @@ function buildRoadNetwork(sidewalks, obstacles) {
 
   // Paint describes the physical streets, including dead ends and roads AI traffic cannot circulate through.
   // Snapshot their geometry before routing moves stop lines, drops edges and renumbers the surviving junctions.
-  // (WAGMI City: paintEdges and isRoadClear ported from Slop New York by Mr.doob, MIT, commit 30096be)
+  // (Gen Z Quant: paintEdges and isRoadClear ported from Slop New York by Mr.doob, MIT, commit 30096be)
   const paintNodes = new Map(nodes.map((n, id) => [n, { id, x: n.x, z: n.z, shape: n.shape }]));
   const paintEdges = edges.map(({ from, to, axis, x0, z0, sx, sz, dx, dz, rx, rz, span, len, half, lanes }) => ({
     from: paintNodes.get(from), to: paintNodes.get(to), axis, x0, z0, sx, sz, dx, dz, rx, rz, span, len, half, lanes

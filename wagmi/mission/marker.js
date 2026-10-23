@@ -1,4 +1,4 @@
-// WAGMI City: a mission marker on the ground, the GTA corona: a 3 m translucent cylinder of light rising off a ring,
+// Gen Z Quant: a mission marker on the ground, the GTA corona: a 3 m translucent cylinder of light rising off a ring,
 // its colour fading out upward, breathing slowly.
 //   const m = createMarker(THREE, scene, { color: '#FFC93C', radius: 3 }); m.at(x, y, z); m.hide();
 import { uv, uniform, float, vec3, sin, time, pow, mix, smoothstep, abs } from 'three/tsl';

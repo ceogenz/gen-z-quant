@@ -1,4 +1,4 @@
-// WAGMI City: the cutscene machinery. A cutscene is a clock (t, seconds) and functions of it: the camera's shot, every
+// Gen Z Quant: the cutscene machinery. A cutscene is a clock (t, seconds) and functions of it: the camera's shot, every
 // actor's place and pose, the cues (lines, captions, sounds) that fire once as t passes them. Seeking is cheap, so a
 // capture can step through it frame by frame.
 //   const D = createDirector(W);  D.take();  D.camera = { pos, look, fov, roll };  D.release(blendSecs)

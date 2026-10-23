@@ -1,4 +1,4 @@
-// WAGMI City: the voice build (Node, macOS). Reads every spoken line out of the game (lines.mjs), gives each a voice
+// Gen Z Quant: the voice build (Node, macOS). Reads every spoken line out of the game (lines.mjs), gives each a voice
 // file and writes the manifest the game plays them from, and the line sheet for whoever records them for real.
 //
 //   node wagmi/radio/build/voices.mjs            build every line that has no file yet (or whose words changed)
@@ -199,7 +199,7 @@ function sheet(list) {
   const who = [...new Set(list.map((l) => l.speaker))];
   const scenes = { intro: 'The opening cutscene "Dognapped" (wagmi/intro.js): E 37th St at golden hour; Moon is snatched, then ZK calls on video.', m1: 'Mission 1 (wagmi/mission/m1.js): Juno\'s phone call on the drive; the Degens at Chelsea Park; searching the van.' };
   for (const sc of new Set(list.map((l) => l.scene))) if (!scenes[sc] && /^m\d+$/.test(sc)) scenes[sc] = `Mission ${sc.slice(1)} (wagmi/mission/${sc}*.js).`;
-  let s = `# WAGMI City: voice lines\n\nEvery spoken line in the game, for a voice service or actors. Generated from the game's own source by\n\`node wagmi/radio/build/voices.mjs\` (do not edit by hand: change the words in the game, then rebuild).\n\n`;
+  let s = `# Gen Z Quant: voice lines\n\nEvery spoken line in the game, for a voice service or actors. Generated from the game's own source by\n\`node wagmi/radio/build/voices.mjs\` (do not edit by hand: change the words in the game, then rebuild).\n\n`;
   const synth = Object.entries(picks).filter(([, n]) => VOICES[n]);
   s += `**The ${synth.length ? 'other ' : ''}voices in the build today are placeholders** made with the macOS speech voices (Apple's licence allows those for\npersonal, non-commercial use only). They must be replaced before quantgenz.com goes public.`;
   s += synth.length ? ` Synthesised instead: ${synth.map(([w, n]) => `${w} (\`${n}\`)`).join(', ')}; see below.\n\n` : `\n\n`;
