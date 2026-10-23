@@ -799,6 +799,9 @@ function createTrafficSystem(scene, sidewalks, obstacles) {
       for (const list of a.occ) {
         const lead = leadOf(list);
         if (lead && !canStop(lead, a, v.wait > 8)) return true;
+        // (WAGMI City: and to one standing at its line, except in the side road's turn (the courtesy, below): else a
+        // steady stream across, each car going while the avenue's stood, kept its box busy and its queue there for good)
+        if (lead && !(n.courtesy > clock) && a.len - lead.s - lead.v.half < 3) return true;
       }
     }
     return false;
@@ -928,6 +931,12 @@ function createTrafficSystem(scene, sidewalks, obstacles) {
       return false;
     }
     if (phase === 'red' || (phase === 'amber' && stoppable)) return false;
+    // (WAGMI City: at a corner without signals, a side road's driver kept at the line by the avenue's traffic filling
+    // the box asks for the avenue's courtesy too (see below), not only one waiting for a gap in it)
+    if (!n.signal && e.axisIndex !== 0 && v.wait > 6 && d < 3 && !(n.courtesyNext > clock)) {
+      n.courtesy = clock + 8;
+      n.courtesyNext = clock + 16;
+    }
     if (boxBusy(n, e.axisIndex)) return false; // crossing traffic inside
     const lead = ahead(e.occ[v.lane], v.s, v);
     if (lead && lead.v.yielding) return false; // the vehicle ahead waits inside to turn: wait behind the line
@@ -943,8 +952,8 @@ function createTrafficSystem(scene, sidewalks, obstacles) {
     if (!n.signal && e.axisIndex !== 0 && yieldToAvenue(v, n)) {
       // (waited a while at the line for a gap that doesn't come: the avenue lets it through, see below)
       if (v.wait > 6 && d < 3 && !(n.courtesyNext > clock)) {
-        n.courtesy = clock + 6;
-        n.courtesyNext = clock + 14;
+        n.courtesy = clock + 8;
+        n.courtesyNext = clock + 16;
       }
       return false;
     }
@@ -2245,8 +2254,7 @@ function createTrafficSystem(scene, sidewalks, obstacles) {
     network,
     hold, // (WAGMI City)
     unwreck, // (WAGMI City)
-    blockers, // (WAGMI City)
-    _dbg: { phaseOf, boxBusy, room, alongside, mergingAhead, yieldOncoming, yieldPoint, pedestrianOn, laneCoord, timeTo, canStopBefore, yieldToAvenue } // TEMP (fix-round diagnosis)
+    blockers // (WAGMI City)
   };
 }
 
