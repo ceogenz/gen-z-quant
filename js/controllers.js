@@ -954,8 +954,9 @@ class ThirdPersonControllerManager {
             carEntity.pitchVel = (carEntity.pitchVel || 0) + (sinH * nx + cosH * nz) * Math.min(14.0, vn) * 0.16;
             carEntity.rollVel = (carEntity.rollVel || 0) - sideDot * Math.min(14.0, vn) * 0.22;
             carEntity.heaveVel = (carEntity.heaveVel || 0) + Math.min(1.4, vn * 0.11);
-            // (WAGMI City: the crash's feel, wagmi/crash: how hard it hit, the wall's normal, how square on, where)
-            if (carEntity.crash) carEntity.crash.wall(vn, nx, nz, headOn, pos.x - nx * extX * 0.92, pos.z - nz * extZ * 0.92);
+            // (WAGMI City: the crash's feel, wagmi/crash: how hard it hit, the wall's normal, how square on, where, and
+            // what: a park's iron fence rings)
+            if (carEntity.crash) carEntity.crash.wall(vn, nx, nz, headOn, pos.x - nx * extX * 0.92, pos.z - nz * extZ * 0.92, c);
             if (vn > 2.2) {
               carEntity.lastCollisionSpark = {
                 x: pos.x - nx * extX * 0.92,

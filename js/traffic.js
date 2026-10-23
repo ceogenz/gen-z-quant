@@ -1,7 +1,7 @@
 (function () {
 // js/traffic.js
 // Manhattan traffic and pedestrians on the road graph road-network.js derives from the city as built:
-// - 200 cars (taxis, sedans, SUVs, NYPD cruisers) and 32 MTA buses keep to their lanes and follow the vehicle
+// - 250 cars (taxis, sedans, SUVs, NYPD cruisers) and 32 MTA buses keep to their lanes and follow the vehicle
 //   ahead (Intelligent Driver Model), change lanes to overtake or to reach a turn lane, turn into other streets,
 //   stop for the signals street-details.js shows, give way to oncoming traffic when turning left, to the avenue at
 //   unsignalized corners and to pedestrians on crosswalks, and never enter an intersection they can't clear.
@@ -37,7 +37,7 @@ const {
 const { PersonCrowd, PersonRig } = window.NYC;
 const { mergeGeometries } = window.NYC.Addons;
 
-const NUM_CARS = 200;
+const NUM_CARS = 250; // (WAGMI City: was 200, side streets stood empty)
 const NUM_BUSES = 24; // (WAGMI City: 32 bunched into columns and walls of buses round the player)
 const NUM_PEDS = 340;
 
@@ -130,7 +130,7 @@ function createTrafficSystem(scene, sidewalks, obstacles) {
   };
 
   // =========================================================================
-  // 1. 3D LOFTED NYC YELLOW TAXIS, SEDANS, SUVS & NYPD CRUISERS (200 VEHICLES)
+  // 1. 3D LOFTED NYC YELLOW TAXIS, SEDANS, SUVS & NYPD CRUISERS (250 VEHICLES)
   // =========================================================================
   function createVehicle(bus, half, halfWidth, axle, driver, v0) {
     return {
@@ -598,6 +598,10 @@ function createTrafficSystem(scene, sidewalks, obstacles) {
     nearSignals.length = 0;
     for (const e of edges) if (Math.hypot(e.mx - focusX, e.mz - focusZ) < NEAR_RADIUS) nearEdges.push(e);
     for (const n of nodes) if (n.signal && Math.hypot(n.x - focusX, n.z - focusZ) < NEAR_RADIUS) nearSignals.push(n);
+    // (WAGMI City: the side streets feedSideStreets keeps from standing empty: any within FEED_FAR m of anywhere in the
+    // next 40 m)
+    feedEdges.length = 0;
+    for (const e of nearEdges) if (e.axis !== 'ave' && Math.hypot(e.mx - focusX, e.mz - focusZ) < FEED_FAR + 40 + e.len * 0.5) feedEdges.push(e);
   }
 
   // Where the player is relative to v: metres ahead, metres to the right, and how fast it moves v's way
@@ -1638,6 +1642,117 @@ function createTrafficSystem(scene, sidewalks, obstacles) {
     return false;
   }
 
+  // (WAGMI City) The side streets round the player kept from standing empty: placed only where the camera can't see,
+  // most of a side street off an avenue is out of sight behind the buildings on its corners, never in the frustum's
+  // side planes, so the streets ahead of a driver emptied as he drove. Every FEED_TICK s, the side-street roads (both
+  // ways) within FEED_FAR m of the player with fewer cars than their length wants (1, 2 from 90 m, 3 from 160, 4 from 230) get
+  // one from far off: a car more than FEED_DONOR m away and out of sight, put in a free spot of theirs out of sight
+  // too (out of view, or behind a building), FEED_NEAR m or more from him, not by its ends' stop lines
+  const FEED_NEAR = 35;
+  const FEED_FAR = 170;
+  const FEED_DONOR = 230;
+  const FEED_TICK = 0.2;
+  let feedClock = 0;
+  let feedStamp = 0;
+  const feedEdges = [];
+  const feedStats = { ticks: 0, short: 0, noDonor: 0, noSpot: 0, placed: 0 }; // (for a test)
+  const occCount = (e) => {
+    let n = 0;
+    for (const list of e.occ) n += list.length;
+    return n;
+  };
+  const backOf = (e) => {
+    if (e.back === undefined) e.back = e.to.out.find((f) => f.to === e.from && f.axis === e.axis) || null;
+    return e.back;
+  };
+  // Behind a building from the camera: a point of the line to it, 6 m on from the lens to 3 m short of it, inside a
+  // block's building lots (5 m in from its curb: past the sidewalk), not a park's or a median's. Not from up high
+  function occluded(x, z) {
+    if (!hasView || camY > 22) return false;
+    const { blockAt } = window.NYC;
+    const dx = x - camX;
+    const dz = z - camZ;
+    const D = Math.hypot(dx, dz);
+    for (let t = 6; t < D - 3; t += 4) {
+      const px = camX + (dx * t) / D;
+      const pz = camZ + (dz * t) / D;
+      const b = blockAt(px, pz);
+      if (!b || b.median || b.park > 0.4) continue;
+      if (b.rect ? Math.min(px - b.minX, b.maxX - px, pz - b.minZ, b.maxZ - pz) > 5 : b.area > 1500) return true;
+    }
+    return false;
+  }
+  const unseen = (x, z, r) => !visible(x, z, r) || occluded(x, z);
+  function feedSideStreets(dt) {
+    if ((feedClock -= dt) > 0 || !hasView) return;
+    feedClock = FEED_TICK;
+    feedStamp++;
+    // the roads short of cars, the ones ahead of the player (or the camera, on foot) first, then the nearer
+    const moving = Math.abs(player.vx) + Math.abs(player.vz) > 1;
+    const hx = moving ? player.vx : camFwdX;
+    const hz = moving ? player.vz : camFwdZ;
+    let best = null;
+    let bestScore = Infinity;
+    for (const e of feedEdges) {
+      if (e.fed === feedStamp || heldEdges.has(e) || e.feedHold > clock) continue;
+      const b = backOf(e);
+      e.fed = feedStamp;
+      if (b) b.fed = feedStamp;
+      const L = Math.max(e.len, b ? b.len : 0);
+      const want = L < 45 ? 0 : L < 90 ? 1 : L < 160 ? 2 : L < 230 ? 3 : 4;
+      if (occCount(e) + (b ? occCount(b) : 0) >= want) continue;
+      const t = clamp((focusX - e.sx) * e.dx + (focusZ - e.sz) * e.dz, 0, e.len);
+      const d = Math.hypot(e.sx + e.dx * t - focusX, e.sz + e.dz * t - focusZ);
+      if (d > FEED_FAR) continue;
+      const score = d - ((e.mx - focusX) * hx + (e.mz - focusZ) * hz > 0 ? 80 : 0);
+      if (score < bestScore) {
+        bestScore = score;
+        best = e;
+      }
+    }
+    feedStats.ticks++;
+    if (!best) return;
+    feedStats.short++;
+    // the donor: the furthest car out of sight past FEED_DONOR m, not wrecked, not crossing or committed to a junction
+    let donor = null;
+    let donorD = FEED_DONOR;
+    for (const v of cars) {
+      if (!v.edge || v.wreck || v.conn || v.claimed || v.commit) continue;
+      const d = Math.hypot(v.x - focusX, v.z - focusZ);
+      if (d > donorD && unseen(v.x, v.z, v.half + 2)) {
+        donorD = d;
+        donor = v;
+      }
+    }
+    if (!donor) {
+      feedStats.noDonor++;
+      return;
+    }
+    const b = backOf(best);
+    for (let attempt = 0; attempt < 8; attempt++) {
+      const e = b && Math.random() < 0.5 ? b : best;
+      if (!e.lanes.length || e.len < 2 * donor.half + 30) continue;
+      const lane = Math.floor(Math.random() * e.lanes.length);
+      const s = donor.half + 8 + Math.random() * (e.len - 2 * donor.half - 25);
+      const x = e.sx + e.dx * s + e.rx * e.lanes[lane];
+      const z = e.sz + e.dz * s + e.rz * e.lanes[lane];
+      const d = Math.hypot(x - focusX, z - focusZ);
+      // (the near end of a long road first: a car or two to drive round when he turns into it, not one at its far end)
+      if (d < FEED_NEAR || (attempt < 5 && d > 110) || !unseen(x, z, donor.half + 3) || held(x, z, donor.half)) continue;
+      if (player.active && Math.hypot(x - player.x, z - player.z) < 25) continue;
+      if (parked.active && Math.hypot(x - parked.x, z - parked.z) < 25) continue;
+      if (blockers.some((k) => Math.hypot(x - k.x, z - k.z) < 25)) continue;
+      if (!laneClear(e.occ[lane], s, donor.half + 10)) continue;
+      place(donor, e, lane, s);
+      feedStats.placed++;
+      return;
+    }
+    // (nowhere out of sight on it just now: the others first, for a second or two)
+    best.feedHold = clock + 1.5;
+    if (b) b.feedHold = best.feedHold;
+    feedStats.noSpot++;
+  }
+
   // =========================================================================
   // 7. PEDESTRIANS
   // =========================================================================
@@ -2183,6 +2298,7 @@ function createTrafficSystem(scene, sidewalks, obstacles) {
     nypdDrawn = 0;
     visibleBuses = 0;
     let budget = jump ? Infinity : 4;
+    if (!jump && activeMode !== 'helicopter') feedSideStreets(dt); // (WAGMI City)
     buildGrid();
     for (let i = 0; i < vehicles.length; i++) {
       const v = vehicles[i];
@@ -2308,7 +2424,8 @@ function createTrafficSystem(scene, sidewalks, obstacles) {
     network,
     hold, // (WAGMI City)
     unwreck, // (WAGMI City)
-    blockers // (WAGMI City)
+    blockers, // (WAGMI City)
+    feedStats // (WAGMI City)
   };
 }
 

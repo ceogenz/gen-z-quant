@@ -265,16 +265,14 @@ export function createUI() {
   const blurEl = el('wg-blur');
   const phoneEl = el('wg-phone', `<div class="frame"><div class="screen"><div class="island"></div><div class="status"><span>5:45</span><span>5G ▮▮▮</span></div><div class="content"></div></div></div>`);
   const callerEl = el('wg-caller', `<div class="av"></div><div><div class="n"></div><div class="s"></div></div>`);
-  // Juno's face in the caller's tile while she's on (her frames, juno.js), talking while her line is up
-  let cam = null, camRaf = 0;
+  // Juno's face in the caller's tile while she's on (her frames, juno.js): her mouth with her voice while her line is up
+  // (the portrait follows her voice itself, every frame; asked here only whether the line on screen is hers)
+  let cam = null;
   function callerCam(av) {
-    if (!av) { if (cam) { cam.stop(); cam = null; clearTimeout(camRaf); callerEl.querySelector('.av').classList.remove('cam'); } return; }
+    if (!av) { if (cam) { cam.stop(); cam = null; callerEl.querySelector('.av').classList.remove('cam'); } return; }
     if (cam) return;
-    av.textContent = 'J'; av.classList.add('cam'); cam = junoPortrait(av, { crop: 'face' });
-    const subB = () => document.querySelector('#wg .wg-sub b');
-    const tick = () => { if (!cam) return; const on = /^juno/i.test(subB()?.textContent || '');
-      cam.talk(on ? Math.max(window.WAGMI?.voice?.level?.() || 0, 0.25 + Math.random() * 0.4) : 0); camRaf = setTimeout(() => requestAnimationFrame(tick), 110); };
-    tick();
+    const subB = () => document.querySelector('#wg .wg-sub:not(.hide) b');
+    av.textContent = 'J'; av.classList.add('cam'); cam = junoPortrait(av, { crop: 'face', speaking: () => /^juno/i.test(subB()?.textContent || '') });
   }
   const dmEl = el('wg-dm', `<div class="a"></div><div class="b"></div>`);
   const countEl = el('wg-count', `<div class="l"></div><div class="v"></div>`);

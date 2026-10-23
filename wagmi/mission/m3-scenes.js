@@ -1,15 +1,18 @@
 // WAGMI City: Mission 3's scenes, on the cutscene machinery (cine.js, run by Mission 2's runScene): a clock, the shots
 // as functions of it, the cast posed from it, cues fired as it passes them; Space held skips.
+//   night   the night after Mission 2, in the garage: Quant on the old couch, Moon's photo on his phone, lights out;
+//           NEXT MORNING (a clock runs the night through); the sun low through the door, him asleep sitting up, waking
 //   garage  the Static Garage at midday, the next day: the street outside, then the bay: Gears' legs out from under
 //           Quant's car ("Cold-gas thrusters..."), Juno's video call: the $MOON2 launch stream (Fiona, Moon's face)
-//   rally   Washington Square: the stage under the arch, the chart pumping, Fiona on the megaphone, a Degen spots Quant
+//   rally   Washington Square: the stage under the arch, the chart pumping, Fiona on the megaphone, a Degen spots Quant;
+//           then over his shoulder on the lawn, the three rigs ahead of him (the job's card up over it)
 //   dump    the third rig down: the chart goes red, Fiona drops the megaphone and runs for her SUV on 5th Ave
 //   home    back at the garage: Gears at the door, the car "in one piece"
 // Each is paced by its lines (a shot starts with its line) or fixed, and returns when it ends (or is skipped).
 import * as THREE from 'three/webgpu';
 import { upright, UPRIGHT_BONES } from '../intro.js';
-import { keys, clamp, lerp, spline, travel } from './cine.js';
-import { GARAGE, ARCH, STAGE, FIONA_AT, SUV_AT, SCREEN_Z, CROWD_CAM, drawMoon } from './m3-set.js';
+import { keys, clamp, lerp, spline, travel, rig } from './cine.js';
+import { GARAGE, ARCH, STAGE, FIONA_AT, SUV_AT, SCREEN_Z, CROWD_CAM, RIGS, drawMoon } from './m3-set.js';
 
 const PI = Math.PI;
 const WHITE = '#FFFFFF', BLUE = '#6CB8FF', ACID = '#B6FF3B', GOLD = '#FFC93C', PINK = '#FF8AD8';
@@ -24,8 +27,10 @@ export const SPOT = {
   // the home scene (23 Oct: a metre more between them, across the wide shot's line, which had him right in front of Gears)
   door: { gears: [GX + 0.9, GZ - 1.4], quant: [GX - 1.9, 1607.6] },
 };
-// where Quant's car waits for the escape (5th Ave at the arch, beside where Fiona's SUV stood, facing north)
-export const ESCAPE_CAR = [-3.2, 2787, PI];
+// where Quant's car waits for the escape: just into Washington Mews off 5th Ave, facing east down it, the open street
+// away from the Degens (they come out of W 8th St and down 5th Ave from the north-west). (5th Ave by the arch is a
+// dead end at the square, so the car there faced north, straight at them; 23 Oct.) Clear of Fiona's way up 5th Ave
+export const ESCAPE_CAR = [9.5, 2745.3, PI / 2];
 
 /* ------------------------------------------------------------ helpers -- */
 function poser(W, C) {
@@ -206,13 +211,127 @@ export function garageScene(W, { U, say, gears, garage }) {
   return def;
 }
 
+/* -------------------------------------------------------------- night -- */
+// Moon on his phone's lock screen (the one thing on it he looks at tonight): the time, Moon's face, MoonTag gone quiet
+function lockScreen(W) {
+  if (W._m3lock) return W._m3lock;
+  const c = document.createElement('canvas'); c.width = 144; c.height = 304; const x = c.getContext('2d');
+  const g = x.createLinearGradient(0, 0, 0, 304); g.addColorStop(0, '#1C2A44'); g.addColorStop(1, '#090C14'); x.fillStyle = g; x.fillRect(0, 0, 144, 304);
+  x.textAlign = 'center'; x.fillStyle = '#fff'; x.font = '800 44px "Barlow Condensed", sans-serif'; x.fillText('11:52', 72, 62);
+  x.fillStyle = 'rgba(255,255,255,.6)'; x.font = '600 11px "Barlow Condensed", sans-serif'; x.fillText('THURSDAY', 72, 78);
+  x.save(); x.beginPath(); x.arc(72, 148, 46, 0, PI * 2); x.fillStyle = '#FFC93C'; x.fill(); x.beginPath(); x.arc(72, 148, 42, 0, PI * 2); x.clip(); x.fillStyle = '#3B4A63'; x.fillRect(20, 100, 104, 100); drawMoon(x, 72, 152, 36, { tongue: true }); x.restore();
+  x.fillStyle = '#fff'; x.font = '800 16px "Barlow Condensed", sans-serif'; x.fillText('MOON', 72, 214);
+  x.fillStyle = 'rgba(30,34,44,.92)'; x.beginPath(); x.roundRect(10, 236, 124, 34, 8); x.fill();
+  x.fillStyle = '#2F7FD8'; x.beginPath(); x.roundRect(16, 243, 20, 20, 5); x.fill();
+  x.textAlign = 'left'; x.fillStyle = 'rgba(255,255,255,.55)'; x.font = '700 8px "Barlow Condensed", sans-serif'; x.fillText('MOONTAG', 42, 252);
+  x.fillStyle = '#fff'; x.font = '700 10px "Barlow Condensed", sans-serif'; x.fillText('No signal since 6:14 PM', 42, 264);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
+  return (W._m3lock = t);
+}
+
+// ~10.5 s, the night after Mission 2 in the garage. garage: the set (its couch, its moods); card(on): the NEXT MORNING
+// card over the black; onDark(): under the black (the mission puts the morning's light in); ui.fade does the blacks
+export function nightScene(W, { garage, card, onDark }) {
+  const C = W.cast, Q = W.quant, P = W.person, ui = W.ui, sfx = W.sfx, cm = W.app.controllerManager;
+  const { x: cx, z: cz, seat } = garage.couch;
+  // (on the couch's east half, facing into the bay)
+  const QX = cx + 0.42, QZ = cz + 0.06, QH = 0;
+  const T = { insert: 1.5, wide: 3.5, down: 3.3, out: 4.2, dark: 4.6, card: 4.9, light: 7.4, wake: 8.7, end: 10.9 };
+  const r = rig(Q.mixer, { sitTalk: Q.act('sitTalk').getClip() });
+  const head = () => Q.bones.head.getWorldPosition(V());
+  let lock0 = null, slump = 0;
+  const F = V(Math.sin(QH), 0, Math.cos(QH)), R = V(-Math.cos(QH), 0, Math.sin(QH));
+  const wide = (t, t0, a, b) => ({ pos: drift([cx + 2.9, GY + 1.2, cz + 3.6], [cx + 2.55, GY + 1.12, cz + 3.25], 3.4)(t, t0), look: [cx + 0.75 + a, GY + 0.82 + b, cz + 0.2], fov: 36, shake: 0.25 });
+  const bone = (n) => Q.bones[n].getWorldPosition(V());
+  const def = {
+    END: T.end, blend: 0,
+    shots: [
+      // the bay at night: the couch by the door, him on it in his phone's light, the street dark through the door
+      { t: 0, cam: (t, t0) => ({ pos: drift([QX + 1.45, GY + 1.3, QZ + 3.3], [QX + 1.3, GY + 1.22, QZ + 3.0], 1.5)(t, t0), look: [QX - 0.1, GY + 0.95, QZ + 0.2], fov: 38, shake: 0.25 }) },
+      // over his shoulder: Moon on the lock screen
+      { t: T.insert, cam: () => { const h = head(), ph = C.phone.position; return { pos: [h.x + R.x * 0.3 - F.x * 0.4, h.y + 0.15, h.z + R.z * 0.3 - F.z * 0.4], look: [ph.x, ph.y - 0.02, ph.z], fov: 30, shake: 0.2 }; } },
+      { t: T.wide, cam: (t, t0) => wide(t, t0, 0.3, -0.05) },
+      // the morning: the same bay, the sun in through the door, him asleep sitting up; then closer as he wakes
+      { t: T.light, cam: (t, t0) => ({ pos: drift([cx + 3.4, GY + 1.35, cz + 3.9], [cx + 3.0, GY + 1.25, cz + 3.5], 2.5)(t, t0), look: [cx + 1.1, GY + 0.95, cz + 0.4], fov: 44, shake: 0.2 }) },
+      { t: T.wake, cam: (t, t0) => ({ pos: drift([QX + 1.2, GY + 1.05, QZ + 1.65], [QX + 1.05, GY + 1.05, QZ + 1.5], 2)(t, t0), look: [QX, GY + 0.95, QZ], fov: 36, shake: 0.2 }) },
+    ],
+    cues: [
+      [0.05, () => { ui.fade(0, 0.8); ui.place('Static Garage', 'West Chelsea · that night', 3); }],
+      [T.down, () => sfx?.play('thunk', { gain: 0.08, f: 900, ring: false })],
+      // (the work lamp clicked off)
+      [T.out, () => { garage.mood('dark'); sfx?.play('thunk', { gain: 0.12, f: 220, ring: false }); }],
+      [T.dark, () => { ui.fade(1, 0.35); }],
+      [T.card, () => { card?.(true); try { onDark?.(); } catch (e) { console.warn('[m3] night', e); } garage.mood('morning'); }],
+      [T.light - 0.5, () => { card?.(false); }],
+      [T.light, () => { ui.fade(0, 0.9); }],
+      [T.wake, () => sfx?.play('thunk', { gain: 0.14, f: 420, ring: false })],
+      [T.end - 0.55, () => { ui.fade(1, 0.5); }],
+    ],
+    pose(t) {
+      // sat on the couch, his hips on its seat (the clip's own hips put there whatever its height)
+      P.position.set(QX, cm.getGroundHeight(QX, QZ, 'person'), QZ); P.heading = QH; P.mesh.visible = true;
+      P.mesh.position.set(QX, GY, QZ); P.mesh.rotation.y = QH; Q.body.position.y = 0; Q.body.rotation.x = 0;
+      r.pose(t);
+      P.mesh.updateMatrixWorld(true);
+      const hip = Q.bones.upperleg01_L.getWorldPosition(V()).add(Q.bones.upperleg01_R.getWorldPosition(V())).multiplyScalar(0.5);
+      P.mesh.position.x += QX - hip.x; P.mesh.position.z += QZ - hip.z; P.mesh.position.y += seat + 0.1 - hip.y;
+      P.mesh.updateMatrixWorld(true);
+      // asleep in the morning (his head down on his chest, to one side), then waking
+      slump = t < T.down ? 0 : t < T.light ? clamp((t - T.down) / 1.2) * 0.6 : t < T.wake + 0.2 ? 1 : 1 - clamp((t - T.wake - 0.2) / 0.8);
+      if (slump > 0.001) {
+        const nk = Q.bones.neck01 || Q.bones.neck02, hd = Q.bones.head;
+        for (const [b, a, rl] of [[nk, 0.32, 0.1], [hd, 0.3, 0.16]]) if (b) b.quaternion.multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(a * slump, 0, rl * slump)));
+        P.mesh.updateMatrixWorld(true);
+      }
+      // his hands in his lap (the clip talks with them); the phone up in his right till he puts it down, its light on
+      // his face; awake, a long stretch, both arms up
+      for (const [sd, out] of [['L', R.clone().negate()], ['R', R]]) {
+        const lap = bone('upperleg01_' + sd).lerp(bone('lowerleg01_' + sd), 0.55).add(V(0, 0.09, 0)).addScaledVector(out, -0.04);
+        const sh = bone('upperarm01_' + sd);
+        armTo(W, sd, lap, sh.clone().addScaledVector(out, 0.45).add(V(0, -0.5, 0)).addScaledVector(F, -0.25), 1);
+      }
+      const k = t < T.down ? clamp((t - 0.1) / 0.5) : 1 - clamp((t - T.down) / 0.5);
+      holdPhone(W, C.phone, QH, t < T.dark ? k : 0);
+      if (C.phone.visible && t < T.out) garage.glow(head().addScaledVector(F, 0.16).add(V(0, -0.04, 0)), 0.32 * k); else if (t < T.out) garage.glow(null);
+      const u = (t - T.wake - 0.45) / 1.5, s = u > 0 && u < 1 ? Math.sin(PI * u) : 0;
+      if (s > 0.001) for (const [sd, out] of [['L', R.clone().negate()], ['R', R]]) {
+        const sh = bone('upperarm01_' + sd);
+        armTo(W, sd, sh.clone().add(V(0, 0.52, 0)).addScaledVector(F, 0.1).addScaledVector(out, 0.14), sh.clone().addScaledVector(out, 0.6).addScaledVector(F, -0.25), Math.min(1, s * 1.4));
+      }
+    },
+    setup() {
+      const car = W.car; car.position.set(SPOT.car[0], GY, SPOT.car[1]); car.heading = SPOT.car[2]; car.speed = 0; car.mesh.position.copy(car.position); car.mesh.rotation.y = car.heading;
+      garage.show(true); garage.inside(true); garage.mood('night');
+      for (const a of Q.mixer._actions) if (!r.owns(a)) a.setEffectiveWeight(0);
+      r.set([[0, ['sitTalk', { from: 0.35, speed: 0.12 }]]]);
+      lock0 = C.phone.screen.material.map; C.phone.screen.material.map = lockScreen(W); C.phone.screen.material.needsUpdate = true;
+      if (C.phone.vid) C.phone.vid.visible = false; C.phone.screen.visible = true;
+    },
+    cleanup() {
+      r.stop(); Q.act('idle').setEffectiveWeight(1); card?.(false);
+      if (lock0) { C.phone.screen.material.map = lock0; C.phone.screen.material.needsUpdate = true; }
+      C.phone.visible = false; garage.mood(null);
+    },
+  };
+  return def;
+}
+
 /* -------------------------------------------------------------- rally -- */
-// ~9 s. fiona: her rig (hype), rally: the set, crew: the Degen who spots Quant ({ e } an enemy of the crew, or null)
-export function rallyScene(W, { say, fiona, rally, spotter }) {
+// ~14 s. fiona: her rig (hype), rally: the set, crew: the Degen who spots Quant ({ e } an enemy of the crew, or null);
+// lawn: [x, z] where the fight starts him (behind the crowd, the rigs ahead): the last shot is over his shoulder there,
+// the three rigs in it, their marks up, onRigs() as it cuts in (the job's card)
+export function rallyScene(W, { say, fiona, rally, spotter, lawn = null, onRigs = null }) {
   const ui = W.ui, [FX, FZ] = FIONA_AT, top = STAGE.top;
   const sp = spotter ? { x: spotter.pos.x, z: spotter.pos.z } : { x: -8, z: 2856 };
+  const T = { rigs: 11.0, end: lawn ? 14.4 : 11.0 };
+  // (the lawn shot: him facing the nearest rig, the camera up behind him, looking between it and the far two)
+  const near = lawn ? RIGS.map(([x, z]) => [x, z, Math.hypot(x - lawn[0], z - lawn[1])]).sort((a, b) => a[2] - b[2])[0] : null;
+  const QH = near ? Math.atan2(near[0] - lawn[0], near[1] - lawn[1]) : 0;
+  const mid = RIGS.reduce((a, [x, z]) => [a[0] + x / 3, a[1] + z / 3], [0, 0]);
+  const aim = near ? [lerp(near[0], mid[0], 0.45), 3.4, lerp(near[1], mid[1], 0.45)] : [0, 3.4, 2870];
+  const back = (d, h, s = 0) => (lawn ? [lawn[0] - Math.sin(QH) * d + Math.cos(QH) * s, h, lawn[1] - Math.cos(QH) * d - Math.sin(QH) * s] : [0, h, 2830]);
   return {
-    END: 11.0, quant: false,
+    END: T.end, quant: false,
     shots: [
       // from 5th Ave: the arch, Moon on the banner, the chart through the opening
       { t: 0, cam: (t) => ({ pos: keys([[0, [7.5, 2.0, 2748]], [3.2, [6.5, 2.3, 2758]]], 'linear')(t), look: keys([[0, [0, 11, 2801]], [3.2, [0, 10, 2801]]], 'linear')(t), fov: 54, shake: 0.4 }) },
@@ -223,12 +342,21 @@ export function rallyScene(W, { say, fiona, rally, spotter }) {
       // and her shades read; a frontal shot puts its bell over her face)
       { t: 5.8, cam: (t) => ({ pos: keys([[5.8, [2.65, top + 1.42, FZ + 1.95]], [8.4, [2.35, top + 1.46, FZ + 1.75]]], 'linear')(t), look: [FX + 0.05, top + 1.5, FZ + 0.1], fov: 30, shake: 0.5 }) },
       { t: 8.4, cam: (t) => ({ pos: [sp.x - 1.6, 1.75, sp.z + 2.6], look: keys([[8.4, [sp.x + 0.2, 1.5, sp.z - 0.4]], [11, [sp.x + 0.4, 1.4, sp.z - 2]]])(t), fov: 40, shake: 0.6 }) },
+      // the job: over his shoulder on the lawn, high, the three rigs ahead with their marks, easing in on the nearest
+      ...(lawn ? [{ t: T.rigs, cam: (t) => ({ pos: keys([[T.rigs, back(5.4, 3.3, 1.2)], [T.end, back(4.2, 2.7, 0.9)]], 'out')(t), look: keys([[T.rigs, aim], [T.end, [lerp(aim[0], near[0], 0.5), 2.6, lerp(aim[2], near[1], 0.5)]]], 'inOut')(t), fov: 52, shake: 0.35 }) }] : []),
     ],
     cues: [
       [0.2, () => ui.place('Washington Square', 'Greenwich Village · WAGMI City', 3.2)],
       [0.6, (st) => { W.voice?.fx?.('Fiona', 'phone'); say([['Fiona', PINK, 'Welcome to the launch of the century! Moon two!']], st); }],
       [5.9, (st) => say([['Fiona', PINK, 'Number go up! Number go UP!']], st)],
       [8.6, (st) => say([['Wick', ACID, "Yo. That's the coin kid. Protect the streams!"]], st)],
+      // (him on the lawn behind the crowd, facing the nearest rig: where the fight starts him)
+      ...(lawn ? [[T.rigs - 0.02, () => {
+        const P = W.person, cm = W.app.controllerManager;
+        P.position.set(lawn[0], cm.getGroundHeight(lawn[0], lawn[1], 'person'), lawn[1]); P.heading = QH; P.speed = 0;
+        P.mesh.position.copy(P.position); P.mesh.rotation.y = QH; P.mesh.visible = true;
+        onRigs?.();
+      }]] : []),
     ],
     pose(t, dt) {
       stand(W, fiona, FX, FZ, 0, t, { y: top });

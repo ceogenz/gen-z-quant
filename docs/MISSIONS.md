@@ -611,6 +611,14 @@ TIME, MY COMMUNITY, $QUANT · 1H), kept below the call's corner labels in every 
   nearest lane facing the lane's way, stopped and clear of other cars (WAGMI.recoverCar; also "Reset car to road" in
   the pause menu, and offered by the stall help). Held against a wall going nowhere for 1.2 s, the centre prompt says
   "X · Reset car to road".
+- The bar also shows **Q · Electric / Engine**: Q at the wheel (not on foot, where Q is the fight's counter; not in a
+  scene, the pause menu or the map) switches the car between its engine (the default) and ALL ELECTRIC, the quiet mode
+  (WAGMI.toggleDriveMode, wagmi/audio/drivemode.js: the sound crossfades with its cue; remembered in localStorage
+  'wagmi.drivemode'). A badge in the speed panel, right of the speed, shows it: an engine block and ENGINE in warm
+  amber, or a bolt and ELECTRIC in cool cyan, pulsing once on each change. Once the cold-gas thrusters are unlocked
+  (M3) the bar adds **Space · Hop** and **Z C · Dash** (a lane left or right; they were Q / E before Q took the drive
+  mode). Controls in the car: W S drive / reverse, A D steer, Shift boost, F get out, X reset, Q electric / engine,
+  Space hop, Z C dash, R next station, T radio, M map, B brief, Esc pause.
 
 ### 5.4 Phase 2 · The drive (~2.0 km, ~110 s)
 - Objective: "Follow Moon's tag to **Chelsea Park**." Destination blip and corona at **(-1139, 0, 1160)**: 9th Ave's

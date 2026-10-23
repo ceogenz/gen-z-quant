@@ -1507,8 +1507,8 @@ function buildCityGrid(scene) {
   // =========================================================================
   // 4. RAISED SIDEWALKS & GRANITE CURBSTONES: every real curb island of Manhattan (city-config.js BLOCKS, from the
   //    street centreline at its curb-to-curb widths). Rectangular islands are instanced slabs; the rest (Broadway's
-  //    triangles & trapezoids, Lower Manhattan's irregular blocks, the malls down the middle of Park Ave & Broadway)
-  //    are extruded from their outlines
+  //    triangles & trapezoids, Lower Manhattan's irregular blocks, the short islands in the streets) are extruded from
+  //    their outlines
   // =========================================================================
   const sidewalkMat = createSidewalkMaterial();
   const curbMat = createCurbMaterial();
@@ -1517,7 +1517,6 @@ function buildCityGrid(scene) {
   const roadSidewalks = []; // the curbs road-network.js bounds the roads with (medians go in as footprints)
   const slabGeos = [];
   const curbGeos = [];
-  const hedgeGeos = [];
   const SW_TOP = 0.22;
   for (const b of BLOCKS) {
     if (b.park > 0.6 && !b.median && b.parkName !== 'Bryant Park') continue; // parks build their own perimeter sidewalk (sections 7, 7B)
@@ -1541,10 +1540,53 @@ function buildCityGrid(scene) {
       }
       if (b.median) addFootprint((b.minX + b.maxX) * 0.5, (b.minZ + b.maxZ) * 0.5, b.maxX - b.minX, b.maxZ - b.minZ);
     }
-    // Planted malls down the middle of Park Ave, Broadway (Upper West Side), Allen St...: a clipped hedge on the slab
-    if (b.median && Math.min(b.maxX - b.minX, b.maxZ - b.minZ) > 2.2) {
-      const hedge = offsetPolygonInward(b.poly, 1.0);
-      if (hedge) hedgeGeos.push(createExtrudedPolygonMesh(hedge, SW_TOP, 0.55, medianHedgeMat).geometry);
+    // (WAGMI City: no clipped hedge on the medians any more: the malls down the middle of Park Ave, Broadway, Allen St...
+    // are road with a double yellow line (below, city-config.js REMOVED_MEDIANS), the short islands left plain concrete)
+  }
+  // (WAGMI City) A double yellow line down where each removed median ran, 0.5 m short of its ends (createRoadPaintMaterial
+  // attributes, as js/road-paint.js lays them)
+  {
+    const { createRoadPaintMaterial, REMOVED_MEDIANS } = window.NYC;
+    const P = { pos: [], side: [], paint: [], col: [], idx: [] };
+    const Y = new THREE.Color(0xe8ad22);
+    const strip = (ax, az, bx, bz, w) => {
+      const len = Math.hypot(bx - ax, bz - az);
+      const sx = ((az - bz) / len) * w * 0.5;
+      const sz = ((bx - ax) / len) * w * 0.5;
+      const k = P.pos.length / 3;
+      for (const [x, z, s, u] of [[ax, az, -1, 0], [ax, az, 1, 0], [bx, bz, 1, len], [bx, bz, -1, len]]) {
+        P.pos.push(x + sx * s, 0.012, z + sz * s);
+        P.side.push(sx * s, sz * s);
+        P.paint.push(u, 1, 1);
+        P.col.push(Y.r, Y.g, Y.b);
+      }
+      P.idx.push(k, k + 1, k + 2, k, k + 2, k + 3);
+    };
+    for (const m of REMOVED_MEDIANS || []) {
+      const L = Math.hypot(m.bx - m.ax, m.bz - m.az);
+      const ux = (m.bx - m.ax) / L;
+      const uz = (m.bz - m.az) / L;
+      const ax = m.ax + ux * 0.5;
+      const az = m.az + uz * 0.5;
+      const bx = m.bx - ux * 0.5;
+      const bz = m.bz - uz * 0.5;
+      for (const o of [-0.12, 0.12]) strip(ax - uz * o, az + ux * o, bx - uz * o, bz + ux * o, 0.11);
+    }
+    if (P.idx.length && createRoadPaintMaterial) {
+      const g = new THREE.BufferGeometry();
+      const normals = new Float32Array(P.pos.length);
+      for (let i = 1; i < normals.length; i += 3) normals[i] = 1;
+      g.setAttribute('position', new THREE.Float32BufferAttribute(P.pos, 3));
+      g.setAttribute('normal', new THREE.BufferAttribute(normals, 3));
+      g.setAttribute('color', new THREE.Float32BufferAttribute(P.col, 3));
+      g.setAttribute('side', new THREE.Float32BufferAttribute(P.side, 2));
+      g.setAttribute('paint', new THREE.Float32BufferAttribute(P.paint, 3));
+      g.setIndex(P.idx);
+      const m = new THREE.Mesh(g, createRoadPaintMaterial());
+      m.name = 'MedianDoubleYellow';
+      m.receiveShadow = true;
+      m.renderOrder = -1; // like the street markings (js/road-paint.js)
+      group.add(m);
     }
   }
   const mergeInto = (geos, mat, cast = false) => {
@@ -1557,7 +1599,6 @@ function buildCityGrid(scene) {
   };
   mergeInto(curbGeos, curbMat, true);
   mergeInto(slabGeos, sidewalkMat);
-  mergeInto(hedgeGeos, medianHedgeMat, true);
 
   const rectSlabs = blockSidewalks.filter((s) => !s.cover);
   const swInstanced = new THREE.InstancedMesh(unitBox, sidewalkMat, rectSlabs.length);
@@ -1999,6 +2040,25 @@ function buildCityGrid(scene) {
   const BED_Y = 0.41; // lawn top inside the granite bed copings
   const parkLawnGeos = [];
   const parkFenceGeos = [];
+  // (WAGMI City) The parks' iron fences and railings solid to Quant's car (carOnly: people on foot step over the low
+  // hoops and walk through as before; the gates are the gaps in the runs): a turned box 0.3 m thick along each run, up to
+  // its top (js/controllers.js: a wall to the car, wagmi/crash: `fence`, the iron's clang)
+  const fenceColliders = [];
+  const solidFence = (segs, top) => {
+    for (const [x1, z1, x2, z2] of segs) {
+      const len = Math.hypot(x2 - x1, z2 - z1);
+      if (len < 0.4) continue;
+      const ux = (x2 - x1) / len;
+      const uz = (z2 - z1) / len;
+      const cx = (x1 + x2) * 0.5;
+      const cz = (z1 + z2) * 0.5;
+      const hx = 0.15;
+      const hz = len * 0.5 + 0.05;
+      const ex = Math.abs(uz) * hx + Math.abs(ux) * hz;
+      const ez = Math.abs(ux) * hx + Math.abs(uz) * hz;
+      fenceColliders.push({ minX: cx - ex, maxX: cx + ex, minZ: cz - ez, maxZ: cz + ez, maxY: top, carOnly: true, fence: true, obb: { cx, cz, cs: uz, sn: ux, hx, hz } });
+    }
+  };
   const inPolygon = (x, z, pts) => {
     let inside = false;
     for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
@@ -2092,10 +2152,12 @@ function buildCityGrid(scene) {
       addGround(BED_Y, bed);
       parkLawnGeos.push(createExtrudedPolygonMesh(offsetConvexPolygon(bed, -0.3), 0.3, BED_Y - 0.3, cpLawnMat).geometry);
       const hoop = offsetConvexPolygon(bed, -0.18);
-      parkFenceGeos.push(buildFenceStripGeometry(hoop.map((p, k) => {
+      const hoopSegs = hoop.map((p, k) => {
         const q = hoop[(k + 1) % hoop.length];
         return [p.x, p.z, q.x, q.z];
-      }), BED_Y - 0.01, 0.5));
+      });
+      parkFenceGeos.push(buildFenceStripGeometry(hoopSegs, BED_Y - 0.01, 0.5));
+      solidFence(hoopSegs, BED_Y + 0.5); // (WAGMI City)
       lineBedEdges(bed);
       scatterParkTrees(bed, cell.treeSpacing ?? 9.0, BED_Y, 2.0, speciesMix);
     }
@@ -2190,6 +2252,7 @@ function buildCityGrid(scene) {
       addBox(graniteMat, (x1 + x2) * 0.5, PARK_Y - 0.02, (z1 + z2) * 0.5, 0.42, 0.34, len + 0.2, Math.atan2(x2 - x1, z2 - z1), false);
     }
     parkFenceGeos.push(buildFenceStripGeometry(fenceSegs, PARK_Y + 0.32, 0.95));
+    solidFence(fenceSegs, PARK_Y + 1.27); // (WAGMI City)
 
     // London planes & lampposts lining the perimeter sidewalk (kept clear of the corners & gates)
     const row = shaped ? offsetConvexPolygon(slab, -1.3) : rectPolygon(minX + 1.3, maxX - 1.3, minZ + 1.3, maxZ - 1.3);
@@ -2337,6 +2400,14 @@ function buildCityGrid(scene) {
     addGround(BED_Y, bed);
     const lawnTop = offsetPolygonInward(bed, 0.3);
     if (lawnTop) parkLawnGeos.push(createExtrudedPolygonMesh(lawnTop, 0.3, BED_Y - 0.3, cpLawnMat).geometry);
+    // (WAGMI City) a low hoop fence round the lawn on its coping, as round the squares' beds (7B), solid to Quant's car
+    const hoop = offsetPolygonInward(bed, 0.18) || bed;
+    const hoopSegs = hoop.map((p, k) => {
+      const q = hoop[(k + 1) % hoop.length];
+      return [p.x, p.z, q.x, q.z];
+    });
+    parkFenceGeos.push(buildFenceStripGeometry(hoopSegs, BED_Y - 0.01, 0.5));
+    solidFence(hoopSegs, BED_Y + 0.5);
     // trees on a jittered grid inside the bed
     const SP = 11;
     for (let gx = b.minX + SP * 0.5; gx < b.maxX; gx += SP) {
@@ -2431,6 +2502,7 @@ function buildCityGrid(scene) {
       railSegs.push([A.x, A.z, B.x, B.z]);
     }
     if (railSegs.length) parkFenceGeos.push(buildFenceStripGeometry(railSegs, COPING_TOP, 1.1));
+    solidFence(railSegs, COPING_TOP + 1.1); // (WAGMI City)
   }
 
   // One merged lawn mesh & one alpha-tested iron fence mesh for every small park
@@ -2570,7 +2642,8 @@ function buildCityGrid(scene) {
   // roadway, handed over with the footprints)
   const sidewalks = roadSidewalks;
   // Player colliders of the South Street Viaduct's columns, ramps and portal
-  const colliders = (window.NYC.fdrViaduct && window.NYC.fdrViaduct.colliders) || [];
+  // (and the parks' fences, solid to the car: section 7B)
+  const colliders = ((window.NYC.fdrViaduct && window.NYC.fdrViaduct.colliders) || []).concat(fenceColliders);
   return { group, sidewalks, footprints, highwayLanes, colliders };
 }
 

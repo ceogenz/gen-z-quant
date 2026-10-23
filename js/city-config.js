@@ -471,6 +471,7 @@ function nearestRoads(x, z, radius = 60) {
 //   frames: irregular islands' lots laid out along the streets they front, [[θ, px, pz, rects], ...] (rects in a
 //   frame turned by θ about (px, pz): world = p + R_y(θ)·(local − p)), or null
 // ---------------------------------------------------------------------------------------------------------------------
+const REMOVED_MEDIANS = [];
 const BLOCKS = GEO.blocks.map(([flat, rects, park, parkName, isRect, frames], id) => {
   const poly = toPts(flat);
   let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity, a = 0, cx = 0, cz = 0;
@@ -489,7 +490,30 @@ const BLOCKS = GEO.blocks.map(([flat, rects, park, parkName, isRect, frames], id
     cz: a ? cz / (6 * a) : (minZ + maxZ) / 2,
     median: /Malls?$/.test(parkName) || Math.min(maxX - minX, maxZ - minZ) < 9
   };
-});
+}).filter((b) => !removedMedian(b));
+// (WAGMI City) The planted malls and long medians down the middle of Park Ave (S), Broadway, Adam Clayton Powell Jr.
+// Blvd, Allen St, Delancey St... are road now (the owner: the green centre divider can go): left out of the blocks, so
+// nothing is built, stands or walks on them and the traffic and the car drive over where they were. REMOVED_MEDIANS:
+// each one's centreline { ax, az, bx, bz, w } (its long axis, along its longest side), where city-grid.js paints a
+// double yellow line. A median shorter than 25 m or under 4 times as long as it is wide (a pedestrian island at a
+// corner, Broadway's triangles) stays, a plain concrete island
+function removedMedian(b) {
+  if (!b.median) return false;
+  let ux = 1, uz = 0, best = 0;
+  for (let i = 0; i < b.poly.length; i++) {
+    const p = b.poly[i], q = b.poly[(i + 1) % b.poly.length], L = Math.hypot(q.x - p.x, q.z - p.z);
+    if (L > best) { best = L; ux = (q.x - p.x) / L; uz = (q.z - p.z) / L; }
+  }
+  let s0 = Infinity, s1 = -Infinity, t0 = Infinity, t1 = -Infinity;
+  for (const p of b.poly) {
+    const s = p.x * ux + p.z * uz, t = p.z * ux - p.x * uz;
+    s0 = Math.min(s0, s); s1 = Math.max(s1, s); t0 = Math.min(t0, t); t1 = Math.max(t1, t);
+  }
+  if (s1 - s0 < 25 || s1 - s0 < (t1 - t0) * 4) return false;
+  const t = (t0 + t1) / 2; // (s along the axis u, t across it: x = s ux - t uz, z = s uz + t ux)
+  REMOVED_MEDIANS.push({ ax: s0 * ux - t * uz, az: s0 * uz + t * ux, bx: s1 * ux - t * uz, bz: s1 * uz + t * ux, w: t1 - t0 });
+  return true;
+}
 // Spatial index of the blocks (64 m cells)
 const BLOCK_CELL = 64;
 const BLOCK_GRID = new Map();
@@ -790,6 +814,7 @@ Object.assign(window.NYC, {
   ISLAND_BOUNDS,
   LANDMARK_BLOCKS,
   BLOCKS,
+  REMOVED_MEDIANS, // (WAGMI City)
   CUT_Z,
   SIGNAL_TIMING,
   streetZ,

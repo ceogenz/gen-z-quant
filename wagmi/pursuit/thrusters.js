@@ -3,8 +3,9 @@
 //   hop    SPACE: the perimeter ports fire straight down and the car hops ~2.5 m (1.1 s in the air), over a car or a
 //          barrier: it clears a sedan's roof for 0.7 s of it and an SUV's for 0.65 s (at 20 m/s, 13-14 m: SPACE about 8 m
 //          short of the car). 1.5 s to recharge.
-//   dash   Q / E: the side ports fire and shove the car a lane (~3 m) left or right in a blink; into a car beside it, a
-//          side-swipe (the crash's rules). 0.8 s to recharge.
+//   dash   Z / C: the side ports fire and shove the car a lane (~3 m) left or right in a blink; into a car beside it, a
+//          side-swipe (the crash's rules). 0.8 s to recharge. (Q in the car is the drive mode, wagmi/game.js; on foot Q and
+//          C are the fight's counter and dodge, which only listen on foot)
 // Each puffs white vapour out of the ports it fires (vapor.js), lights the car's own cold-gas plumes (roadster.js
 // setThrust), kicks the camera (the crash's jolt) and hisses (WAGMI.audio 'boostIgnite' / 'whoosh').
 // API (window.WAGMI.thrusters): unlocked { boost, hop, dash }, unlock(name | 'all', { announce }), on(ev, cb) ('unlock',
@@ -34,15 +35,17 @@ export function createThrusters(W, vapor) {
     dash: (side) => dash(side),
     get ready() { return { hop: 1 - Math.max(0, S.hopCool) / HOP.cool, dash: 1 - Math.max(0, S.dashCool) / DASH.cool }; },
     get air() { return S.h; },
-    keys: { hop: 'Space', left: 'KeyQ', right: 'KeyE' },
+    keys: { hop: 'Space', left: 'KeyZ', right: 'KeyC' },
   };
   const S = { h: 0, vy: 0, air: false, hopCool: 0, dashCool: 0, gas: 0, dashT: 0, dashSide: 0, t: 0 };
 
   // the help: the mission's own help line if there is one (ui.help draws [KEY] as a key cap), else a toast of ours
+  // (a key's name for the player: 'KeyZ' Z, 'Space' SPACE)
+  const name = (code) => code.replace(/^Key/, '').toUpperCase();
   function tell() {
     const u = T.unlocked, parts = [];
-    if (u.hop) parts.push('[SPACE] hop');
-    if (u.dash) parts.push('[Q] [E] puff a lane left · right');
+    if (u.hop) parts.push(`[${name(T.keys.hop)}] hop`);
+    if (u.dash) parts.push(`[${name(T.keys.left)}] [${name(T.keys.right)}] puff a lane left · right`);
     const text = `Cold-gas thrusters: ${parts.join(' · ')}.`;
     if (W.ui?.help) { W.ui.help(text, 9); return; }
     toast(text);
@@ -164,6 +167,7 @@ export function createThrusters(W, vapor) {
   css.textContent = `
 #wg-thr { position: fixed; right: 28px; bottom: 196px; display: none; gap: 8px; z-index: 30; pointer-events: none; font-family: 'Barlow Condensed', system-ui, sans-serif; color: #fff; }
 #wg-thr.on { display: flex; }
+body.wg-paused #wg-thr { opacity: 0; }
 #wg-thr .t { position: relative; display: flex; align-items: center; gap: 6px; padding: 5px 10px 5px 8px; background: rgba(8,10,14,0.62); border-radius: 10px; font: 700 13px/1 'Barlow Condensed'; letter-spacing: 1.5px; text-transform: uppercase; overflow: hidden; text-shadow: 0 1px 2px rgba(0,0,0,.8); }
 #wg-thr .t i { position: absolute; left: 0; bottom: 0; height: 3px; background: #FFC93C; width: 100%; transform-origin: left; }
 #wg-thr .t.wait { color: rgba(255,255,255,.5); }
@@ -175,8 +179,22 @@ export function createThrusters(W, vapor) {
 @media (max-width: 760px) { #wg-thr { bottom: 170px; right: 16px; } }`;
   document.head.appendChild(css);
   const el = document.createElement('div'); el.id = 'wg-thr';
-  el.innerHTML = `<div class="t" data-k="hop"><kbd>SPACE</kbd>Hop<i></i></div><div class="t" data-k="dash"><kbd>Q</kbd><kbd>E</kbd>Dash<i></i></div>`;
+  el.innerHTML = `<div class="t" data-k="hop"><kbd>${name(T.keys.hop)}</kbd>Hop<i></i></div><div class="t" data-k="dash"><kbd>${name(T.keys.left)}</kbd><kbd>${name(T.keys.right)}</kbd>Dash<i></i></div>`;
   document.body.appendChild(el);
+  // ...and in the car's controls bar (js/main.js draws it per mode; game.js adds X and Q): what is unlocked, at its end
+  const bar = document.getElementById('hud-controls-hint');
+  const addBar = () => {
+    if (!bar || cm.activeMode !== 'car') return;
+    for (const [k, on, keys, label] of [['hop', T.unlocked.hop, [T.keys.hop], 'Hop'], ['dash', T.unlocked.dash, [T.keys.left, T.keys.right], 'Dash']]) {
+      if (!on || bar.querySelector('.wg-thr-' + k)) continue;
+      const item = document.createElement('span'); item.className = 'hint wg-thr-' + k;
+      for (const c of keys) { const b = document.createElement('kbd'); b.textContent = c.replace(/^Key/, ''); item.appendChild(b); }
+      const l = document.createElement('span'); l.className = 'hint-label'; l.textContent = label;
+      item.appendChild(l); bar.appendChild(item);
+    }
+  };
+  if (bar) new MutationObserver(addBar).observe(bar, { childList: true });
+  T.on('unlock', addBar);
   const chips = { hop: el.querySelector('[data-k=hop]'), dash: el.querySelector('[data-k=dash]') };
   let shown = '';
   function hud() {

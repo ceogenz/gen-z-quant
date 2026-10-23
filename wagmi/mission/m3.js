@@ -5,20 +5,26 @@
 //                                                                                              checkpoint 'garage'
 //   square  'Go to Washington Square.'  the GPS to the arch at the foot of 5th Ave; Juno calls  checkpoint 'square'
 //   rally   (a scene) the stage under the arch, the chart pumping, Fiona hyping; a Degen spots him
-//   rigs    'Smash the livestream rigs.'  RIGS 0/3: blows (two), a bat, a thrown can or bottle, or the car; two of the
+//   rigs    'Smash the livestream rigs.'  RIGS 0/3 (the job's card over the rally's last shot, which shows the three
+//           rigs from the lawn; each rig marked: a green column, a chevron, its tag with its health; J in reach of one;
+//           STREAM DOWN as each goes): blows (two), a bat (one lies by each), a thrown can or bottle, or the car; two of the
 //           hype crew by the rigs (a bat: their help), a brute by the stage who comes on at the first rig down, one more
 //           at 2/3; health 130 for it, a slow regen out of reach, +25 a rig; Fiona on the megaphone; the crowd runs;
 //           100 m from the fight: 'Get back to the fight.', 160 m: 'You left the fight.'   checkpoint 'rigs' (a retry
 //           keeps the rigs smashed and starts by the next one standing)
 //   dump    (a scene) the chart goes red, Fiona drops the megaphone and runs for her SUV on 5th Ave
-//   escape  'Lose the Degens.'  HEAT 2: two Degens cars (WAGMI.pursuit); the cold-gas thrusters unlock (their help)
+//   escape  'Lose the Degens.'  HEAT 2: two Degens cars (WAGMI.pursuit), the car in Washington Mews facing away from
+//           them; 'Turn corners and break their line of sight'; the cold-gas thrusters unlock (their help)
 //                                                                                              checkpoint 'escape'
 //   return  'Go back to the garage.'  Juno calls                                               checkpoint 'return'
 //   home    (a scene) Gears at the door: "in one piece." "Mostly."
 //   then MISSION PASSED (TIME, RIGS SMASHED, DEGENS REKT, HITS TAKEN, FOLLOWERS +18,500, NEW: bats · cold-gas
 //   thrusters), the save, and Pete's DM: the P at Sara D. Roosevelt Park ('Mission 4 is coming soon': no Mission 4 yet)
 // Fails: 'Quant got rekt.', 'You left the fight.', 'The Degens caught you.' Retry, Quit, Skip (after three).
-// URL: ?m3=garage|square|rigs|escape|return (and handoff: the G at night; pete: the P after it).
+// Into the G in the dark (Mission 2 ends at dusk), the night in the garage comes first: on the couch, lights out, NEXT
+// MORNING, the sun through the door (m3-scenes.js nightScene); the city's light goes night, then sunrise, then midday.
+// URL: ?m3=garage|square|rigs|escape|return (and handoff: the G at night; night: straight into the night in the
+// garage; pete: the P after it).
 import * as THREE from 'three/webgpu';
 import { place, getCast } from '../intro.js';
 import { createGPS } from './gps.js';
@@ -30,7 +36,7 @@ import { createM2UI } from './m2-ui.js';
 import { runScene } from './m2-scenes.js';
 import { buildChevron } from './m2-set.js';
 import { buildRally, buildGarage, buildSUV, buildFiona, buildGears, ARCH, ARENA, GARAGE, SUV_AT } from './m3-set.js';
-import { garageScene, rallyScene, dumpScene, homeScene, SPOT, ESCAPE_CAR } from './m3-scenes.js';
+import { garageScene, nightScene, rallyScene, dumpScene, homeScene, SPOT, ESCAPE_CAR } from './m3-scenes.js';
 import { watchStory, markDone } from './m3-save.js';
 import { clamp } from './cine.js';
 
@@ -56,6 +62,142 @@ const FRESH = {
 class Fail extends Error { constructor(reason, rekt = false) { super(reason); this.reason = reason; this.rekt = rekt; } }
 class Quit extends Error {}
 
+/* -------------------------------------------------------- our overlays -- */
+// Mission 3's own, in the game's style (mission/ui.js): the rigs' job card (big, mid-top, a few seconds, then just the
+// objective in the tracker), a tag over each rig (its icon, RIG, how far, a health bar), the prompt in reach of one
+// (J · Smash the rig), STREAM DOWN as one goes down (and the RIGS counter pops), and the NEXT MORNING card over the
+// black of the night in the garage (a clock running the night through). Under #wg (its fades cover them) but the
+// night's card, which is over its black.
+const O_CSS = `
+#m3o { position: fixed; inset: 0; pointer-events: none; z-index: 29; font-family: 'Barlow Condensed', system-ui, sans-serif; color: #fff; }
+#m3o * { box-sizing: border-box; }
+#m3o kbd { display: inline-block; min-width: 1.5em; padding: 2px 6px 1px; margin: 0 2px; border-radius: 5px; border: 1.5px solid rgba(255,255,255,.85); background: rgba(0,0,0,.3); font: 800 .82em/1.2 'Barlow Condensed'; text-align: center; color: #fff; text-shadow: none; }
+#m3o g { color: #4ADE80; font-weight: 800; }
+#m3o .card { position: absolute; left: 50%; top: 15vh; width: min(660px, calc(100vw - 32px)); transform: translate(-50%, -10px) scale(.96); opacity: 0; transition: opacity .35s, transform .45s cubic-bezier(.2,.7,.2,1);
+  padding: 16px 22px 15px; border-radius: 12px; background: rgba(8,10,14,0.72); border-top: 3px solid #4ADE80; text-align: center; text-shadow: 0 1px 3px rgba(0,0,0,.7); backdrop-filter: blur(6px); }
+#m3o .card.on { opacity: 1; transform: translate(-50%, 0) scale(1); }
+#m3o .card.out { opacity: 0; transform: translate(-50%, -24px) scale(.9); transition: opacity .5s, transform .6s; }
+#m3o .card .t { font: italic 800 clamp(26px, 3.6vw, 42px)/1 'Barlow Condensed'; letter-spacing: 1px; }
+#m3o .card .t b { color: #4ADE80; }
+#m3o .card .l { margin-top: 10px; font: 600 clamp(16px, 1.7vw, 21px)/1.35 'Barlow Condensed'; }
+#m3o .card .s { margin-top: 6px; font: 600 clamp(14px, 1.4vw, 17px)/1.3 'Barlow Condensed'; color: rgba(255,255,255,.75); }
+#m3o .tag { position: absolute; left: 0; top: 0; will-change: transform; transition: opacity .25s; }
+#m3o .tag .in { position: absolute; left: 0; bottom: 0; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 4px; }
+#m3o .tag .pill { display: flex; align-items: center; gap: 6px; padding: 4px 10px 3px 7px; border-radius: 999px; background: rgba(8,10,14,0.7); box-shadow: 0 0 0 2px #4ADE80, 0 0 16px rgba(74,222,128,.55); font: italic 800 20px/1 'Barlow Condensed'; letter-spacing: 1.5px; white-space: nowrap; text-shadow: 0 1px 2px rgba(0,0,0,.8); }
+#m3o .tag .pill svg { width: 20px; height: 20px; }
+#m3o .tag .pill .d { font: 700 14px/1 'Barlow Condensed'; font-style: normal; letter-spacing: .5px; color: rgba(255,255,255,.72); }
+#m3o .tag .hp { position: relative; width: 74px; height: 7px; border-radius: 4px; background: rgba(8,10,14,0.7); box-shadow: 0 0 0 1px rgba(255,255,255,.25); overflow: hidden; }
+#m3o .tag .hp i { position: absolute; left: 0; top: 0; bottom: 0; width: 100%; transform-origin: 0 50%; }
+#m3o .tag .hp .tr { background: rgba(255,255,255,.9); } #m3o .tag .hp .f { background: linear-gradient(180deg, #7CF5A8, #4ADE80 55%, #22A55A); }
+#m3o .tag .hp .seg { position: absolute; left: 50%; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: rgba(8,10,14,.85); }
+#m3o .tag .caret { width: 0; height: 0; border-left: 9px solid transparent; border-right: 9px solid transparent; border-top: 11px solid #4ADE80; filter: drop-shadow(0 1px 2px rgba(0,0,0,.6)); }
+#m3o .tag.hit .pill { animation: m3hit .3s ease-out; }
+@keyframes m3hit { 0% { transform: scale(1.25); box-shadow: 0 0 0 3px #fff, 0 0 26px rgba(255,255,255,.8); } 100% { transform: scale(1); } }
+#m3o .tag.down .pill { box-shadow: 0 0 0 2px #EF4444; color: rgba(255,255,255,.8); }
+#m3o .tag.down .caret { border-top-color: #EF4444; } #m3o .tag.down .hp { opacity: 0; }
+#m3o .prompt { position: absolute; left: 50%; top: 64%; transform: translate(-50%, 6px); opacity: 0; transition: opacity .15s, transform .15s; padding: 9px 16px 8px 11px; border-radius: 10px; background: rgba(8,10,14,0.68);
+  font: 700 21px/1 'Barlow Condensed'; letter-spacing: .5px; white-space: nowrap; box-shadow: 0 0 0 1.5px rgba(74,222,128,.7); }
+#m3o .prompt.on { opacity: 1; transform: translate(-50%, 0); }
+#m3o .prompt small { margin-left: 8px; font: 600 15px/1 'Barlow Condensed'; color: rgba(255,255,255,.7); }
+#m3o .pop { position: absolute; left: 50%; top: 27vh; transform: translateX(-50%) scale(.85); opacity: 0; text-align: center; transition: opacity .2s, transform .25s cubic-bezier(.2,.7,.2,1); text-shadow: 0 3px 16px rgba(0,0,0,.6), 0 1px 2px rgba(0,0,0,.8); }
+#m3o .pop.on { opacity: 1; transform: translateX(-50%) scale(1); }
+#m3o .pop .a { font: italic 800 clamp(34px, 5vw, 58px)/1 'Barlow Condensed'; letter-spacing: 2px; color: #4ADE80; }
+#m3o .pop .b { margin-top: 2px; font: 800 clamp(18px, 2vw, 24px)/1 'Barlow Condensed'; letter-spacing: 4px; }
+#wg .wg-count.m3pop .v { animation: m3pop .7s cubic-bezier(.2,.7,.2,1); }
+@keyframes m3pop { 0% { transform: scale(2.1); color: #4ADE80; } 60% { color: #4ADE80; } 100% { transform: scale(1); color: #fff; } }
+#wg .wg-count .v { transform-origin: 100% 60%; }
+#m3n { position: fixed; inset: 0; pointer-events: none; z-index: 31; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; opacity: 0; transition: opacity .45s;
+  font-family: 'Barlow Condensed', system-ui, sans-serif; color: #fff; }
+#m3n.on { opacity: 1; }
+#m3n .t { font: italic 800 clamp(40px, 6vw, 72px)/1 'Barlow Condensed'; letter-spacing: 2px; color: #FFC93C; }
+#m3n svg { width: clamp(96px, 12vw, 140px); height: auto; }
+#m3n .c { font: 800 clamp(24px, 3vw, 34px)/1 'Barlow Condensed'; letter-spacing: 3px; }
+#m3n .s { font: 700 14px/1 'Barlow Condensed'; letter-spacing: 4px; color: rgba(255,255,255,.6); text-transform: uppercase; }
+`;
+const RIG_ICON = '<svg viewBox="0 0 24 24"><circle cx="12" cy="9" r="6.2" fill="none" stroke="#4ADE80" stroke-width="2.4"/><rect x="10" y="5.6" width="4" height="6.8" rx="1" fill="#fff"/><path d="M12 15.2 V20 M8 22 L12 18.6 L16 22" stroke="#4ADE80" stroke-width="1.8" fill="none" stroke-linecap="round"/><circle cx="18.6" cy="3.6" r="1.6" fill="#EF4444"/></svg>';
+function overlay(W) {
+  if (W._m3o) return W._m3o;
+  if (!document.getElementById('m3o-css')) { const st = document.createElement('style'); st.id = 'm3o-css'; st.textContent = O_CSS; document.head.appendChild(st); }
+  const root = document.createElement('div'); root.id = 'm3o'; document.body.appendChild(root);
+  const night = document.createElement('div'); night.id = 'm3n'; document.body.appendChild(night);
+  const card = document.createElement('div'); card.className = 'card'; root.appendChild(card);
+  const prompt = document.createElement('div'); prompt.className = 'prompt'; root.appendChild(prompt);
+  const pop = document.createElement('div'); pop.className = 'pop'; pop.innerHTML = '<div class="a"></div><div class="b"></div>'; root.appendChild(pop);
+  const tags = [];
+  const timers = {};
+  const later = (k, ms, f) => { clearTimeout(timers[k]); timers[k] = setTimeout(f, ms); };
+  const _v = new THREE.Vector3();
+  const O = {
+    // the rigs' job: up for secs, then away (shrinking up)
+    card(on, secs = 4) {
+      clearTimeout(timers.card); clearTimeout(timers.card2);
+      if (!on) { if (card.classList.contains('on')) { card.classList.add('out'); later('card2', 600, () => card.classList.remove('on', 'out')); } return; }
+      card.innerHTML = `<div class="t">SMASH THE <b>3</b> LIVESTREAM RIGS</div>
+        <div class="l">Grab a <g>bat</g> or a <g>bottle</g> <kbd>E</kbd> · walk up to a <g>rig</g> · strike it <kbd>J</kbd> / click</div>
+        <div class="s">Fists work too: two hits a rig. Degens will try to stop you.</div>`;
+      card.classList.remove('out'); void card.offsetWidth; card.classList.add('on');
+      later('card', secs * 1000, () => O.card(false));
+    },
+    prompt(html) {
+      if (!html) { prompt.classList.remove('on'); return; }
+      if (prompt.dataset.h !== html) { prompt.innerHTML = html; prompt.dataset.h = html; }
+      prompt.classList.add('on');
+    },
+    pop(a, b, secs = 1.6) {
+      pop.querySelector('.a').textContent = a; pop.querySelector('.b').textContent = b;
+      pop.classList.remove('on'); void pop.offsetWidth; pop.classList.add('on'); later('pop', secs * 1000, () => pop.classList.remove('on'));
+      const c = document.querySelector('#wg .wg-count'); if (c) { c.classList.remove('m3pop'); void c.offsetWidth; c.classList.add('m3pop'); }
+    },
+    // the tags over the rigs (rigs: the set's; null: none), placed each frame by place(cam)
+    tags(rigs) {
+      while (tags.length) tags.pop().el.remove();
+      for (const r of rigs || []) {
+        const el = document.createElement('div'); el.className = 'tag';
+        el.innerHTML = `<div class="in"><div class="pill">${RIG_ICON}RIG<span class="d"></span></div><div class="hp"><i class="tr"></i><i class="f"></i><span class="seg"></span></div><div class="caret"></div></div>`;
+        root.appendChild(el);
+        tags.push({ r, el, d: el.querySelector('.d'), f: el.querySelector('.f'), tr: el.querySelector('.tr'), trail: 1, downT: 0, hitT: 0, last: '' });
+      }
+    },
+    hitTag(r) { const t = tags.find((x) => x.r === r); if (!t) return; t.el.classList.remove('hit'); void t.el.offsetWidth; t.el.classList.add('hit'); },
+    place(cam, me, dt) {
+      const w = innerWidth, h = innerHeight;
+      for (const t of tags) {
+        const r = t.r;
+        if (r.down) { t.downT += dt; if (!t.el.classList.contains('down')) { t.el.classList.add('down'); t.el.querySelector('.pill').lastChild.textContent = ''; t.el.querySelector('.pill').childNodes[1].textContent = 'DOWN'; } }
+        // (over its chevron from afar; close by, just over the ring light, so it stays in view)
+        const dm = me ? Math.hypot(me.x - r.x, me.z - r.z) : 20;
+        _v.set(r.x, (r.y || 0) + 2.45 + 1.5 * clamp((dm - 4) / 8), r.z).project(cam);
+        const off = _v.z > 1 || _v.z < -1 || Math.abs(_v.x) > 1.15 || Math.abs(_v.y) > 1.2 || t.downT > 1.6;
+        t.el.style.opacity = off ? '0' : '1';
+        if (off) continue;
+        t.el.style.transform = `translate(${((_v.x + 1) / 2 * w).toFixed(1)}px, ${((1 - _v.y) / 2 * h).toFixed(1)}px)`;
+        const k = clamp(r.hp / (r.hp0 || 2)); t.trail = Math.max(k, t.trail - dt * 1.4);
+        t.f.style.transform = `scaleX(${k})`; t.tr.style.transform = `scaleX(${t.trail})`;
+        const m = me ? `${Math.round(Math.hypot(me.x - r.x, me.z - r.z))} m` : '';
+        if (m !== t.last) { t.d.textContent = m; t.last = m; }
+      }
+    },
+    // the night's card over the black: NEXT MORNING, a clock running from 11:52 PM to 7:30 AM over secs
+    night(on, secs = 1.9) {
+      if (!on) { night.classList.remove('on'); cancelAnimationFrame(timers.nightRaf); return; }
+      night.innerHTML = `<div class="t">NEXT MORNING</div><svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="44" fill="rgba(8,10,14,.6)" stroke="#fff" stroke-width="4"/>${Array.from({ length: 12 }, (_, i) => { const a = i / 12 * PI * 2; return `<rect x="${(50 + Math.sin(a) * 36 - 2).toFixed(1)}" y="${(50 - Math.cos(a) * 36 - 2).toFixed(1)}" width="4" height="4" fill="#fff"/>`; }).join('')}<line class="hh" x1="50" y1="50" x2="50" y2="28" stroke="#FFC93C" stroke-width="5" stroke-linecap="round"/><line class="mh" x1="50" y1="50" x2="50" y2="16" stroke="#fff" stroke-width="3" stroke-linecap="round"/><circle cx="50" cy="50" r="3.5" fill="#FFC93C"/></svg><div class="c">11:52 PM</div><div class="s">West Chelsea</div>`;
+      night.classList.add('on');
+      const hh = night.querySelector('.hh'), mh = night.querySelector('.mh'), c = night.querySelector('.c'), t0 = performance.now();
+      const from = 23 * 60 + 52, to = 24 * 60 + 7 * 60 + 30;
+      const f = () => {
+        const k = clamp((performance.now() - t0) / 1000 / secs), e = k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2, m = from + (to - from) * e;
+        hh.setAttribute('transform', `rotate(${((m / 60) % 12) * 30} 50 50)`); mh.setAttribute('transform', `rotate(${(m % 60) * 6} 50 50)`);
+        const H = Math.floor(m / 60) % 24, M = Math.floor(m % 60);
+        c.textContent = `${((H + 11) % 12) + 1}:${String(M).padStart(2, '0')} ${H < 12 ? 'AM' : 'PM'}`;
+        if (k < 1) timers.nightRaf = requestAnimationFrame(f);
+      };
+      f();
+    },
+    clear() { O.card(false); O.prompt(null); O.tags(null); pop.classList.remove('on'); O.night(false); },
+  };
+  return (W._m3o = O);
+}
+
 /* -------------------------------------------------------- the install -- */
 export async function install(W) {
   watchStory(W);
@@ -69,6 +211,8 @@ export async function install(W) {
     return;
   }
   if (at === 'pete') { place(W, { car: SPOT.out.car, quant: SPOT.out.quant }); toPete(W, { quick: true }); return; }
+  // (night: as if into the G at night: the night in the garage, then the mission)
+  if (at === 'night') { W.app.selectTime?.('twilight'); place(W, { car: [-1530, 1603.6, PI / 2], quant: [-1556, 1607.4, -PI / 2] }); }
   start(W, { at }).catch((e) => console.error('[m3]', e));
 }
 async function boot(W) {
@@ -169,6 +313,7 @@ function createMission(W, { keep = false } = {}) {
   const U = W.m2ui || (W.m2ui = createM2UI(ui));
   app.mapSystem.onTeleport = null;
   ui.story(true);
+  const O = overlay(W);
 
   /* ------------------------------------------------------------ helpers -- */
   let tok = { dead: false, err: null };
@@ -274,10 +419,49 @@ function createMission(W, { keep = false } = {}) {
   }
   function wake() { S.awake = true; for (const e of S.crew?.enemies || []) e._m3restore?.(); S.crew?.engage(); }
   function wakeBrute() { if (S.bruteUp) return; S.bruteUp = true; for (const e of S.brute?.enemies || []) e._m3restore?.(); S.brute?.engage(); }
+  // a bat lying by each rig standing, on the side he comes from (the stage's): grab one [E] and one swing does it
+  function batsByRigs() {
+    const items = W.combat?.items; if (!items?.place) return;
+    for (const r of S.R.rigs) {
+      if (r.down) continue;
+      const a = Math.atan2(0 - r.x, 2809.6 - r.z) + 0.55, x = r.x + Math.sin(a) * 1.5, z = r.z + Math.cos(a) * 1.5;
+      try { items.place('bat', x, z); } catch (e) { console.warn('[m3] bat', e); }
+    }
+  }
+  // the rigs marked, for the fight and the shot before it: a green column of light at each one standing, its chevron
+  // over it (bigger than a man's), and its tag (icon, RIG, how far, its health) over that; their own frame loop
+  let marks = null;
+  function markRigs(on) {
+    if (!on) {
+      if (!marks) return;
+      marks.live = false; for (const m of marks.cols) { m.hide(); app.scene.remove(m.group); }
+      for (const c of S.chev || []) { c.hide(); c.group.scale.setScalar(1); }
+      O.tags(null); O.prompt(null); marks = null; return;
+    }
+    if (marks || !S.R) return;
+    const M = marks = { live: true, cols: S.R.rigs.map((r) => { const m = createMarker(THREE, app.scene, { color: '#4ADE80', radius: 0.8, height: 3.0, alpha: 0.24 }); m.at(r.x, r.y ?? cm.getGroundHeight(r.x, r.z, 'person'), r.z); return m; }) };
+    O.tags(S.R.rigs);
+    let last = performance.now();
+    (function loop() {
+      if (!M.live) return;
+      requestAnimationFrame(loop);
+      const t = performance.now(), dt = Math.min(0.05, (t - last) / 1000); last = t;
+      if (W.paused) return;
+      for (const r of S.R.rigs) {
+        const col = M.cols[r.i], ch = S.chev[r.i];
+        // (close by, the tag is enough: the column and the chevron would fill the view)
+        const me = inCar() ? car.position : P.position, near = Math.hypot(me.x - r.x, me.z - r.z) < 7;
+        if (r.down || near) { col.hide(); ch.hide(); continue; }
+        col.group.visible = true; ch.group.scale.setScalar(1.25); ch.at(r.x, (r.y || 0) + 2.75, r.z, dt);
+      }
+      O.place(app.cameraSystem.camera, inCar() ? car.position : P.position, dt);
+    })();
+  }
 
   function tidy() {
     hooks.clear(); fionaHook = null; ui.objective(null); ui.sub(null); ui.help(null); ui.counter(null); ui.caller(null); ui.hold(null); ui.phone.hide(); U.call?.hide();
     gps.clear(); for (const id of [...gps.blips.keys()]) gps.unblip(id);
+    markRigs(false); O.clear();
     for (const c of S.chev || []) c.hide();
     S.chase?.stop?.(); S.chase = null;
   }
@@ -302,9 +486,20 @@ function createMission(W, { keep = false } = {}) {
       // (come in his car: out of it, so the scene can park it in the bay; the car's controls hold it where it stands)
       if (inCar()) place(W, { quant: SPOT.out.quant });
       await sets();
-      midday();
-      ui.caption('THE NEXT DAY', 'Midday · West Chelsea', '#FFC93C', 2.6);
+      // (into the G in the dark, as Mission 2 leaves him: the night in the garage first, and the morning after it)
+      const dark = !keep && ['twilight', 'midnight'].includes(app.lightingSystem?.activePresetId);
       holds([{ minX: G_AT.x - 45, maxX: G_AT.x + 45, minZ: 1590, maxZ: 1612 }]);
+      if (dark) {
+        app.selectTime?.('midnight');
+        const night = nightScene(W, { garage: S.Gar, card: (on) => O.night(on), onDark: () => app.selectTime?.('golden') });
+        night.setup();
+        await runScene(W, night);
+        // (it ends on black; a skip leaves it wherever it was: black now, the bars back for the next scene)
+        await ui.fade(1, 0.05); O.night(false); S.Gar.mood(null);
+        W.cutscene = true; ui.cine(true);
+      }
+      midday();
+      ui.caption(dark ? 'LATER THAT MORNING' : 'THE NEXT DAY', dark ? 'West Chelsea' : 'Midday · West Chelsea', '#FFC93C', 2.6);
       const def = garageScene(W, { U, say, gears: S.gears, garage: S.Gar });
       def.setup();
       ui.fade(0, 0.9);
@@ -356,7 +551,10 @@ function createMission(W, { keep = false } = {}) {
       // (its shots kept clear while it plays, M1's way: 5th Ave's last block down to the arch, the stage, the lawn to
       // the rigs; then only the stage again)
       holds([STAGE_HOLD, { minX: -26, maxX: 26, minZ: 2735, maxZ: 2905 }]);
-      const def = rallyScene(W, { say, fiona: S.fiona, rally: S.R, spotter: S.crew?.enemies[0] || null });
+      // (its last shot: him on the lawn behind the crowd, the three rigs ahead with their marks, the job's card up)
+      S.carded = false;
+      const def = rallyScene(W, { say, fiona: S.fiona, rally: S.R, spotter: S.crew?.enemies[0] || null, lawn: FRESH.rigs.quant,
+        onRigs: () => { S.carded = true; markRigs(true); O.card(true, 4.6); } });
       def.setup();
       if (moved && !fresh) setTimeout(() => ui.fade(0, 0.6), 120);
       try { await runScene(W, def); } finally { holds([STAGE_HOLD]); }
@@ -370,7 +568,16 @@ function createMission(W, { keep = false } = {}) {
         // (a retry: the rigs he smashed stay smashed, and he starts by the next one standing, a few steps off it)
         const next = S.R.smashed ? S.R.rigs.filter((r) => !r.down).sort((a, b) => Math.hypot(a.x, a.z - 2836) - Math.hypot(b.x, b.z - 2836))[0] : null;
         place(W, { car: FRESH.rigs.car, quant: next ? [next.x + 1.2, next.z - 3.4, Math.atan2(-1.2, 3.4)] : FRESH.rigs.quant });
+      } else if (dist(P.position, FRESH.rigs.quant[0], FRESH.rigs.quant[1]) > 6) {
+        // (the rally skipped before its last shot: on the lawn as it would have left him, facing the nearest rig)
+        const [lx, lz] = FRESH.rigs.quant, n = S.R.rigs.filter((r) => !r.down).sort((a, b) => Math.hypot(a.x - lx, a.z - lz) - Math.hypot(b.x - lx, b.z - lz))[0];
+        place(W, { quant: [lx, lz, n ? Math.atan2(n.x - lx, n.z - lz) : FRESH.rigs.quant[2]] });
       }
+      // the rigs marked; the job's card (unless the rally's last shot just put it up); a bat by each one standing
+      markRigs(true);
+      if (fresh || !S.carded) O.card(true, 4.2);
+      S.carded = false;
+      batsByRigs();
       const combat = W.combat, R = S.R;
       const autoGetUp = combat?.player.autoGetUp, maxHp0 = combat?.player.maxHp;
       let offDown = null;
@@ -384,8 +591,7 @@ function createMission(W, { keep = false } = {}) {
         const go = () => objective(['Smash the ', { 'livestream rigs': 'green' }, '.'], null);
         go();
         ui.counter('RIGS', `${R.smashed}/3`);
-        delay(1.6).then(() => ui.help(['Bats: walk up to one and press [E] to pick it up. One swing smashes a ', { rig: 'green' }, '.'], 9)).catch(() => {});
-        let warned = false, barkT = now() + 6000, helped2 = false, extra = false, lastMv = 'free', swing = null, said = 0, routed = false;
+        let warned = false, barkT = now() + 6000, again = null, extra = false, lastMv = 'free', swing = null, said = 0, routed = false;
         // (out of reach of them, a retry or a chase off the lawn: the line to the nearest rig standing)
         const nearestRig = () => { let b = null, bd = Infinity; for (const r of R.rigs) if (!r.down) { const d = dist(me(), r.x, r.z); if (d < bd) { bd = d; b = r; } } return [b, bd]; };
         const rigTarget = { follow: () => { const [r] = nearestRig(); return r ? { x: r.x, z: r.z } : me(); }, name: 'Livestream rig' };
@@ -396,6 +602,7 @@ function createMission(W, { keep = false } = {}) {
         const LOST = [['Fiona', PINK, 'We lost a stream! Keep pumping!'], ['Fiona', PINK, 'Two streams down! This is fine! Pump harder!']];
         const smashed = (r) => {
           stats.smashed = R.smashed; ui.counter('RIGS', `${R.smashed}/3`);
+          O.pop('STREAM DOWN', `RIGS ${R.smashed}/3`);
           R.screen.dip(); S.chev[r.i].hide(); gps.unblip('rig' + r.i);
           sfx?.play('thunk', { gain: 0.3, f: 90 });
           if (combat?.player && !combat.player.down) combat.player.hp = Math.min(combat.player.maxHp, combat.player.hp + 25);
@@ -403,11 +610,22 @@ function createMission(W, { keep = false } = {}) {
           if (R.smashed < 3) { W.voice?.fx?.('Fiona', 'phone'); say([LOST[Math.min(LOST.length - 1, said++)]]).catch(() => {}); barkT = now() + 9000; }
         };
         // a blow at a rig: Quant's swing (the fight's own move, or the keys), what he throws, his car
-        let heavyT = -1e9, pressT = -1e9;
-        const reachOf = () => (W.combat?.debug?.c?.me?.holding?.kind === 'bat' ? 3.0 : 2.4);
+        let heavyT = -1e9, pressT = -1e9, stepIn = null;
+        const reachOf = () => (W.combat?.debug?.c?.me?.holding?.kind === 'bat' ? 3.0 : 2.5);
         const blow = (r, heavy) => {
           const held = W.combat?.debug?.c?.me?.holding?.kind, dmg = held === 'bat' || held === 'bottle' ? 3 : heavy ? 2 : 1;
-          if (!r.hit(dmg, P.position) && !helped2) { helped2 = true; ui.help(['Hit it again. Or throw a ', { 'trash can': 'green' }, ' at it.'], 7); }
+          r.hit(dmg, P.position);
+        };
+        // every blow that lands on a rig, whatever brought it: a flash and sparks, the view jolted, a beat's hit-stop on
+        // foot, its tag kicked (the set glitches its screen and rocks it)
+        const _at = new THREE.Vector3(), _dir = new THREE.Vector3();
+        for (const r of R.rigs) r.onHit = (rig, dmg, from, down) => {
+          const c = W.combat?.debug?.c, f = from || me();
+          _at.set(rig.x, (rig.y || 0) + 1.65, rig.z); _dir.set(rig.x - f.x, 0.15, rig.z - f.z).normalize();
+          c?.fx?.hit?.(_at, _dir, { heavy: down ? 1 : dmg >= 2 ? 0.6 : 0.25 });
+          if (!inCar()) { c?.shake?.(down ? 0.8 : dmg >= 2 ? 0.6 : 0.45, _dir); c?.hitStop?.(down ? 0.1 : 0.06, 0.05); }
+          O.hitTag(rig);
+          again = down ? null : rig;
         };
         // (the fight's swing, where it lands: a rig in reach in front of him, or right by him)
         const strike = (heavy) => {
@@ -424,14 +642,18 @@ function createMission(W, { keep = false } = {}) {
           }
           if (best) blow(best, heavy);
         };
-        // (a blow pressed with a rig in reach and nearer him than any Degen, or right by him: the rig's, whichever way
-        // the fight turns him to swing; with a Degen nearer, the fight has it)
+        // (a blow pressed with a rig in reach: the rig's, whichever way the fight turns him to swing, unless a Degen on
+        // his feet is right in his face, nearer than the rig: then the fight has it. The prompt says which. (23 Oct: it
+        // used to give way to any Degen nearer than the rig, and the crew stand by the rigs, so J beside one did nothing)
         const rigAt = () => {
           const reach = reachOf(), px = P.position.x, pz = P.position.z;
           let best = null, bd = Infinity;
           for (const r of R.rigs) { if (r.down) continue; const d = Math.hypot(r.x - px, r.z - pz); if (d <= reach && d < bd) { bd = d; best = r; } }
-          if (!best || bd < 1.5) return best;
-          for (const e of W.combat?.enemies || []) if (e.alive && Math.hypot(e.pos.x - px, e.pos.z - pz) < bd - 0.2) return null;
+          if (!best || bd < 1.3) return best;
+          for (const e of W.combat?.enemies || []) {
+            if (!e.alive || e.standing === false) continue;
+            const de = Math.hypot(e.pos.x - px, e.pos.z - pz); if (de < 1.25 && de < bd - 0.2) return null;
+          }
           return best;
         };
         onKey = (e) => {
@@ -441,7 +663,12 @@ function createMission(W, { keep = false } = {}) {
           // (a heavy pressed: the fight calls a heavy at nobody a whiff, but at a rig it lands as a heavy)
           if (heavy) heavyT = now();
           const r = rigAt();
-          if (r) { pressT = now(); setTimeout(() => { if (!r.down && !W.paused) blow(r, heavy); }, 160); return; }
+          if (r) {
+            // (turned to it as he swings: the blow goes where it lands)
+            pressT = now(); P.heading = Math.atan2(r.x - P.position.x, r.z - P.position.z); P.mesh.rotation.y = P.heading;
+            stepIn = { r, t: 0 };
+            setTimeout(() => { if (!r.down && !W.paused) blow(r, heavy); }, 160); return;
+          }
           // (without the fight's own moves to read: the strike keys)
           if (!W.combat?.debug?.c?.me) setTimeout(() => strike(heavy), 160);
         };
@@ -456,6 +683,13 @@ function createMission(W, { keep = false } = {}) {
           }
           // (the brute at the stage comes for him if he goes for him first)
           if (!S.bruteUp && S.brute?.enemies.some((e) => !e.alive || e.state !== 'idle' || dist(P.position, e.pos.x, e.pos.z) < 5)) wakeBrute();
+          // (a blow given to a rig: a quick step in, so the swing meets it, not the air a couple of metres short)
+          if (stepIn) {
+            const sr = stepIn.r, dx = sr.x - P.position.x, dz = sr.z - P.position.z, d = Math.hypot(dx, dz), want = W.combat?.debug?.c?.me?.holding ? 1.5 : 1.0;
+            stepIn.t += dt;
+            if (d <= want || stepIn.t > 0.2 || combat?.player?.down) stepIn = null;
+            else { const m = Math.min(d - want, 9 * dt); P.position.x += dx / d * m; P.position.z += dz / d * m; P.mesh.position.x = P.position.x; P.mesh.position.z = P.position.z; }
+          }
           // (his swing: the moment a strike, a heavy or a swing at the air starts, its blow lands ~0.16 s on)
           const mv = W.combat?.debug?.c?.me?.moveName?.() || 'free';
           // (a swing the press already gave to a rig isn't counted twice)
@@ -476,8 +710,15 @@ function createMission(W, { keep = false } = {}) {
           if (inCar() && Math.abs(car.speed) > 2.5) for (const r of R.rigs) if (!r.down && dist(car.position, r.x, r.z) < 2.4) r.hit(3, car.position);
           // (each rig down, whatever brought it down: counted, its marks off, the chart shaken)
           for (const r of R.rigs) if (r.down && !r.counted) { r.counted = true; smashed(r); }
-          // the rigs marked (green blips, a chevron over each, the line to the nearest from afar), the Degens red
-          for (const r of R.rigs) if (!r.down) { gps.blip('rig' + r.i, { x: r.x, z: r.z, kind: 'object', edge: true, name: 'Livestream rig' }); S.chev[r.i].at(r.x, 2.9, r.z, dt); }
+          // the rigs marked (green blips; their columns, chevrons and tags: markRigs; the line to the nearest from afar),
+          // the Degens red
+          for (const r of R.rigs) if (!r.down) gps.blip('rig' + r.i, { x: r.x, z: r.z, kind: 'object', edge: true, name: 'Livestream rig' });
+          // (in reach of one, the blow his: the prompt, the key and what it takes)
+          const nr = !inCar() && !combat?.player?.down ? rigAt() : null;
+          if (nr) {
+            const held = W.combat?.debug?.c?.me?.holding?.kind, armed = held === 'bat' || held === 'bottle';
+            O.prompt(`<kbd>J</kbd> ${again === nr ? 'Again!' : 'Smash the rig'}<small>${armed ? 'one swing' : again === nr ? 'one more' : 'fists: two hits'}</small>`);
+          } else O.prompt(null);
           const far = nearestRig()[1] > (routed ? 18 : 24);
           if (far !== routed) { routed = far; gps.to(far ? rigTarget : null); }
           const live = new Set();
@@ -501,13 +742,15 @@ function createMission(W, { keep = false } = {}) {
         await wait(() => R.smashed >= 3);
         stats.rekt = [S.crew, S.brute, S.extra].filter(Boolean).reduce((n, c) => n + c.enemies.filter((e) => !e.alive).length, 0);
       } finally {
-        offFight?.();
+        offFight?.(); O.prompt(null);
+        for (const r of R.rigs) r.onHit = null;
         if (onKey) { removeEventListener('keydown', onKey, true); removeEventListener('pointerdown', onKey, true); }
         offDown?.(); if (combat?.player) { combat.player.autoGetUp = autoGetUp; combat.player.maxHp = maxHp0; combat.player.hp = Math.min(combat.player.hp, maxHp0); }
       }
       for (const id of [...gps.blips.keys()]) if (id.startsWith('e:') || id.startsWith('rig')) gps.unblip(id);
       ui.counter(null);
       await delay(0.8);
+      markRigs(false); O.card(false);
     },
     // the dump: the chart red, Fiona gone, the car waiting
     async dump(fresh) {
@@ -515,8 +758,10 @@ function createMission(W, { keep = false } = {}) {
       if (fresh) { await spawnRally({ crew: false }); for (const r of S.R.rigs) if (!r.down) r.hit(3); }
       S.fionaUp = false;
       W.combat?.clear?.(); S.crew = null; S.brute = null; S.extra = null;
+      markRigs(false); O.card(false);
       for (const c of S.chev) c.hide();
-      holds([{ minX: -12, maxX: 12, minZ: 2560, maxZ: 2796 }, { minX: -16, maxX: 26, minZ: 2776, maxZ: 2830 }, STAGE_HOLD]);
+      // (5th Ave from the square up, the arch's front, the stage, and the first of Washington Mews where his car waits)
+      holds([{ minX: -12, maxX: 12, minZ: 2560, maxZ: 2796 }, { minX: -16, maxX: 26, minZ: 2776, maxZ: 2830 }, STAGE_HOLD, { minX: 5, maxX: 60, minZ: 2738, maxZ: 2753 }]);
       inTheCar(...ESCAPE_CAR);
       const def = dumpScene(W, { say, fiona: S.fiona, rally: S.R, suv: S.suv });
       def.setup();
@@ -532,8 +777,10 @@ function createMission(W, { keep = false } = {}) {
       if (fresh || !inCar()) inTheCar(...ESCAPE_CAR);
       objective(['Lose the ', { Degens: 'red' }, '.'], null);
       W.audio?.play?.('horn', { pos: [car.position.x - 40, 1, car.position.z] });
-      // the thrusters: Gears' cold-gas, unlocked now (their own help)
-      delay(2.2).then(() => {
+      // how: break their line of sight (the pursuit loses him once they haven't seen him for a while)
+      delay(0.5).then(() => ui.help(['Turn corners and break their ', { 'line of sight': 'yellow' }, ' to lose them.'], 6.5)).catch(() => {});
+      // the thrusters: Gears' cold-gas, unlocked now (their own help, after the line above has had its time)
+      delay(7.2).then(() => {
         if (W.thrusters?.unlock) W.thrusters.unlock('all', { announce: true });
         else ui.help(['Cold-gas thrusters: [Space] hops the car, [Q] / [E] dash it sideways.'], 9);
       }).catch(() => {});
@@ -582,7 +829,11 @@ function createMission(W, { keep = false } = {}) {
       finally { off(); drive.stop(); m.hide(); app.scene.remove(m.group); }
     },
     async home() {
-      await sets(); midday();
+      await sets();
+      // (back late in the day: the drive home and the escape took the afternoon. Under a short black, the evening's
+      // light, which the P after it keeps, as the save's Continue does for Mission 4)
+      W.cutscene = true; ui.cine(true); cm.resetInput?.();
+      if (app.lightingSystem?.activePresetId !== 'golden') { await ui.fade(1, 0.35); app.selectTime?.('golden'); setTimeout(() => ui.fade(0, 0.6), 150); }
       S.Gar.show(true);
       car.speed = 0;
       // (out of the car for the scene: it parks him and his car where it wants them)

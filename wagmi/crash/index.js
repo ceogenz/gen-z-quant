@@ -62,7 +62,7 @@ export function install(W) {
     car.heaveVel = (car.heaveVel || 0) + Math.min(1.4, sp * 0.1);
   }
   // how big a hit is to the player: the crunch, the bits and sparks, the jolt, and slow motion on a huge one
-  const cool = { sound: 0, last: 0, slow: 0 };
+  const cool = { sound: 0, last: 0, slow: 0, fence: 0 };
   function feel(sp, x, y, z, nx, nz, { glass = sp > 9, paint = null, heavy = 1 } = {}) {
     if (sp > 2.2 && (sp > cool.last * 1.4 || cool.sound <= 0)) { play('carHit', { pos: [x, y, z], vol: clamp(sp / 16, 0.25, 1.25) }); cool.sound = 0.2; cool.last = sp; }
     const tx = -nz, tz = nx, sd = Math.random() < 0.5 ? 1 : -1;
@@ -85,13 +85,13 @@ export function install(W) {
   const box = () => { const B = car.body; return { hl: (B.z1 - B.z0) / 2, cz: (B.z1 + B.z0) / 2 }; };
   // a building (js/controllers.js has already pushed it out and bounced it): head on, a hard stop, barely bouncing back;
   // the feel once a frame, for the hardest
-  const wallHit = { vn: 0, nx: 0, nz: 0, x: 0, z: 0, headOn: 0 };
-  function wall(vn, nx, nz, headOn, x, z) {
+  const wallHit = { vn: 0, nx: 0, nz: 0, x: 0, z: 0, headOn: 0, fence: false };
+  function wall(vn, nx, nz, headOn, x, z, c = null) {
     // (and less of the shove back off it the controllers gave: head on, it stays at the wall)
     const back = headOn > 0.72 ? 0.32 : 0.12;
     car.vx -= nx * vn * back; car.vz -= nz * vn * back;
     if (headOn > 0.72) car.speed *= 0.4;
-    if (vn > wallHit.vn) Object.assign(wallHit, { vn, nx, nz, x, z, headOn });
+    if (vn > wallHit.vn) Object.assign(wallHit, { vn, nx, nz, x, z, headOn, fence: !!(c && c.fence) });
   }
   // a solid thing (a tree, the subway stairs, a pole hit too slowly): as a wall
   function bounce(nx, nz) {
@@ -314,13 +314,26 @@ export function install(W) {
   }
   let trail = 0;
   function frame(dt) {
-    cool.sound -= dt;
+    cool.sound -= dt; cool.fence -= dt;
     scanSolids(dt);
     // the hardest wall hit this frame, felt; scraping along one at speed, a trail of sparks
     if (wallHit.vn > 0) {
       const w = wallHit;
-      if (w.vn > 1.5) { feel(w.vn, w.x, 0.6, w.z, w.nx, w.nz, { glass: w.vn > 12 && w.headOn > 0.5 }); emit('hit', { kind: 'wall', speed: w.vn, headOn: w.headOn }); }
-      if (Math.abs(car.speed) > 7) { trail += dt * Math.abs(car.speed) * 3; const n = Math.floor(trail); trail -= n; if (n) fx.spark(w.x, 0.45, w.z, -Math.sin(car.heading), -Math.cos(car.heading), n, 6); }
+      if (w.vn > 1.5) {
+        feel(w.vn, w.x, 0.6, w.z, w.nx, w.nz, { glass: w.vn > 12 && w.headOn > 0.5 });
+        // (a park's iron fence: the railings ring under the crunch, and spark even on a soft bump)
+        if (w.fence) {
+          if (w.vn > 1.5 && cool.fence <= 0) { play('clang', { pos: [w.x, 0.8, w.z], vol: clamp(w.vn / 9, 0.3, 1), rate: 1.6 + Math.random() * 0.3 }); cool.fence = 0.12; }
+          fx.spark(w.x, 0.7, w.z, -w.nz, w.nx, Math.round(clamp(w.vn * 1.5, 6, 30)), 4 + w.vn * 0.3);
+        }
+        emit('hit', { kind: 'wall', speed: w.vn, headOn: w.headOn, fence: w.fence });
+      }
+      if (Math.abs(car.speed) > (w.fence ? 3 : 7)) {
+        trail += dt * Math.abs(car.speed) * 3; const n = Math.floor(trail); trail -= n;
+        if (n) fx.spark(w.x, w.fence ? 0.7 : 0.45, w.z, -Math.sin(car.heading), -Math.cos(car.heading), n, 6);
+        // (scraping along the railings: their rattle, now and then)
+        if (w.fence && cool.fence <= 0) { play('clang', { pos: [w.x, 0.8, w.z], vol: clamp(Math.abs(car.speed) / 20, 0.15, 0.5), rate: 1.9 + Math.random() * 0.4 }); cool.fence = 0.16; }
+      }
       w.vn = 0;
     }
     props.update(dt, cam.position);

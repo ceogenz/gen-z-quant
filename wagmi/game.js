@@ -7,10 +7,13 @@
 import * as THREE from 'three/webgpu';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { buildRoadster, createDriver } from './roadster.js';
+import { drive, installDriveMode } from './audio/drivemode.js';
 
 const app = await new Promise((res) => { const t = setInterval(() => { if (window.__NYC_APP && window.__NYC_APP.controllerManager) { clearInterval(t); res(window.__NYC_APP); } }, 100); });
 const cm = app.controllerManager, person = cm.entities.person, car = cm.entities.car;
 const WAGMI = (window.WAGMI = { app, person, car });
+// (the drive mode, engine or ALL ELECTRIC, on WAGMI from the start: Q and the speed panel's badge, below, use it)
+installDriveMode(WAGMI);
 
 /* --------------------------------------------------------------- the car -- */
 {
@@ -728,18 +731,73 @@ addEventListener('keydown', (e) => {
   if (cm.activeMode !== 'car' || WAGMI.paused || app.mapSystem?.isFullMapOpen) return;
   WAGMI.recoverCar();
 });
-// ...and in the car's controls bar (js/main.js draws it per mode): X, Reset car
+// Q at the wheel: ALL ELECTRIC (the quiet mode) or the engine (WAGMI.toggleDriveMode, audio/drivemode.js: the sound
+// follows, the badge in the speed panel shows it, remembered). Only driving: on foot Q is the fight's counter; not while
+// a scene, the pause, the map or getting in and out has the keys
+const DRIVE_KEY = 'KeyQ';
+addEventListener('keydown', (e) => {
+  if (e.code !== DRIVE_KEY || e.repeat || e.ctrlKey || e.metaKey || e.altKey || /^(INPUT|TEXTAREA|SELECT)$/.test(e.target?.tagName || '')) return;
+  if (cm.activeMode !== 'car' || WAGMI.paused || WAGMI.cutscene || WAGMI.directed || ride.phase || app.mapSystem?.isFullMapOpen) return;
+  if (document.body.classList.contains('wg-gating') || document.body.classList.contains('wg-cine')) return;
+  WAGMI.toggleDriveMode();
+});
+// ...and in the car's controls bar (js/main.js draws it per mode): X, Reset car; Q, Electric / Engine
 {
   const bar = document.getElementById('hud-controls-hint');
-  const addReset = () => {
-    if (!bar || cm.activeMode !== 'car' || bar.querySelector('.wg-reset')) return;
-    const item = document.createElement('span'); item.className = 'hint wg-reset';
-    const k = document.createElement('kbd'); k.textContent = 'X';
-    const l = document.createElement('span'); l.className = 'hint-label'; l.textContent = 'Reset car';
+  const addItem = (cls, key, label) => {
+    if (bar.querySelector('.' + cls)) return;
+    const item = document.createElement('span'); item.className = 'hint ' + cls;
+    const k = document.createElement('kbd'); k.textContent = key;
+    const l = document.createElement('span'); l.className = 'hint-label'; l.textContent = label;
     item.append(k, l); bar.appendChild(item);
   };
-  if (bar) new MutationObserver(addReset).observe(bar, { childList: true });
-  addReset();
+  const addCarKeys = () => {
+    if (!bar || cm.activeMode !== 'car') return;
+    addItem('wg-reset', 'X', 'Reset car');
+    addItem('wg-drivemode', DRIVE_KEY.replace(/^Key/, ''), 'Electric / Engine');
+  };
+  if (bar) new MutationObserver(addCarKeys).observe(bar, { childList: true });
+  addCarKeys();
+}
+// the drive mode's badge in the speed panel, right of the speed: ENGINE (warm amber, an engine block) or ELECTRIC (cool
+// cyan, a bolt), its key beside it; a pulse on each change. In the car only (the panel's own mode, body[data-mode])
+{
+  const css = document.createElement('style');
+  css.textContent = `
+#wg-drive { display: none; align-self: center; margin-left: auto; align-items: center; gap: 5px; padding: 4px 7px 4px 6px; border-radius: 7px;
+  font-size: 11px; font-weight: 700; line-height: 1; letter-spacing: 0.12em; text-transform: uppercase; white-space: nowrap;
+  color: var(--wgd); background: color-mix(in srgb, var(--wgd) 14%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--wgd) 50%, transparent);
+  transition: color .25s, background-color .25s, box-shadow .25s; --wgd: #FFB547; }
+body[data-mode='car'] #wg-drive { display: inline-flex; }
+#wg-drive.ev { --wgd: #45E3FF; }
+#wg-drive svg { width: 14px; height: 14px; flex: none; fill: currentColor; }
+#wg-drive svg.ev, #wg-drive.ev svg.eng { display: none; }
+#wg-drive.ev svg.ev { display: block; }
+#wg-drive kbd { margin-left: 2px; padding: 1px 4px; border-radius: 4px; font: inherit; font-size: 10px; letter-spacing: 0; color: rgba(255,255,255,.7); box-shadow: inset 0 0 0 1px rgba(255,255,255,.3); background: none; }
+#wg-drive.pulse { animation: wgDrivePulse .7s ease-out; }
+@keyframes wgDrivePulse { 0% { transform: scale(1); } 22% { transform: scale(1.16); box-shadow: inset 0 0 0 1px var(--wgd), 0 0 16px 2px color-mix(in srgb, var(--wgd) 70%, transparent); } 100% { transform: scale(1); } }`;
+  document.head.appendChild(css);
+  const row = document.querySelector('#hud-cluster .gauge-speed');
+  if (row) {
+    const el = document.createElement('span'); el.id = 'wg-drive';
+    el.innerHTML = '<svg class="eng" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4h7v2h-2.5v2H15l2 2h2V8h3v9h-3v-2h-2l-2.5 3H8.5L6 15.5V13H4v3H2V8h2v3h2V8h3.5V6H7z"/></svg>'
+      + '<svg class="ev" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 1 4 14h6.5L9 23l11-13.5h-6.8z"/></svg><span class="w"></span><kbd></kbd>';
+    el.querySelector('kbd').textContent = DRIVE_KEY.replace(/^Key/, '');
+    row.appendChild(el);
+    const show = (pulse) => {
+      const ev = drive.mode === 'electric';
+      el.classList.toggle('ev', ev); el.querySelector('.w').textContent = ev ? 'Electric' : 'Engine';
+      el.title = `${ev ? 'All electric' : 'Engine'}: ${DRIVE_KEY.replace(/^Key/, '')} switches`;
+      if (pulse) { el.classList.remove('pulse'); void el.offsetWidth; el.classList.add('pulse'); }
+    };
+    el.addEventListener('animationend', () => el.classList.remove('pulse'));
+    addEventListener('wagmi:drivemode', () => show(true));
+    show(false);
+  }
+  // (and the car's boost burning cyan rather than orange while it is electric, where the roadster has that: setElectric)
+  const tint = () => car.roadster?.setElectric?.(drive.mode === 'electric');
+  addEventListener('wagmi:drivemode', tint);
+  tint();
 }
 
 const hint = document.createElement('div');

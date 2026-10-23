@@ -91,7 +91,7 @@ body.touch-enabled .wg-track .k kbd { display: none; }
 
 const CONTROLS = [
   ['On foot', [['Move', 'W A S D'], ['Sprint', 'Shift'], ['Jump', 'Space'], ['Get in the car', 'F'], ['Look round', 'drag the mouse']]],
-  ['In the car', [['Drive · brake', 'W · S'], ['Steer', 'A · D'], ['Boost', 'Shift'], ['Get out', 'F (slow down first)'], ['Reset car to road', 'recover'], ['Thrusters: hop', 'Space'], ['Thrusters: dash left · right', 'Q · E'], ['Next station', 'R'], ['Radio off / on', 'T']]],
+  ['In the car', [['Drive · brake', 'W · S'], ['Steer', 'A · D'], ['Boost', 'Shift'], ['Get out', 'F (slow down first)'], ['Reset car to road', 'recover'], ['Electric / Engine', 'Q'], ['Thrusters: hop', 'Space'], ['Thrusters: dash left · right', 'Z · C'], ['Next station', 'R'], ['Radio off / on', 'T']]],
   ['Fighting', [['Strike', 'Left click · J'], ['Heavy', 'Right click · K'], ['Counter (on the cue)', 'Q · L'], ['Dodge', 'C · Space'], ['Grab · pick up · throw', 'E'], ['Lock the mouse to the view', 'click in a fight']]],
   ['Anywhere', [['Map', 'M'], ['Brief: the objective, the last lines', 'B'], ['Pause', 'Esc · P'], ['Skip a cutscene', 'hold Space']]],
 ];

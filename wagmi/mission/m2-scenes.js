@@ -213,18 +213,39 @@ export async function burnerMeet(W, { U, say, van, at = J_AT }) {
   chair(-0.62, 0, H); chair(0.15, 0.75, H + PI / 2 + 0.4);
   const lap = buildLaptop(); lap.rotation.y = H + PI; const lp = p(-0.12, 0, 0.755); lap.position.set(lp[0] - TX, 0.755, lp[2] - TZ); set.add(lap);
   set.traverse((m) => { if (m.isMesh) { m.castShadow = true; m.receiveShadow = true; } });
+  // the light (23 Oct): at twilight under the terrace her table was in the dark and so was she. One of the park's lamps
+  // on the sidewalk behind her, to her left (its globe lit; its warm light over the table, and a rim on her hair and
+  // shoulders), a soft key from the street side onto her face and the table, and the laptop's own glow on her face,
+  // brighter while its screen is on. (Point lights only: the renderer's clustered lighting takes them without a stall)
+  const loc = (f, r, y) => { const q = p(f, r, y); return [q[0] - TX, q[1] - G, q[2] - TZ]; };
+  const lampM = new THREE.MeshStandardMaterial({ color: '#1C2620', roughness: 0.45, metalness: 0.6 });
+  const lamp = new THREE.Group(); lamp.position.set(...loc(-1.3, 1.6, 0)); set.add(lamp);
+  const lampPart = (geo, y, mat = lampM) => { const m = new THREE.Mesh(geo, mat); m.position.y = y; m.castShadow = mat === lampM; lamp.add(m); return m; };
+  lampPart(new THREE.CylinderGeometry(0.15, 0.18, 0.4, 14), 0.2); lampPart(new THREE.CylinderGeometry(0.045, 0.065, 3.1, 12), 1.95);
+  lampPart(new THREE.CylinderGeometry(0.07, 0.05, 0.1, 12), 3.52); lampPart(new THREE.SphereGeometry(0.2, 20, 14), 3.74, new THREE.MeshBasicMaterial({ color: new THREE.Color(2.6, 2.1, 1.45) }));
+  lampPart(new THREE.CylinderGeometry(0.035, 0.09, 0.07, 12), 3.97);
+  const lampL = new THREE.PointLight('#FFD2A0', 11, 12, 1.6); lampL.position.set(lamp.position.x, 3.62, lamp.position.z); set.add(lampL);
+  const keyL = new THREE.PointLight('#FFE6CC', 2.6, 4.5, 2); keyL.position.set(...loc(0.8, 0.5, 1.9)); set.add(keyL);
+  // (at the screen itself, a little in front of it: closer in, it burnt out her chin)
+  // (23 Oct, round 2: that put it a hand's breadth from her hands on the keys, and they and her face came out white
+  // under it. Now just behind the screen's top edge, higher and further from her hands than her face is from it, and
+  // ~60% down on her face: a soft blue on her, not a lamp)
+  const glowL = new THREE.PointLight('#8EC2FF', 0.15, 1.4, 2); glowL.position.set(...loc(0.05, 0, 1.0)); set.add(glowL);
   set.position.set(TX, G, TZ); W.app.scene.add(set);
   // where they are: her chair, his mark (the street side of the table, a little to her right), his walk in from the curb
   const JX = p(-0.62, 0, 0), QM = p(0.78, -0.45, 0), QS = p(3.6, -2.4, 0), QH = H + PI - 0.35;
   const T = { ring: 0, walk: 1.2, at: 4.6, line0: 5.0 };
-  let ps = null, speaking = null, hand = null, plug = null, scrMode = 'off';
+  let ps = null, speaking = null, lineText = '', hand = null, plug = null, scrMode = 'off';
   const drift = (a, b, secs) => (t, t0) => keys([[t0, a], [t0 + secs, b]], 'linear')(t);
   const juH = () => J.bones.head.getWorldPosition(V());
   const def = {
-    END: Infinity,
+    // (a touch brighter than the street's twilight grade while it plays: faces at a table, not cars under street lamps)
+    END: Infinity, exposure: 1.16,
     shots: [
-      // over the avenue at twilight: the park's trees, her at her table under the terrace, Quant crossing to her
-      { t: 0, cam: (t, t0) => ({ pos: drift(p(6.5, -5.5, 2.6), p(5.4, -4.4, 2.1), 4.6)(t, t0), look: p(0, 0, 0.9), fov: 40, shake: 0.35 }) },
+      // over the avenue at twilight: the park's trees, her at her table under the terrace by its lamp, Quant crossing to
+      // her (from her left and a little higher than his head: he walks in from the right of the shot, never between it
+      // and her)
+      { t: 0, cam: (t, t0) => ({ pos: drift(p(6.8, 2.6, 3.0), p(5.7, 2.1, 2.45), 4.6)(t, t0), look: p(-0.6, 1.25, 1.85), fov: 42, shake: 0.35 }) },
       // two-shot, low over the table: her with the laptop, him standing
       { line: 0, t: Infinity, cam: (t, t0) => ({ pos: drift(p(1.9, 1.7, 1.3), p(1.75, 1.55, 1.27), 5)(t, t0), look: p(0.1, -0.25, 1.05), fov: 40, shake: 0.3 }) },
       // over her shoulder onto him
@@ -243,7 +264,7 @@ export async function burnerMeet(W, { U, say, van, at = J_AT }) {
       [1.2, () => ui.place('Bryant Park', 'Midtown · WAGMI City', 3.4)],
       [T.line0, (st) => {
         say(MEET_LINES, st, (who, i) => {
-          const now = W.sceneClock?.t ?? 0; speaking = who;
+          const now = W.sceneClock?.t ?? 0; speaking = who; lineText = MEET_LINES[i]?.[2] || '';
           for (const sh of def.shots) if (sh.line === i) sh.t = now;
           if (i === 1) hand = now + 0.4;                       // he hands it over as he answers
           if (i === 2) { plug = now + 0.3; scrMode = 'scan'; }
@@ -275,8 +296,12 @@ export async function burnerMeet(W, { U, say, van, at = J_AT }) {
       const Rv = V(R[0], 0, R[2]), Fv = V(F[0], 0, F[2]);
       J.arm('L', kb.clone().addScaledVector(Rv, -0.12).add(V(0, type2, 0)), shL.clone().addScaledVector(Rv, -0.5).add(V(0, -0.5, 0)), 0.9);
       J.arm('R', kb.clone().addScaledVector(Rv, 0.12).add(V(0, type, 0)).lerp(V(...p(0.2, -0.2, 0.98)), reach), sh.clone().addScaledVector(Rv, 0.5).add(V(0, -0.5, 0)), 0.9);
-      J.talk(t, speaking === 'Juno', W.voice?.level?.() || null);
+      // her face (juno.js face.live): her mouth with her voice, her eyes on him once he's at the table (on her laptop as
+      // he walks up), glancing down at her screen, blinking; her head following her eyes a little
+      const qHead = W.quant?.bones?.head?.getWorldPosition(V()) || V(QM[0], G + 1.6, QM[2]), scr = lap.localToWorld(V(0, 0.13, -0.1));
+      J.face.live(dt, { talking: speaking === 'Juno', text: speaking === 'Juno' ? lineText : '', look: t < T.at - 0.4 ? scr : qHead, alt: scr });
       lap.userData.screen(scrMode, t);
+      glowL.intensity = scrMode === 'off' ? 0.15 : 0.3 + 0.02 * Math.sin(t * 7.3);
       void Fv; void plug; void dt;
       // the van at the curb in Times Square for the cutaway
       if (van) { van.group.visible = true; van.group.position.set(VAN_START[0], 0, VAN_START[1]); van.group.rotation.set(0, VAN_START[2], 0); van.setDoor(0); van.update(dt, 0, 0); }
@@ -286,7 +311,7 @@ export async function burnerMeet(W, { U, say, van, at = J_AT }) {
       J.rig.set([[0, J.clips.includes('sit') ? 'sit' : 'idle', { speed: 0.6 }]]);
     },
     cleanup(st) {
-      C.phone.visible = false; lap.userData.screen('off');
+      C.phone.visible = false; lap.userData.screen('off'); J.jaw(0); J.face.set({ blink: 0, brow: 0 });
       // (where play goes on: Quant at the table, facing the avenue and his car; Juno stays at her table until he's
       // well away, then she's packed up)
       ps?.at(QM[0], QM[2], H + PI + PI);

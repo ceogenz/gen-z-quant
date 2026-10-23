@@ -3,10 +3,12 @@
 //           LED screen in front of its opening with the live $MOON2 chart (a canvas: pumping green, then the dump in red),
 //           Moon's face on a banner over the arch's attic, speaker stacks, crowd barriers, the hype crowd (the city's
 //           PersonCrowd) facing the stage, and three ring-light livestream rigs (tripod, ring light, phone): smashed by
-//           blows, a bat, a thrown can or bottle or the car, they topple, spark and go dark
+//           blows, a bat, a thrown can or bottle or the car (a blow glitches the phone's screen and rocks the rig;
+//           rig.onHit for the mission's own), they topple, spark and go dark
 //   garage  Gears' Static Garage on W 22nd St: the frontage on the street (a roll-up door half up, the sign) and the bay
 //           behind it (built inside the building's shell: its walls face out, so from in here only ours are seen):
-//           concrete, a tool wall, a bench, tyres, strip lights and a work lamp
+//           concrete, a tool wall, a bench, tyres, strip lights and a work lamp, an old couch by the door; its moods
+//           (G.mood('night' | 'dark' | 'morning' | null)) for the night Quant sleeps there
 //   suv     Fiona's black SUV (the city's SUV body, acid-green rims), parked on 5th Ave by the arch
 //   people  Gears (his own model, gears.glb: navy overalls, a beard, a cap: a big gentle mechanic) and Floor Price Fiona (her own
 //           model, fiona.glb: platinum ponytail, white shades, a megaphone), each posed by its clips (rig) plus an arm to a point
@@ -229,15 +231,20 @@ export function buildRally(W) {
     const phone = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.16, 0.012), black); phone.position.set(0, 1.68, 0.01); piv.add(phone);
     const scr = new THREE.Mesh(new THREE.PlaneGeometry(0.07, 0.145), scrM); scr.position.set(0, 1.68, 0.0175); piv.add(scr);
     const dot = new THREE.Mesh(new THREE.SphereGeometry(0.018, 8, 6), new THREE.MeshBasicMaterial({ color: '#EF4444' })); dot.position.set(0.2, 1.95, 0); piv.add(dot);
+    // (a blow: its screen glitches and the ring light stutters for a moment, the whole rig rocks on its feet)
+    const GLITCH = ['#FF2E63', '#FFFFFF', '#3BD8FF', '#050506', '#B6FF3B', '#FFE14D'];
     const R = {
-      i, x: rx, z: rz, root, hp: 2, down: false, fall: 0, fallDir: 0, flash: 0,
+      i, x: rx, z: rz, y: y0, root, hp: 2, hp0: 2, down: false, fall: 0, fallDir: 0, flash: 0, glitch: 0, rock: 0, rockDir: 0,
+      onHit: null, // (the mission's: (rig, dmg, from, down) at every blow, for its own feedback)
       // a blow (dmg: 1 a fist, 2 a heavy, 3 a bat, a throw or the car) from (fx, fz)
       hit(dmg = 1, from = null) {
         if (R.down) return false;
-        R.hp -= dmg; R.flash = 0.18;
+        R.hp -= dmg; R.flash = 0.18; R.glitch = 0.55; R.rock = 1;
+        R.rockDir = from ? Math.atan2(rx - from.x, rz - from.z) - root.rotation.y : 0;
         const at = V(rx, y0 + 1.6, rz);
-        spark(at, dmg >= 2 ? 12 : 6);
-        W.audio?.play?.('carHit', { pos: [rx, 1.4, rz], vol: 0.35 });
+        spark(at, dmg >= 2 ? 16 : 10);
+        W.audio?.play?.('carHit', { pos: [rx, 1.4, rz], vol: 0.45 });
+        try { R.onHit?.(R, dmg, from, R.hp <= 0); } catch (e) { console.warn('[m3] rig', e); }
         if (R.hp > 0) return false;
         R.down = true; R.fall = 0;
         // (it falls away from the blow)
@@ -248,8 +255,19 @@ export function buildRally(W) {
         W.audio?.play?.('glass', { pos: [rx, 1.6, rz], vol: 0.9 });
         return true;
       },
-      reset() { R.hp = 2; R.down = false; R.counted = false; R.fall = 0; piv.rotation.set(0, 0, 0); ringMat.emissiveIntensity = 2.4; ringMat.color.set('#FFFFFF'); scrM.color.set('#B6FF3B'); dot.visible = true; },
+      reset() { R.hp = 2; R.down = false; R.counted = false; R.fall = 0; R.glitch = 0; R.rock = 0; piv.rotation.set(0, 0, 0); ringMat.emissiveIntensity = 2.4; ringMat.color.set('#FFFFFF'); scrM.color.set('#B6FF3B'); dot.visible = true; },
       update(dt, t) {
+        // a blow's glitch: the phone's screen flicks through colours, the ring light stutters, the rig rocks
+        if (!R.down && R.glitch > 0) {
+          R.glitch = Math.max(0, R.glitch - dt);
+          scrM.color.set(R.glitch > 0 ? GLITCH[(Math.floor(t * 28) + R.i) % GLITCH.length] : '#B6FF3B');
+          ringMat.emissiveIntensity = R.glitch > 0 && Math.floor(t * 22) % 3 === 0 ? 0.15 : 2.4;
+        }
+        if (!R.down && R.rock > 0) {
+          R.rock = Math.max(0, R.rock - dt / 0.45);
+          const a = Math.sin((1 - R.rock) * 26) * 0.16 * R.rock;
+          piv.rotation.set(Math.cos(R.rockDir) * a, 0, -Math.sin(R.rockDir) * a);
+        }
         if (R.down && R.fall < 1) {
           R.fall = Math.min(1, R.fall + dt / 0.55);
           const k = R.fall * R.fall, ang = k * 1.42 + (R.fall >= 1 ? 0 : 0);
@@ -257,7 +275,7 @@ export function buildRally(W) {
           piv.rotation.set(Math.cos(R.fallDir) * ang, 0, -Math.sin(R.fallDir) * ang);
           if (R.fall >= 1) { spark(V(rx + Math.sin(root.rotation.y + R.fallDir) * 1.6, y0 + 0.1, rz + Math.cos(root.rotation.y + R.fallDir) * 1.6), 10); W.audio?.play?.('carHit', { pos: [rx, 0.3, rz], vol: 0.25 }); }
         }
-        if (!R.down) { dot.visible = (t % 1.2) < 0.75; ringMat.emissiveIntensity = 2.4 + (R.flash > 0 ? 3 : 0); }
+        if (!R.down && R.glitch <= 0) { dot.visible = (t % 1.2) < 0.75; ringMat.emissiveIntensity = 2.4 + (R.flash > 0 ? 3 : 0); }
         R.flash = Math.max(0, R.flash - dt);
       },
     };
@@ -458,6 +476,19 @@ export function buildGarage(W) {
   const creeper = new THREE.Group(); inn.add(creeper);
   box(0.46, 0.05, 1.05, red, 0, 0.11, 0, creeper);
   for (const [cx2, cz2] of [[-0.18, -0.42], [0.18, -0.42], [-0.18, 0.42], [0.18, 0.42]]) { const w = new THREE.Mesh(new THREE.SphereGeometry(0.04, 8, 6), tyre); w.position.set(cx2, 0.045, cz2); creeper.add(w); }
+  // the old couch against the front wall, west of the door, facing into the bay (where Quant sleeps the night after
+  // Mission 2): worn brown leather, two seat cushions, a pillow and a blanket at its west end
+  const COUCH = { x: GX - 4.9, z: GZ + 0.62, seat: Y + 0.46, len: 2.2 };
+  const couch = new THREE.Group(); couch.position.set(COUCH.x, Y, COUCH.z); inn.add(couch);
+  const hide = new THREE.MeshStandardMaterial({ color: '#5B3B27', roughness: 0.62, metalness: 0.05 });
+  const hideDk = new THREE.MeshStandardMaterial({ color: '#43291A', roughness: 0.7 });
+  box(COUCH.len, 0.26, 0.86, hideDk, 0, 0.2, 0.02, couch);                                     // the frame
+  for (const sx of [-0.5, 0.5]) box(1.0, 0.14, 0.7, hide, sx * 0.98, 0.39, 0.1, couch);         // the seat cushions
+  box(COUCH.len, 0.56, 0.24, hide, 0, 0.6, -0.33, couch);                                        // the back
+  for (const sx of [-1, 1]) box(0.2, 0.6, 0.86, hide, sx * (COUCH.len / 2 - 0.1), 0.36, 0.02, couch); // the arms
+  for (const [lx, lz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) box(0.06, 0.07, 0.06, benchMat, lx * (COUCH.len / 2 - 0.12), 0.035, lz * 0.36, couch);
+  const pillow = box(0.46, 0.14, 0.34, new THREE.MeshStandardMaterial({ color: '#C9C2B2', roughness: 0.9 }), -0.82, 0.55, 0.0, couch); pillow.rotation.set(0.15, 0.2, -0.35);
+  const blanket = box(0.7, 0.06, 0.62, new THREE.MeshStandardMaterial({ color: '#2E4E6E', roughness: 0.95 }), 0.62, 0.48, 0.12, couch); blanket.rotation.set(0.05, -0.12, 0.04);
 
   /* the shop's kit, merged by material (a draw call each): a two-post lift in the back west corner, its arms down; a
      tyre rack and a workbench with a vice on the back wall; steel shelving of boxes and cans on the west wall under a
@@ -594,11 +625,59 @@ export function buildGarage(W) {
     for (const [mesh, id, m] of cityIn || []) { mesh.setMatrixAt(id, on ? _zero : m); mesh.instanceMatrix.needsUpdate = true; }
   }
 
+  // the bay's moods for the night after Mission 2: 'night' (the shop shut: its lights off, a cold street light through
+  // the half-open door, the work lamp low) and 'morning' (the sun low through the door, a warm shaft across the floor
+  // to the couch); null: the shop at work. (The bay's own two lights do it, moved and recoloured: a light more in the
+  // scene would rebuild every lit material's shader the moment it came on)
+  const SUN_AT = V(GX + 2.4, Y + 5.2, GZ - 6.5);
+  const LIT = {
+    work: { warm: ['#FFD9A8', 9, [GX - 3.0, Y + 1.7, GZ + 5.8]], fill: ['#E8EEFF', 7, [GX + 1.5, Y + BH - 0.5, GZ + 6.5]] },
+    night: { warm: ['#FFB070', 2.2, [GX - 3.0, Y + 1.7, GZ + 5.8]], fill: ['#7C9CFF', 12, [GX - 1.9, Y + 2.5, GZ + 1.3]] },
+    dark: { warm: ['#FFB070', 0, [GX - 3.0, Y + 1.7, GZ + 5.8]], fill: ['#6F8FFF', 6, [GX - 1.9, Y + 2.5, GZ + 1.3]] },
+    morning: { warm: ['#FFE6C4', 2.4, [GX - 3.2, Y + 1.2, GZ + 3.4]], fill: ['#FFB25E', 16, [GX - 2.2, Y + 1.6, GZ + 0.7]] },
+  };
+  // (the shaft: the door's opening swept along the sun's way in down to the floor, warm haze brightest at the door: the
+  // four sides of it, additive, their colour fading to nothing at the far end)
+  const shaft = (() => {
+    const d = V(GX - 1.4, Y + 1.3, GZ).sub(SUN_AT).normalize();
+    const c = [[GX - 2.6, Y + 0.05], [GX - 0.2, Y + 0.05], [GX - 0.2, Y + 2.45], [GX - 2.6, Y + 2.45]].map(([x, y]) => V(x, y, GZ + 0.05));
+    const e = c.map((p) => p.clone().addScaledVector(d, Math.max(0.4, (p.y - Y - 0.02) / -d.y)));
+    const pos = [], col = [];
+    for (let i = 0; i < 4; i++) {
+      const a = c[i], b = c[(i + 1) % 4], a2 = e[i], b2 = e[(i + 1) % 4];
+      for (const [p, k] of [[a, 1], [b, 1], [b2, 0], [a, 1], [b2, 0], [a2, 0]]) { pos.push(p.x, p.y, p.z); col.push(k, k, k); }
+    }
+    const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); geo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+    const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: new THREE.Color(0.32, 0.22, 0.12), vertexColors: true, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false }));
+    m.renderOrder = 4; m.visible = false; m.frustumCulled = false; inn.add(m); return m;
+  })();
+  const STRIP = stripMat.color.clone(), BULB = bulb.color.clone(), LAMP = lampMat.color.clone();
+  let mood = null, inOn = false, glowAt = null;
+  function lights() {
+    const work = inOn && !mood, L = LIT[mood || 'work'];
+    for (const [light, [col, k, at]] of [[warm, L.warm], [fill, L.fill]]) { light.color.set(col); light.intensity = inOn ? k : 0; light.position.set(...at); }
+    // (a phone's glow on his face: the warm light borrowed, small and cold)
+    if (glowAt && inOn) { warm.color.set('#B4C8FF'); warm.intensity = glowAt[3]; warm.position.set(glowAt[0], glowAt[1], glowAt[2]); }
+    shaft.visible = inOn && mood === 'morning';
+    stripMat.color.copy(STRIP).multiplyScalar(work ? 1 : 0.035);
+    bulb.color.copy(BULB).multiplyScalar(work ? 1 : 0.03);
+    lampMat.color.copy(LAMP).multiplyScalar(work || mood === 'night' ? 1 : 0.04);
+  }
+
   const G = {
     group: g, creeper, lamp,
     bay: { x0: BX0, x1: BX1, z0: BZ0, z1: BZ1 },
     show(on) { g.visible = !!on; },
-    inside(on) { inn.visible = !!on; warm.intensity = on ? 9 : 0; fill.intensity = on ? 7 : 0; if (on || cityIn) cityWalls(!!on); },
+    couch: COUCH,
+    inside(on) { inn.visible = !!on; inOn = !!on; lights(); if (on || cityIn) cityWalls(!!on); },
+    // the bay's mood: 'night' | 'dark' (the work lamp off too) | 'morning' | null (at work)
+    mood(m = null) { mood = m || null; glowAt = null; lights(); },
+    // a small cold light at p (a phone's screen; null: none), k its strength
+    glow(p, k = 1.2) {
+      if (!p) { if (glowAt) { glowAt = null; lights(); } return; }
+      glowAt = [p.x, p.y, p.z, k]; if (inOn) { warm.color.set('#B4C8FF'); warm.intensity = k; warm.position.set(p.x, p.y, p.z); }
+    },
+    get moodNow() { return mood; },
   };
   return G;
 }
@@ -735,10 +814,48 @@ export async function buildGears(W) {
   if (clipMap.idle) clipMap.thugIdle = clipMap.idle;
   root.visible = false; W.app.scene.add(root);
   const P = { root, inner, bones, mixer, rig: rig(mixer, clipMap), clips: Object.keys(clipMap), top, arm: (side, target, pole, w) => armTo(bones, side, target, pole, w, MH_ARM), relax: () => {} };
-  // the rag: hanging from his right back pocket (on the hips' bone, placed in the rest pose)
-  const hip = (bones.root || bones.pelvis_R).getWorldPosition(V());
+  // his tee: an old heather tee, not a lit white one (the clothes' texture's pale, unsaturated texels, the tee's, toned
+  // down and warmed a little, with a fine heather fleck; once a load, the texture shared by every Gears)
+  inner.traverse((o) => {
+    const m = o.isMesh && o.material; if (!m || m.name !== 'clothes' || !m.map?.image || m.map.userData.heather) return;
+    try {
+      const img = m.map.image, c = document.createElement('canvas'); c.width = img.width; c.height = img.height;
+      const x = c.getContext('2d', { willReadFrequently: true }); x.drawImage(img, 0, 0);
+      const d = x.getImageData(0, 0, c.width, c.height), px = d.data;
+      let s = 7; const rnd = () => ((s = (s * 1664525 + 1013904223) >>> 0) / 4294967296);
+      for (let i = 0; i < px.length; i += 4) {
+        const r = px[i], g = px[i + 1], b = px[i + 2], hi = Math.max(r, g, b), lo = Math.min(r, g, b);
+        if (hi < 60 || hi - lo > 22) continue;
+        const k = 0.94 + (rnd() - 0.5) * 0.1;
+        px[i] = Math.min(255, r * k); px[i + 1] = Math.min(255, g * k * 0.985); px[i + 2] = Math.min(255, b * k * 0.95);
+      }
+      x.putImageData(d, 0, 0);
+      const t = new THREE.CanvasTexture(c); t.colorSpace = m.map.colorSpace; t.flipY = m.map.flipY; t.wrapS = m.map.wrapS; t.wrapT = m.map.wrapT; t.anisotropy = 4;
+      t.userData.heather = true; m.map = t; m.needsUpdate = true;
+    } catch (e) { console.warn('[m3] gears tee', e); }
+  });
+  // the rag: hanging out of his right back pocket. Placed in the bind pose (the clothes' own vertices through the skin's
+  // bind matrix: the back of his hips over the right hip joint) and hung on the hips' bone the way the skin hangs on it
+  // (its bones were saved mid-clip, so the model as it loads is not in that pose)
   const rag = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.2, 0.012), new THREE.MeshStandardMaterial({ color: '#B42B26', roughness: 0.95 }));
-  rag.rotation.z = 0.12;
-  onBone(P, bones.root ? 'root' : 'pelvis_R', rag, -0.1, hip.y - 0.13, hip.z - 0.16);
+  let skin = null; inner.traverse((o) => { if (o.isSkinnedMesh && o.material?.name === 'clothes') skin = o; });
+  const hb = skin ? skin.skeleton.bones.findIndex((b) => b.name === 'root') : -1;
+  const lb = skin ? skin.skeleton.bones.findIndex((b) => b.name === 'upperleg01_R') : -1;
+  if (skin && hb >= 0 && lb >= 0) {
+    const hipJ = V().setFromMatrixPosition(skin.skeleton.boneInverses[lb].clone().invert());
+    const pa = skin.geometry.attributes.position, _v = V(), py = hipJ.y - 0.02, side = hipJ.x;
+    let back = Infinity;
+    for (let i = 0; i < pa.count; i++) { _v.fromBufferAttribute(pa, i).applyMatrix4(skin.bindMatrix); if (Math.abs(_v.y - py) < 0.05 && Math.abs(_v.x - side) < 0.05) back = Math.min(back, _v.z); }
+    if (!Number.isFinite(back)) back = hipJ.z - 0.14;
+    const at = new THREE.Matrix4().compose(V(side, py - 0.07, back - 0.008), new THREE.Quaternion().setFromEuler(new THREE.Euler(0.08, 0, 0.12)), V(1, 1, 1));
+    skin.skeleton.boneInverses[hb].clone().multiply(at).decompose(rag.position, rag.quaternion, rag.scale);
+    skin.skeleton.bones[hb].add(rag); rag.castShadow = true; rag.frustumCulled = false;
+    P.ragAt = { hip: hipJ.toArray().map((v) => +v.toFixed(3)), back: +back.toFixed(3) };
+  } else {
+    const hip = (bones.root || bones.pelvis_R).getWorldPosition(V());
+    rag.rotation.z = 0.12;
+    onBone(P, bones.root ? 'root' : 'pelvis_R', rag, -0.1, hip.y - 0.13, hip.z - 0.16);
+  }
+  P.rag = rag;
   return P;
 }
