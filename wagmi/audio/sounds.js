@@ -3,13 +3,18 @@
 // t; o.rate pitches it (and speeds it) where that makes sense. Names the whole team calls:
 //   pedHit       a body hitting a car: a deep thump through the bonnet's metal knock, cloth and a slap (o.speed m/s)
 //   scream       a passer-by screaming (o.voice 'f' | 'm', o.kind 'aah' | 'whoa' | 'hey')
-//   carHit       a crash: a low boom, crunching metal ringing, plastic bits scattering, glass if hard (vol = how hard)
+//   carHit       a crash: the body's thump, the sheet metal buckling, bits flying off (crunch.js, after Slop New York),
+//                glass if hard (vol = how hard: the impact speed / 16)
 //   horn         a car horn (o.kind 'taxi' | 'sedan' | 'suv' | 'bus', o.len 'tap' | 'beep' | 'double' | 'long' | 'lean')
 //   doorOpen / doorClose / doorThunk   Quant's car's door: latch, seal and servo; a slam; a heavy closing thunk
 //   engineStart  the car waking: a power-up swell under a two-note chime
 //   footstep     a step (o.surface 'hard' | 'grass', o.run 0..1)       land: a jump landing
 //   whoosh, splash, glass, phoneBuzz, blip, missionStart, missionPassed
 // and the city's own: airBrake, kerb, boostIgnite, coo, chirps, flutter, clang, jackhammer, beeper, whistle, call, bodyFall
+import { crunch } from './crunch.js';
+// (the crunch's level under the volume asked for: as loud as the old boom-and-crunch at the same volume)
+const CRUNCH = 1.75;
+
 const VOWEL = { a: [850, 1350, 2800, 3600], o: [520, 900, 2500, 3400], e: [520, 1850, 2600, 3500], u: [360, 800, 2400, 3300], i: [320, 2300, 3000, 3700] };
 
 // a voice: a glottal buzz (two saws a hair apart, a little shaken), through four formant bands moving between vowels
@@ -90,16 +95,13 @@ const S = {
     return voice(M, out, t, { f0, dur: M.rr(0.7, 1.25), vowels: ['a', 'a', 'e'], peak: 0.3, rise: 1.1, fall: 0.68, rough: 0.09, breath: 0.16 });
   },
   carHit(M, out, o, t) {
-    // (how hard: o.k, or read off the volume asked for)
-    const k = Math.max(0.2, Math.min(1.3, o.k ?? 0.5 + 0.5 * Math.min(1.3, o.vol ?? 1))), r = o.rate || 1;
-    M.tone(out, { t, f0: 72 * r, f1: 28, dur: 0.38, peak: 1.0 * k });                                         // the boom
-    M.burst(out, { t, dur: 0.22, f0: 1800, f1: 500, q: 0.7, peak: 0.6 * k, a: 0.001, buf: M.crackle });       // the crunch
-    M.burst(out, { t, dur: 0.05, type: 'highpass', f0: 3000, q: 0.6, peak: 0.4 * k, a: 0.0006 });
-    M.modes(out, { t: t + 0.003, base: 236 * r, ratios: [1, 1.73, 2.92, 4.79, 6.1], decays: [0.5, 0.36, 0.26, 0.18, 0.12], peak: 0.2 * k }); // panels ringing
-    const bits = 4 + Math.floor(k * 6);
-    for (let i = 0; i < bits; i++) M.burst(out, { t: t + 0.06 + M.R() * 0.5, dur: 0.02, f0: M.rr(1800, 4500), q: 4, peak: 0.12 * k * M.rr(0.4, 1), a: 0.0006 }); // bits landing
+    // (how hard: o.k, or read off the volume asked for: the callers give vol = impact speed / 16)
+    const k = Math.max(0.2, Math.min(1.3, o.k ?? 0.5 + 0.5 * Math.min(1.3, o.vol ?? 1)));
+    const hard = o.k != null ? (o.k - 0.5) * 2 : Math.min(1.3, o.vol ?? 1), sev = Math.max(0, Math.min(1, (hard * 16 - 0.8) / 22));
+    // the metal (louder the harder, on top of the volume asked for, as before), then our glass if it was hard
+    const dur = crunch(M, M.gain(CRUNCH * k, out), t, sev, o.rate || 1);
     if (k > 0.85) S.glass(M, out, { k: 0.5 * k }, t + 0.01);
-    return 0.9;
+    return Math.max(0.8, dur);
   },
   kerb(M, out, o, t) {
     const k = o.k ?? 0.6;

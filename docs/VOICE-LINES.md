@@ -4,7 +4,7 @@ Every spoken line in the game, for a voice service or actors. Generated from the
 `node wagmi/radio/build/voices.mjs` (do not edit by hand: change the words in the game, then rebuild).
 
 **The other voices in the build today are placeholders** made with the macOS speech voices (Apple's licence allows those for
-personal, non-commercial use only). They must be replaced before quantgenz.com goes public. Quant is synthesised (`quant-A`), Juno is synthesised (`juno-C`): see below.
+personal, non-commercial use only). They must be replaced before quantgenz.com goes public. Synthesised instead: Quant (`quant-A`), Juno (`juno-C`), Bagsy (`bagsy-A`), Lev (`lev-B`), Fiona (`fiona-A`), Wick (`wick-A`), Fomo (`fomo-A`), Gears (`gears-D`); see below.
 
 ## How to deliver
 
@@ -15,18 +15,19 @@ personal, non-commercial use only). They must be replaced before quantgenz.com g
 - Put the files in `assets/voice/src/` and run `node wagmi/radio/build/voices.mjs`. Each recording then replaces its
   placeholder (trimmed, evened to the same loudness, ZK's run through his voice changer) as `assets/voice/<id>.m4a`;
   the manifest records which lines are real. Nothing in the game's code changes.
-- New or changed lines in the game get placeholders the next time the build runs (`--all` rebuilds every line, e.g.
-  after changing a placeholder voice in `wagmi/radio/build/cast.mjs`).
+- New or changed lines in the game get their speaker's voice (synthesised, else a placeholder) the next time the build
+  runs (`--all` rebuilds every line, e.g. after changing a placeholder voice in `wagmi/radio/build/cast.mjs`).
 
-## Synthesised voices (Quant, Juno)
+## Synthesised voices
 
-Quant and Juno can be voiced by an open text-to-speech model instead of the macOS placeholders: Qwen3-TTS 12Hz (a
-voice designed from words, then cloned for every line) or Kokoro-82M, both Apache-2.0, run locally. The candidates
-the owner auditioned are `quant-A` .. `quant-F` and `juno-A` .. `juno-F` in `wagmi/radio/build/tts-voices.mjs`
-(the audition files are in `.scratch/tts/`). To give the pick to every line of theirs, in one command:
+A speaker can be voiced by an open text-to-speech model instead of the macOS placeholders: Qwen3-TTS 12Hz (a voice
+designed from words, then cloned for every line) or Kokoro-82M, both Apache-2.0, run locally. The candidates the
+owner auditioned are in `wagmi/radio/build/tts-voices.mjs`: Quant `quant-A` .. `quant-F`; Juno `juno-A` .. `juno-F`; Bagsy `bagsy-A`, `bagsy-B`; Lev `lev-A`, `lev-B`; Gears `gears-A` .. `gears-E`; Fiona `fiona-A`, `fiona-B`; Fomo `fomo-A`, `fomo-B`; Wick `wick-A`, `wick-B` (the audition files are in
+`.scratch/tts/`, `.scratch/polish-voices/` and `.scratch/r2-voices/`). To give each pick to every line of that
+speaker, in one command (today's picks):
 
 ```sh
-node wagmi/radio/build/voices.mjs --tts quant-C,juno-B     # the two picked names
+node wagmi/radio/build/voices.mjs --tts quant-A,juno-C,bagsy-A,lev-B,fiona-A,wick-A,fomo-A,gears-D     # the picked names
 ```
 
 - It records the pick in `wagmi/radio/build/tts/picks.json` (later builds keep using it: a changed line is synthesised
@@ -48,14 +49,14 @@ node wagmi/radio/build/voices.mjs --tts quant-C,juno-B     # the two picked name
 | Speaker | Who | Direction | Voice in the build |
 |---|---|---|---|
 | Quant | the player: a teenager who went viral for a joke coin he made on a livestream (it pumped, it dumped); Moon is his dog | Quick, deadpan, very online, kinder than the comments think; the jokes are armour. When it is about Moon, the cool cracks. | quant-A: Qwen3-TTS (qwen-teen-tenor) |
-| Bagsy | the Degens' Midtown crew lead: shades, a duffel "bag" always slung; his bags went to zero | Cocky street voice, loud, sing-song mockery; enjoys every second; never actually angry. | Rocko (English (US)) (placeholder) |
+| Bagsy | the Degens' Midtown crew lead: shades, a duffel "bag" always slung; his bags went to zero | Cocky street voice, loud, sing-song mockery; enjoys every second; never actually angry. | bagsy-A: Qwen3-TTS (qwen-cocky-baritone) |
 | ZK | the Degens' boss ("Zero Knowledge"): an anonymous influencer in a chrome visor, heard through a voice changer | Calm, slow, theatrical menace; a streamer who loves his own show. Never shouts. Smiles through the threats. | Daniel + voice changer (placeholder) |
 | Juno | Quant's friend from the group chat, an on-chain sleuth who reads wallets like gossip; mostly a voice on the phone | Quick, friendly, sharp; talks fast because she thinks fast; dry about Quant's choices but on his side. | juno-C: Qwen3-TTS (qwen-low-wry) |
-| Fomo | a Degen, always late | Breathless, panicky, running in late; a whiny pitch. | Reed (English (US)) (placeholder) |
-| Lev | Leverage Larry, runs the Degens in Midtown | Big, loud, panicky about his money; every sentence a pitch. | Rocko (English (US)) (placeholder) |
-| Gears | big, gentle, an ex-pit-crew mechanic with an EV tuning garage | Slow, warm, proud of his work. | Reed (English (US)) (placeholder) |
-| Fiona | Floor Price Fiona, the Degens' hype host | A hype host on a megaphone; everything is the best thing ever. | Flo (English (US)) (placeholder) |
-| Wick | a Degen of the hype crew at the $MOON2 rally | Loud, jumpy, a hype man turned bouncer. | Rocko (English (US)) (placeholder) |
+| Fomo | a Degen, always late | Breathless, panicky, running in late; a whiny pitch. | fomo-A: Qwen3-TTS (qwen-breathless-whiny) |
+| Lev | Leverage Larry, runs the Degens in Midtown | Big, loud, panicky about his money; every sentence a pitch. | lev-B: Qwen3-TTS (qwen-nasal-hustler) |
+| Gears | big, gentle, an ex-pit-crew mechanic with an EV tuning garage | Slow, warm, proud of his work. | gears-D: Qwen3-TTS (qwen-old-gravel) |
+| Fiona | Floor Price Fiona, the Degens' hype host | A hype host on a megaphone; everything is the best thing ever. | fiona-A: Qwen3-TTS (qwen-big-hype-mezzo) |
+| Wick | a Degen of the hype crew at the $MOON2 rally | Loud, jumpy, a hype man turned bouncer. | wick-A: Qwen3-TTS (qwen-gravel-bouncer) |
 
 ## Opening cutscene
 

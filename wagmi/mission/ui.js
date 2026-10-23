@@ -517,7 +517,8 @@ export function createUI() {
     gate({ fine = '', when = () => true, onStart = null } = {}) {
       document.body.classList.add('wg-gating');
       const touch = matchMedia('(pointer: coarse)').matches;
-      const g = el('wg-gate', `<div class="go">${touch ? 'Tap to start' : 'Click or press any key to start'}</div><div class="fine">${esc(fine)}</div>`);
+      // (with a game pad the last used: its A, wagmi/pad.js)
+      const g = el('wg-gate', `<div class="go">${touch ? 'Tap to start' : '<span class="wg-nopad">Click or press any key to start</span><span class="wg-padonly">Press <kbd data-pad="A">A</kbd> to start</span>'}</div><div class="fine">${esc(fine)}</div>`);
       let shown = false;
       const show = () => { shown = true; g.classList.add('on'); gTitle.classList.add('on'); ui.bootOff(); };
       if (when()) show(); else { const poll = setInterval(() => { if (when()) { clearInterval(poll); show(); } }, 50); }

@@ -28,6 +28,7 @@ const { createTrafficSystem, createHighwayTraffic } = window.NYC;
 const { buildRoadPaint } = window.NYC;
 const { ThirdPersonControllerManager } = window.NYC;
 const { TouchControls } = window.NYC;
+const { GamepadControls } = window.NYC;
 const { CameraSystem, CAMERA_PRESETS } = window.NYC;
 const { LightingSystem } = window.NYC;
 const { NYCMapSystem } = window.NYC;
@@ -134,17 +135,19 @@ async function initApp() {
   });
 
   // 5. TSL RenderPipeline with Half-Res Screen Space Reflections (SSRNode), Bloom & Filmic Toning
-  //    SSR skips pixels with zero metalness, so fading it out with distance spares the far facades
+  //    Fade out distant and matte surfaces so SSR spends its rays on visible glossy reflections.
+  //    (WAGMI City: the matte cut-off, binary refine and reflection mask ported from Slop New York by Mr.doob, MIT, commit d837961)
   const scenePass = pass(scene, cameraSystem.camera);
   // The multisampled colour attachments (output, normal, metalRough) only need resolving, never storing: discarding
   // them spares the GPU writing 3 x 4 samples per pixel to memory every frame (transient, memoryless attachments where
   // the browser supports them). The multisampled depth stays stored: SSR reads it.
   scenePass.renderTarget.storeMultisampledColorBuffer = false;
   const ssrFade = smoothstep(360.0, 180.0, positionView.z.negate());
+  const maxSSRRoughness = 0.75;
   const sceneMRT = mrt({
     output: output,
     normal: normalView,
-    metalRough: vec2(metalness.mul(ssrFade), roughness)
+    metalRough: vec2(roughness.lessThan(maxSSRRoughness).select(metalness.mul(ssrFade), 0), roughness)
   });
   sceneMRT.setBlendMode('normal', new THREE.BlendMode(THREE.MaterialBlending));
   sceneMRT.setBlendMode('metalRough', new THREE.BlendMode(THREE.MaterialBlending));
@@ -164,11 +167,16 @@ async function initApp() {
   ssrPass.blurQuality = 1;
   ssrPass.maxDistance.value = 42;
   ssrPass.thickness.value = 0.85;
-  ssrPass.quality.value = 0.35;
+  // Fewer coarse steps, then refine detected hits to keep reflection edges precise.
+  ssrPass.quality.value = 0.25;
+  ssrPass.binaryRefine = true;
   ssrPass.intensity.value = 0.50;
   ssrPass.screenEdgeFadeBlack = true;
 
-  const colorGrade = createPostProcessing(renderer, scenePassColor, ssrPass);
+  // Roughness mip blur must not spread reflections back onto matte or nonreflective surfaces.
+  const reflectionMask = scenePassMetalRough.r.greaterThan(0).select(smoothstep(maxSSRRoughness, 0.55, scenePassMetalRough.g), 0);
+  const reflections = ssrPass.mul(reflectionMask);
+  const colorGrade = createPostProcessing(renderer, scenePassColor, reflections);
   const { bloomPass } = colorGrade;
   const renderPipeline = new THREE.RenderPipeline(renderer, colorGrade.outputNode);
 
@@ -189,6 +197,15 @@ async function initApp() {
   const elAltitude = document.getElementById('hud-altitude');
   const elLocation = document.getElementById('hud-location');
   const elControlsHint = document.getElementById('hud-controls-hint');
+  const gamepadControls = new GamepadControls(controllerManager, cameraSystem, {
+    onCycleMode: (step) => {
+      const modes = ['person', 'car', 'cyclist', 'helicopter'];
+      selectMode(modes[(modes.indexOf(controllerManager.activeMode) + step + modes.length) % modes.length]);
+    },
+    onCycleCamera: cycleCamera,
+    onToggleMap: () => mapSystem.toggleFullMap(!mapSystem.isFullMapOpen),
+    onCloseMap: () => mapSystem.toggleFullMap(false)
+  });
 
   // Keyboard guide for each mode: [keys, action]
   const controlHints = {
@@ -197,17 +214,27 @@ async function initApp() {
     cyclist: [[['W', 'S'], 'Pedal / Brake'], [['A', 'D'], 'Lean & Turn'], [['Shift'], 'Sprint'], [['Drag'], 'Orbit']],
     helicopter: [[['W', 'S'], 'Pitch'], [['A', 'D'], 'Yaw'], [['Space', 'E'], 'Ascend'], [['Q', 'C'], 'Descend'], [['Shift'], 'Boost']]
   };
+  // (WAGMI City) ...and the same guide on a game pad, when a pad was the last thing used (wagmi/pad.js: setHintInput): the
+  // buttons by their standard names, drawn as that pad's own (kbd data-pad)
+  const controlHintsPad = {
+    person: [[['LS'], 'Move'], [['RS'], 'Look'], [['L3'], 'Sprint'], [['A'], 'Jump']],
+    car: [[['RT', 'LT'], 'Drive / Reverse'], [['LS'], 'Steer'], [['X'], 'Boost'], [['RS'], 'Look']],
+    cyclist: [[['RT', 'LT'], 'Pedal / Brake'], [['LS'], 'Lean & Turn'], [['X'], 'Sprint'], [['RS'], 'Look']],
+    helicopter: [[['LS'], 'Pitch & Yaw'], [['RT', 'LT'], 'Ascend / Descend'], [['X'], 'Boost'], [['RS'], 'Look']]
+  };
+  let hintPad = false;
   // Boosted top speeds in mph (controllers.js caps them at 8.2, 36, 19 & 52 m/s): full scale of the speed meter
   const topSpeedMph = { person: 18, car: 81, cyclist: 43, helicopter: 116 };
 
   function renderControlHints(mode) {
     if (!elControlsHint) return;
-    const items = (controlHints[mode] || []).map(([keys, action]) => {
+    const items = ((hintPad ? controlHintsPad : controlHints)[mode] || []).map(([keys, action]) => {
       const item = document.createElement('span');
       item.className = 'hint';
       for (const key of keys) {
         const kbd = document.createElement('kbd');
         kbd.textContent = key;
+        if (hintPad) kbd.dataset.pad = key;
         item.appendChild(kbd);
       }
       const label = document.createElement('span');
@@ -217,6 +244,13 @@ async function initApp() {
       return item;
     });
     elControlsHint.replaceChildren(...items);
+  }
+
+  // (WAGMI City) the guide in the pad's buttons (true) or the keyboard's (false)
+  function setHintInput(pad) {
+    if (hintPad === !!pad) return;
+    hintPad = !!pad;
+    renderControlHints(controllerManager.activeMode);
   }
 
   // The taxi-yellow pill under the selected mode glides from button to button
@@ -230,6 +264,7 @@ async function initApp() {
   function selectMode(mode) {
     controllerManager.setMode(mode);
     touchControls.setMode(controllerManager.activeMode);
+    gamepadControls.reset();
     modeButtons.forEach((btn) => {
       btn.classList.toggle('active', btn.getAttribute('data-mode') === mode);
     });
@@ -386,6 +421,7 @@ async function initApp() {
   function teleportTo(x, z, heading = Math.PI) {
     const destination = controllerManager.teleportActiveTo(x, z, heading);
     touchControls.reset();
+    gamepadControls.reset();
     cameraSystem.resetForTeleport();
     selectCamera('chase', true);
     mapSystem.waypoint = {
@@ -403,6 +439,7 @@ async function initApp() {
     onToggle: (open) => {
       controllerManager.resetInput();
       touchControls.setEnabled(!open);
+      gamepadControls.setEnabled(!open);
       const mapHint = document.getElementById('fullmap-hover-info');
       if (open && touchControls.available && mapHint) {
         mapHint.textContent = 'Tap to teleport · Drag to pan · Use + / − to zoom';
@@ -517,12 +554,14 @@ async function initApp() {
     highwayTraffic,
     controllerManager,
     touchControls,
+    gamepadControls,
     cameraSystem,
     lightingSystem,
     mapSystem,
     selectMode,
     selectCamera,
     cycleCamera,
+    setHintInput,
     selectTime,
     getFps: () => currentFps
   };
@@ -620,6 +659,7 @@ async function initApp() {
     elapsed += dt;
 
     // Update 3rd-person controllers, camera, signals, traffic & vehicle collisions, building LODs, and dynamic shadow focus
+    gamepadControls.update(dt);
     controllerManager.update(dt, elapsed);
     cameraSystem.update(dt, elapsed);
     streetDetails.signalClock.value = elapsed;

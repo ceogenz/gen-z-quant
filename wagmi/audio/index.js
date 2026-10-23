@@ -14,6 +14,8 @@ import { createCity } from './city.js';
 import { createTraffic } from './traffic.js';
 import { createQuantCar } from './quantcar.js';
 import { createSteps } from './steps.js';
+import { createMotors } from './motors.js';
+import { warmCrunch } from './crunch.js';
 
 const NOOP = { set() { return NOOP; }, stop() {} };
 
@@ -28,6 +30,9 @@ export function install(W) {
     const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return null;
     try {
       M = createMixer(new AC({ latencyHint: 'interactive' }));
+      // (the traffic's engines and the crash's metal: their sound baked a slice at a time in idle moments from now)
+      M.motors = createMotors(M); M.motors.warm();
+      warmCrunch(M);
       E = createEngine(M);
       city = createCity(M, E); traffic = createTraffic(M, E); car = createQuantCar(M, E); steps = createSteps(E);
     } catch (e) { console.warn('[audio] no sound:', e); M = null; }
@@ -73,8 +78,8 @@ export function install(W) {
     debug() {
       if (!M) return null;
       const vs = traffic.voices || {};
-      const who = (list) => (list || []).map((x) => (x.v ? { w: +x.w.toFixed(2), d: +Math.hypot(x.v.x - M.listener.x, x.v.z - M.listener.z).toFixed(1), mode: x.L.mode } : null));
-      return { state: M.ctx.state, paused, where: city.where, cars: who(vs.cars), buses: who(vs.buses), sirens: who(vs.sirens), car: car.built, babble: !!M.babble, played: { ...E.count }, msPerFrame: cost.n ? +(cost.ms / cost.n).toFixed(3) : 0, latency: +(M.ctx.baseLatency || 0).toFixed(4) };
+      const who = (list) => (list || []).map((x) => (x.v ? { w: +x.w.toFixed(2), d: +Math.hypot((x.v.edge ? x.v.x : x.x) - M.listener.x, (x.v.edge ? x.v.z : x.z) - M.listener.z).toFixed(1), mode: x.L?.mode, kind: x.kind, highway: !x.v.edge, engine: !!x.mv } : null));
+      return { state: M.ctx.state, paused, where: city.where, cars: who(vs.cars), sirens: who(vs.sirens), blocks: city.engines, car: car.built, babble: !!M.babble, motors: M.motors.bake, crunchMs: M.crunchMs, played: { ...E.count }, msPerFrame: cost.n ? +(cost.ms / cost.n).toFixed(3) : 0, latency: +(M.ctx.baseLatency || 0).toFixed(4) };
     },
   });
 
@@ -167,7 +172,7 @@ export function install(W) {
       const tr = app.trafficSystem, pe = inCar ? c : P;
       traffic.update(dt, tr?.cars || [], tr?.buses || [], {
         active: !W.cutscene, x: pe.position.x, z: pe.position.z, inCar, speed: Math.abs(pe.speed || 0),
-        onSidewalk: inCar && !!cm.isPointOnSidewalk?.(c.position.x, c.position.z),
+        onSidewalk: inCar && !!cm.isPointOnSidewalk?.(c.position.x, c.position.z), self: c, highway: app.highwayTraffic,
       });
       car.update(dt, carState(dt, inCar));
       // his feet (the bones' heights over where he stands)

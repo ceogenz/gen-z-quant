@@ -12,6 +12,7 @@
 // is kept low and steady and the street's life is in tones (engines, horns, sirens, voices) that come and go.
 // Calmer in parks (the traffic falls away, the birds come up); the whole bus is muffled inside the car (core.js).
 import { SOUNDS } from './sounds.js';
+import { motorLoad } from './motors.js';
 
 // a crowd's murmur: twelve voices, syllables of random vowels on a wandering pitch with pauses for breath, rendered once
 export async function makeBabble(sr = 44100, secs = 8) {
@@ -75,50 +76,41 @@ export function createCity(M, E) {
   for (const o of hum) o.start();
 
   // the block's engines: three cars or trucks somewhere down the street, each on its own little story: idling at the
-  // light, then pulling away up through a gear (or not), fading off, and a while later another one, somewhere else
-  // (a saw at the firing rate with a half-order under it for the lope, a body's resonance, the air's low-pass)
-  const engOut = M.gain(0, out);
-  const engines = [0, 1, 2].map((i) => {
-    const sp = M.spot(engOut, null, { ref: 8, verb: 0.5 });
-    const a = M.osc('sawtooth', 30), b = M.osc('square', 15), bg = M.gain(0.3), body = M.filt('peaking', 210, 1.6), lp = M.filt('lowpass', 420, 0.7), hp = M.filt('highpass', 55, 0.7), g = M.gain(0);
-    body.gain.value = 9;
-    a.connect(body); b.connect(bg); bg.connect(body); body.connect(lp); lp.connect(hp); hp.connect(g); g.connect(sp.in);
-    a.start(); b.start();
-    return { sp, a, b, body, lp, g, st: 'gap', t: 0.5 + i * 1.7 + R() * 2, f0: 30, v: 0, truck: false, pan: 0, d: 60 };
-  });
+  // light, then pulling away up through a gear (or not), fading off, and a while later another one, somewhere else.
+  // Each a real engine (motors.js, after Slop New York: a car's, an SUV's or a bus's diesel; its own gearbox makes the
+  // change up), made for its story and let go after it; placed at a pan and a distance, not in the world
+  const engOut = M.gain(0, out), ENG = 4.5;   // (ENG: their level, a little under the old saws' (they were louder than the street's own cars))
+  const engines = [0, 1, 2].map((i) => ({ sp: M.spot(engOut, null, { ref: 8, verb: 0.5 }), g: null, mv: null, st: 'gap', t: 0.5 + i * 1.7 + R() * 2, kind: 'sedan', v: 0, pan: 0, d: 60, speed: 0, acc: 0, vmax: 12, next: 0, seed: R() }));
+  for (const e of engines) e.g = M.gain(0, e.sp.in);
   // an engine's next step (the place: how much traffic, how much city)
   function engine(e, traffic, city, avenue) {
     const t = M.now(), F = (p, v, k) => p.setTargetAtTime(v, t, k);
-    const pitch = (f, k) => { F(e.a.frequency, f, k); F(e.b.frequency, f / 2, k); };
     if (e.st === 'gap') {
       // a new one: a car (or on an avenue now and then a truck or a bus) a block or so off, idling
       if (city < 0.3 && R() < 0.8) { e.t = 4 + R() * 6; return; }
-      e.truck = R() < 0.12 + 0.2 * avenue;
-      e.f0 = e.truck ? 19 + R() * 5 : 26 + R() * 9;
-      e.pan = R() * 1.8 - 0.9; e.d = (e.truck ? 45 : 30) + R() * (90 - 40 * avenue);
-      e.v = (0.5 + 0.5 * R()) * (e.truck ? 1.25 : 1);
+      const truck = R() < 0.12 + 0.2 * avenue;
+      e.kind = truck ? 'bus' : R() < 0.3 ? 'suv' : 'sedan';
+      if (!M.motors?.ready(e.kind)) { e.t = 1; return; }
+      e.pan = R() * 1.8 - 0.9; e.d = (truck ? 45 : 30) + R() * (90 - 40 * avenue);
+      e.v = (0.5 + 0.5 * R()) * (truck ? 1.25 : 1);
       e.sp.fixed(e.pan, e.d);
-      e.a.frequency.setValueAtTime(e.f0, t); e.b.frequency.setValueAtTime(e.f0 / 2, t);
-      e.body.frequency.setValueAtTime(e.truck ? 125 : 180 + R() * 90, t);
-      F(e.lp.frequency, e.truck ? 320 : 380, 0.2);
-      F(e.g.gain, e.v * 0.4, 1.2);
+      e.mv?.dispose(); e.mv = M.motors.voice(e.kind, e.g); e.seed = R(); e.next = 0;
+      e.speed = 0; e.acc = 0; e.vmax = truck ? 9 + R() * 3 : 12 + R() * 5;
+      F(e.g.gain, e.v * 0.55, 1.2);
       e.st = 'idle'; e.t = 2 + R() * 6;
     } else if (e.st === 'idle') {
       // green: away up through first (most of them), or just fading off (it was round the corner)
-      if (R() < 0.75) { pitch(e.f0 * (e.truck ? 1.9 : 2.4), e.truck ? 1.4 : 0.8); F(e.lp.frequency, e.truck ? 650 : 900, 0.5); F(e.g.gain, e.v, 0.35); e.st = 'pull'; e.t = (e.truck ? 2.2 : 1.3) + R() * 1.2; }
+      if (R() < 0.75) { e.acc = e.kind === 'bus' ? 0.9 + R() * 0.3 : 1.1 + R() * 0.7; F(e.g.gain, e.v, 0.35); e.st = 'pull'; e.t = (e.kind === 'bus' ? 6 : 4.5) + R() * 2; }
       else { F(e.g.gain, 0, 1.5); e.st = 'away'; e.t = 4; }
     } else if (e.st === 'pull') {
-      // the change up: the note drops back and climbs again, the throttle off a moment
-      pitch(e.f0 * (e.truck ? 1.35 : 1.6), 0.07); e.g.gain.setTargetAtTime(e.v * 0.7, t, 0.05);
-      e.a.frequency.setTargetAtTime(e.f0 * (e.truck ? 2.1 : 2.7), t + 0.18, 1.2); e.b.frequency.setTargetAtTime(e.f0 * (e.truck ? 1.05 : 1.35), t + 0.18, 1.2);
-      e.g.gain.setTargetAtTime(e.v, t + 0.18, 0.2);
-      e.st = 'shift'; e.t = 1.4 + R() * 1.6;
-    } else if (e.st === 'shift') {
-      // gone down the avenue: quieter, duller, drifting across
-      F(e.g.gain, 0, 1.3); F(e.lp.frequency, 260, 1.4);
+      // gone down the avenue: quieter, duller, drifting across (still pulling a while: its next gear)
+      F(e.g.gain, 0, 1.6);
       e.sp.fixed(Math.max(-1, Math.min(1, e.pan + (R() - 0.5) * 0.8)), e.d * 1.8, 1.5);
-      e.st = 'away'; e.t = 4 + R() * 2;
+      e.st = 'away'; e.t = 5 + R() * 2;
+    } else if (e.st === 'away') {
+      F(e.g.gain, 0, 0.08); e.st = 'gone'; e.t = 0.4;
     } else {
+      e.mv?.dispose(); e.mv = null; e.acc = 0;
       e.st = 'gap'; e.t = 0.4 + R() * 4 / (0.3 + traffic);
     }
   }
@@ -146,8 +138,14 @@ export function createCity(M, E) {
     set(road.g.gain, city * (0.01 + 0.022 * avenue + 0.016 * tb));
     set(hiss.g.gain, city * (0.003 + 0.005 * tb));
     set(humG.gain, 0.05 * (1 - park) * (1 - 0.4 * tb));
-    set(engOut.gain, city * city * (0.58 + 0.5 * tb));
-    for (const e of engines) if ((e.t -= dt) <= 0) engine(e, tb, city, avenue);
+    set(engOut.gain, ENG * city * city * (0.58 + 0.5 * tb));
+    for (const e of engines) {
+      if ((e.t -= dt) <= 0) engine(e, tb, city, avenue);
+      // (its revs: what it does, ~15 times a second; once it's away the throttle eases to a cruise)
+      if (!e.mv) continue;
+      e.speed = Math.min(e.vmax, e.speed + e.acc * dt);
+      if ((e.next -= dt) <= 0) { e.next = 0.066; const acc = e.speed < e.vmax ? e.acc * (e.st === 'away' ? 0.5 : 1) : 0; e.mv.update({ speed: e.speed, load: motorLoad(e.speed, acc, e.kind), seed: e.seed }); }
+    }
     if (murmur) set(murmur.g.gain, 0.04 + 0.42 * crowd);
 
     // events, each on its own clock (faster where it belongs)
@@ -209,5 +207,5 @@ export function createCity(M, E) {
     if (T.steps <= 0) { if (crowd > 0.05) at('crowdStep', { d: 4 + R() * 12, vol: 0.12 + 0.2 * R(), surface: park > 0.6 ? 'grass' : 'hard', verb: 0.15 }); T.steps = 1 / (0.5 + 7 * crowd); }
   }
   // (force(name): an event now, for tests and scenes: honk, siren, subway, coo, chirp, flutter, build, whistle, heli, call)
-  return { update, startMurmur, force(name) { if (name in T) T[name] = 0; }, get where() { return w; } };
+  return { update, startMurmur, force(name) { if (name in T) T[name] = 0; }, get where() { return w; }, get engines() { return engines.map((e) => ({ st: e.st, kind: e.kind, on: !!e.mv })); } };
 }

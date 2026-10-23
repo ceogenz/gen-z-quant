@@ -421,7 +421,7 @@ Midday. The Degens launch $MOON2, a copycat coin with Moon's photo on it, at a r
     arch's east pier to the SUV, which tears off north up 5th Ave; Quant's car is put beside it (-3.2, 2787) facing
     north. Escape: `WAGMI.pursuit.start({ heat: 2, kind: 'degens', count: 2, from: (150, 2722) })`; 'lost' passes it,
     'caught' fails it ("The Degens caught you."); the thrusters unlock 2 s in (`unlock('all', { announce: true })`: its
-    own help, Space hop, Q/E dash). Return: the GPS to the bay door, a corona; Juno calls. Home scene (~13 s): Gears at
+    own help, Space hop, Z/C dash). Return: the GPS to the bay door, a corona; Juno calls. Home scene (~13 s): Gears at
     the door, "...in one piece." "Mostly."
   - Passed: TIME, RIGS SMASHED, DEGENS REKT, HITS TAKEN, FOLLOWERS +18,500, "NEW: bats · cold-gas thrusters"; the save;
     Pete's DM; the **P** at Sara D. Roosevelt Park (933, 3561: by the benches, clear of the park's trees) with a corona

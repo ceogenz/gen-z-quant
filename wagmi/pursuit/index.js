@@ -517,7 +517,7 @@ export function install(W) {
     }
     const at = [P.x, 0.7, P.z];
     if (d < 140 && W.audio?.ready) {
-      if (!P.hum) P.hum = loop('carHum', { pos: at, vol: 0 });
+      if (!P.hum) P.hum = loop('carHum', { pos: at, vol: 0, kind: P.kind !== 'police' && P.i % 2 === 0 ? 'suv' : 'sedan' }); // (the Degens' even cars are SUVs: cars.js)
       const rev = P.ram && !P.ram.go; // (the tell before a run at him: revving where it stands)
       P.hum?.set({ pos: at, speed: rev ? 14 : P.speed, load: rev ? 1 : clamp(0.35 + P.acc * 0.08, 0.2, 1), vol: rev ? 1.1 : 0.9 });
       if (P.kind === 'police') { const sp = [P.x, 1.6, P.z]; if (!P.siren) P.siren = loop('siren', { pos: sp, vol: 0.55, mode: 'wail' }); P.siren?.set({ pos: sp, mode: d < 45 ? 'yelp' : 'wail' }); }

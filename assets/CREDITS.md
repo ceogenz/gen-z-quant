@@ -68,7 +68,9 @@ The gearbox, shifts and pops (`wagmi/audio/supercar.js`) are original.
 
 ## The city
 
-The city is built on Slop New York by Mr.doob, under the MIT License (see [`LICENSE`](../LICENSE)).
+The city is built on Slop New York by Mr.doob, under the MIT License (see [`LICENSE`](../LICENSE)). Some city code is
+ported from Slop New York's newer commits by Mr.doob, under the same MIT License; each ported part names its commit in a
+short header comment.
 
 ## Street combat
 
@@ -83,8 +85,8 @@ The trash cans in `assets/props/trash-cans.glb` are "Metal Trash Can" by GurJas 
 
 ## Voices
 
-Quant's and Juno's lines are synthesised with [Qwen3-TTS](https://github.com/QwenLM/Qwen3-TTS) by the Qwen team,
-Alibaba Cloud (Apache-2.0): each voice was designed once from a written description and every line cloned from it, run
-with [mlx-audio](https://github.com/Blaizzy/mlx-audio) (MIT). The voices are invented. Everyone else's lines are
-placeholders made with the macOS speech voices; `NOTICE` explains their terms, and `docs/VOICE-LINES.md` explains how to
-replace them.
+Quant's, Juno's, Bagsy's, Lev's, Gears', Fiona's, Wick's and Fomo's lines are synthesised with
+[Qwen3-TTS](https://github.com/QwenLM/Qwen3-TTS) by the Qwen team, Alibaba Cloud (Apache-2.0): each voice was designed
+once from a written description and every line cloned from it, run with [mlx-audio](https://github.com/Blaizzy/mlx-audio)
+(MIT). The voices are invented. ZK's lines (and any character's not yet voiced) are placeholders made with the macOS
+speech voices; `NOTICE` explains their terms, and `docs/VOICE-LINES.md` explains how to replace them.

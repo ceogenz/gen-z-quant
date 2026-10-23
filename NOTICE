@@ -4,6 +4,8 @@ WAGMI City: notices and credits
 Slop New York
 -------------
 The city this game is built on is Slop New York by Mr.doob, under the MIT License (see LICENSE).
+Some city code is ported from Slop New York's newer commits by Mr.doob, under the same MIT License
+(see LICENSE); each ported part names its commit in a short header comment.
 
 
 Spiderbench (street combat)
@@ -129,16 +131,19 @@ Engine sounds
     licensed CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/). Changed: trimmed, pitch-flattened
     to constant engine speeds, looped, levelled and re-encoded to AAC.
   - The gearbox, the shifts, the pops and the mix (wagmi/audio/supercar.js) are original to WAGMI City.
+  - The traffic's engines and the crash's metal (wagmi/audio/motors.js, wagmi/audio/crunch.js): engine and
+    crash synthesis ported from Slop New York by Mr.doob (MIT), commits 0e5bbfb and 7772c09.
 
 
 Voices (assets/voice)
 ---------------------
-  - Quant and Juno: synthesised with Qwen3-TTS by the Qwen team, Alibaba Cloud (Apache-2.0,
-    https://github.com/QwenLM/Qwen3-TTS). Each voice was designed once with Qwen3-TTS-12Hz-1.7B-VoiceDesign
-    and every line cloned from it with Qwen3-TTS-12Hz-0.6B-Base, using the mlx-community conversions
-    (Apache-2.0) run with mlx-audio (MIT, https://github.com/Blaizzy/mlx-audio). The voices are invented:
-    no real person's voice was used. Their reference clips are in wagmi/radio/build/tts/.
-  - Everyone else (ZK, Bagsy, Lev, Gears, Fiona and the rest): placeholders made with the macOS speech
-    voices (the `say` command; ZK's through a voice changer made in code). They are meant to be replaced
-    by recordings or synthesised voices like Quant's and Juno's. assets/voice/manifest.json records
-    each line's source; docs/VOICE-LINES.md is the line sheet and says how to drop new voices in.
+  - Quant, Juno, Bagsy, Lev, Gears, Fiona, Wick and Fomo: synthesised with Qwen3-TTS by the Qwen team,
+    Alibaba Cloud (Apache-2.0, https://github.com/QwenLM/Qwen3-TTS). Each voice was designed once with
+    Qwen3-TTS-12Hz-1.7B-VoiceDesign and every line cloned from it with Qwen3-TTS-12Hz-0.6B-Base, using the
+    mlx-community conversions (Apache-2.0) run with mlx-audio (MIT, https://github.com/Blaizzy/mlx-audio).
+    The voices are invented: no real person's voice was used. Their reference clips are in
+    wagmi/radio/build/tts/.
+  - ZK (and any character not yet voiced): placeholders made with the macOS speech voices (the `say`
+    command; ZK's through a voice changer made in code). They are meant to be replaced by recordings or
+    synthesised voices like the others'. assets/voice/manifest.json records each line's source;
+    docs/VOICE-LINES.md is the line sheet and says how to drop new voices in.

@@ -34,7 +34,7 @@ export const CREDITS = [
     { what: '"Maserati GranTurismo S Exhaust"', who: 'lmartins', note: 'Quant\'s car: loops cut at five engine speeds', licence: 'CC BY 4.0', licenceUrl: 'https://creativecommons.org/licenses/by/4.0/', src: 'https://commons.wikimedia.org/wiki/File:Maserati_GranTurismo_S_Exhaust.ogg' },
   ] },
   { heading: 'The city', lines: [
-    { what: 'Slop New York', who: 'Mr.doob', note: 'the city this game is built on', licence: 'MIT', licenceUrl: 'https://opensource.org/license/mit', src: null },
+    { what: 'Slop New York', who: 'Mr.doob', note: 'the city this game is built on; some city code is ported from its newer commits', licence: 'MIT', licenceUrl: 'https://opensource.org/license/mit', src: null },
   ] },
   { heading: 'Street combat', lines: [
     { what: 'Spiderbench combat', who: 'Shikhar', note: 'the street fight, the Degens\' rig and the freeflow clips, used with the author\'s permission (not MIT)', licence: null, licenceUrl: null, src: null },
@@ -43,8 +43,8 @@ export const CREDITS = [
     { what: '"Metal Trash Can"', who: 'GurJas Studios, from Poly Haven', note: '', licence: 'CC0 1.0', licenceUrl: LICENCES['CC0 1.0'], src: 'https://polyhaven.com/a/metal_trash_can' },
   ] },
   { heading: 'Voices', lines: [
-    { what: 'Quant and Juno', who: 'synthesised with Qwen3-TTS (the Qwen team, Alibaba Cloud)', note: 'invented voices, run with mlx-audio (MIT)', licence: 'Apache-2.0', licenceUrl: 'https://www.apache.org/licenses/LICENSE-2.0', src: 'https://github.com/QwenLM/Qwen3-TTS' },
-    { what: 'Everyone else', who: 'placeholder voices (macOS speech)', note: 'to be replaced', licence: null, licenceUrl: null, src: null },
+    { what: 'Quant, Juno, Bagsy, Lev, Gears, Fiona, Wick and Fomo', who: 'synthesised with Qwen3-TTS (the Qwen team, Alibaba Cloud)', note: 'invented voices, run with mlx-audio (MIT)', licence: 'Apache-2.0', licenceUrl: 'https://www.apache.org/licenses/LICENSE-2.0', src: 'https://github.com/QwenLM/Qwen3-TTS' },
+    { what: 'ZK', who: 'placeholder voice (macOS speech)', note: 'to be replaced', licence: null, licenceUrl: null, src: null },
   ] },
 ];
 

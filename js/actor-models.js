@@ -1050,7 +1050,7 @@ function createLoftedCarMaterial(spec, fixedColorHex = null) {
     .mul(smoothstep(0.02, 0.25, n.z.negate()))
     .mul(step(p.z, rearZone))
     .mul(isBody);
-  const turnRear = smoothstep(tlX - tlW * 0.35, tlX - tlW * 0.45, ax).mul(taillight);
+  const turnRear = smoothstep(tlX + tlW * 0.35, tlX + tlW * 0.45, ax).mul(taillight);
   const plateRear = roundedRect(vec2(p.x, p.y.sub(plateR)), vec2(0.155, 0.06), 0.008).mul(rear);
   const plateRecess = roundedRect(vec2(p.x, p.y.sub(plateR)), vec2(0.185, 0.082), 0.02).mul(rear);
   const diffuser = roundedRect(vec2(p.x, p.y.sub(rearSill + 0.035)), vec2(0.58, 0.028), 0.02).mul(rear);
@@ -1145,7 +1145,8 @@ function createLoftedCarMaterial(spec, fixedColorHex = null) {
   const slats = step(0.5, fract(p.y.mul(42.0))).mul(0.4).add(0.6);
   body = mix(body, color(0x111417).mul(slats), max(intake, grille));
   body = mix(body, mix(mix(color(0x23292f), color(0xdfe9f2), headlightLens), color(0xffffff), drl), headlight);
-  // Tail: diffuser, reflectors, wraparound lamps (amber inner turn signal), plate recess; plates; dark underbody
+  // Tail: diffuser, reflectors, wraparound lamps (amber outer turn signal), plate recess; plates; dark underbody
+  // (WAGMI City: the amber at the lamps' outer edge ported from Slop New York by Mr.doob, MIT, commit 168c3a4)
   body = mix(body, color(0x15181b), diffuser);
   body = mix(body, color(0x7a0a10), reflector);
   body = mix(body, mix(color(0x8c0a12), color(0xc24d10), turnRear), taillight);

@@ -46,6 +46,7 @@ test('preset and map teleports share arrival resets and mark the resolved landin
       teleportActiveTo: (...args) => { calls.push(['teleport', ...args]); return landed; }
     },
     touchControls: { reset: () => calls.push(['touch']) },
+    gamepadControls: { reset: () => calls.push(['gamepad']) },
     cameraSystem: { resetForTeleport: () => calls.push(['camera']) },
     selectCamera: (...args) => calls.push(['selectCamera', ...args]),
     getLocationLabel: (x, z) => `${x}, ${z}`,
@@ -64,7 +65,7 @@ test('preset and map teleports share arrival resets and mark the resolved landin
     calls.length = 0;
     handlers.get(name)();
     assert.deepEqual(calls, [
-      ['teleport', point.x, point.z, point.heading], ['touch'], ['camera'], ['selectCamera', 'chase', true]
+      ['teleport', point.x, point.z, point.heading], ['touch'], ['gamepad'], ['camera'], ['selectCamera', 'chase', true]
     ]);
     assert.equal(map.waypoint.x, landed.x);
     assert.equal(map.waypoint.z, landed.z);

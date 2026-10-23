@@ -2,8 +2,10 @@
 // (already placed); set() takes what it understands (vol, rate, speed m/s, load 0..1, dop the doppler factor, mode).
 //   siren    an NYPD siren through its horn speaker: mode 'wail' (a slow rise and fall), 'yelp' (fast), 'phaser'
 //            (faster still) or 'off'
-//   carHum   a car going by: its engine's low hum (rising with speed and load) and its tyres' hiss
-//   busHum   a bus's diesel: a low thrum and the clatter of its firing, a turbo's whistle under load
+//   carHum   a car's engine (motors.js, after Slop New York: its firing, its gears, its tyres at speed; speed, load,
+//            dop, kind 'sedan' | 'suv' | 'bus'), for whoever drives one (the chase's cars); silent until its sound is made
+//   busHum   the same, a bus's diesel
+//   hum      the old synthesised car hum (a saw at the firing rate and the tyres' hiss), kept for anyone who wants one
 //   rumble, wind, hiss, roar, squeal, crowd   plain beds (a deep traffic roar, rushing air, a jet of gas, a rocket,
 //            tyres screaming, a crowd's murmur) for anyone who needs one
 const ramp = (M, p, v, k = 0.05) => p.setTargetAtTime(v, M.now(), k);
@@ -37,7 +39,10 @@ export const LOOPS = {
     return { sources, set(o = {}) { if (o.mode) mode = o.mode; if (o.dop) dop = o.dop; if (o.vol != null) vol = o.vol; apply(); }, stop: finish(M, out, sources), get mode() { return mode; } };
   },
 
-  carHum(M, dest) {
+  carHum(M, dest) { return motorLoop(M, dest, 'sedan'); },
+  busHum(M, dest) { return motorLoop(M, dest, 'bus'); },
+
+  hum(M, dest) {
     const out = M.gain(0, dest);
     // (the engine is what says "a car": its firing and the half-order lope under it, through the exhaust's body; the
     // tyres' band is kept under it, or a street of them passing is surf)
@@ -57,29 +62,6 @@ export const LOOPS = {
         ramp(M, rg.gain, 0.03 + 0.06 * Math.min(1, v / 12));
         ramp(M, tbp.frequency, (650 + v * 30) * dop);
         ramp(M, tg.gain, 0.4 * Math.pow(Math.min(1, v / 14), 1.4));
-        if (vol != null) ramp(M, out.gain, vol, 0.06);
-      },
-      stop: finish(M, out, sources),
-    };
-  },
-
-  busHum(M, dest) {
-    const out = M.gain(0, dest);
-    const e1 = M.osc('sawtooth', 24), elp = M.filt('lowpass', 240, 1.6), eg = M.gain(0.16); e1.connect(elp); elp.connect(eg); eg.connect(out);
-    // the clatter: noise gated at the firing rate
-    const n = M.src(M.white), nbp = M.filt('bandpass', 1500, 1.1), ng = M.gain(0), fire = M.osc('square', 24), fd = M.gain(0.12);
-    n.connect(nbp); nbp.connect(ng); ng.connect(out); fire.connect(fd); fd.connect(ng.gain);
-    const tw = M.osc('sine', 2300), tg = M.gain(0); tw.connect(tg); tg.connect(out);
-    const ty = M.src(M.pink), tbp = M.filt('bandpass', 650, 1.0), tyg = M.gain(0); ty.connect(tbp); tbp.connect(tyg); tyg.connect(out);
-    const sources = [e1, n, fire, tw, ty]; for (const s of sources) s.start();
-    return {
-      sources,
-      set({ speed = 0, load = 0.3, dop = 1, vol } = {}) {
-        const v = Math.abs(speed), f = (22 + v * 2.6 + load * 6) * dop;
-        ramp(M, e1.frequency, f); ramp(M, fire.frequency, f); ramp(M, elp.frequency, 200 + 400 * load + v * 10);
-        ramp(M, fd.gain, 0.05 + 0.07 * load);
-        ramp(M, tw.frequency, (1800 + v * 120) * dop); ramp(M, tg.gain, 0.012 * load * Math.min(1, v / 4));
-        ramp(M, tyg.gain, 0.3 * Math.pow(Math.min(1, v / 12), 1.5));
         if (vol != null) ramp(M, out.gain, vol, 0.06);
       },
       stop: finish(M, out, sources),
@@ -106,6 +88,38 @@ export const LOOPS = {
   crowd(M, dest) { return bed(M, dest, M.babble || M.pink, 'bandpass', 900, 0.5); },
 };
 LOOPS.engine = LOOPS.carHum; LOOPS.traffic = LOOPS.rumble;
+
+// an engine from motors.js as a loop: made once its kind's sound is ready, its revs updated ~15 times a second however
+// often it is set; (o.kind chooses the engine until it is made)
+const MOTOR_LEVEL = 0.65;   // (as loud as the old hum at the same vol)
+function motorLoop(M, dest, kind0) {
+  const out = M.gain(0, dest);
+  let mv = null, kind = kind0, last = -1, speed = 0, load = 0.3, dop = 1, gone = false;
+  const seed = M.R();
+  return {
+    sources: [],
+    wantsDop: true,
+    get engine() { return mv ? kind : null; },
+    set(o = {}) {
+      if (gone) return;
+      if (o.kind && !mv) kind = o.kind;
+      if (o.speed != null) speed = Math.abs(o.speed);
+      if (o.load != null) load = o.load;
+      if (o.dop) dop = o.dop;
+      if (!mv && M.motors?.ready(kind)) mv = M.motors.voice(kind, out);
+      const now = M.now();
+      if (mv && (last < 0 || now - last >= 0.06)) { last = now; mv.update({ speed, load, doppler: dop, seed }, now); }
+      if (o.vol != null) ramp(M, out.gain, o.vol * MOTOR_LEVEL, 0.06);
+    },
+    stop(secs = 0.3) {
+      if (gone) return; gone = true;
+      const t = M.now();
+      out.gain.cancelScheduledValues(t); out.gain.setValueAtTime(out.gain.value, t); out.gain.linearRampToValueAtTime(0, t + secs);
+      const end = () => { mv?.dispose(); try { out.disconnect(); } catch {} };
+      if (M.live) setTimeout(end, (secs + 0.2) * 1000); else end();
+    },
+  };
+}
 
 function bed(M, dest, buf, type, f, q, drive = 0) {
   const out = M.gain(0, dest), s = M.src(buf), fl = M.filt(type, f, q);

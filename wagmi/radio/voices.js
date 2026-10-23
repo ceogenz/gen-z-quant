@@ -91,7 +91,7 @@ export async function createVoice(W, out) {
       // (nothing while the sound is held: the pause menu)
       if (!cur || !ana || ctx.state !== 'running') return 0;
       ana.getFloatTimeDomainData(data); let e = 0; for (const v of data) e += v * v;
-      return Math.min(1, Math.sqrt(e / data.length) * 5);
+      return Math.min(1, Math.sqrt(e / data.length) * 3.5);
     },
     fx(speaker, kind) { if (kind === undefined) delete fxOf[speaker]; else fxOf[speaker] = kind; },
     warm,

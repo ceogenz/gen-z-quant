@@ -618,9 +618,10 @@ export function buildRoadster(THREE, o = {}) {
   }
   // the thrusters: gunmetal bells set 2 cm into the beam, a thin bright lip; their throats glow as they light
   const NZ = NZX.map((x) => V3(x, NZY, ZB + 0.02));
-  const uCold = uniform(0), uBurn = uniform(0), uT = uniform(0), uPuff = uniform(0);
+  // (uElec: ALL ELECTRIC, the drive mode: the burn and the throats' glow go cyan for orange; setElectric)
+  const uCold = uniform(0), uBurn = uniform(0), uT = uniform(0), uPuff = uniform(0), uElec = uniform(0);
   const throatM = new THREE.MeshBasicNodeMaterial();
-  throatM.colorNode = mix(vec3(0.55, 0.75, 1.0), vec3(1.0, 0.55, 0.18), uBurn.div(max(uCold.add(uBurn), 0.001))).mul(max(uCold, uBurn).mul(2.6).add(0.04));
+  throatM.colorNode = mix(vec3(0.55, 0.75, 1.0), mix(vec3(1.0, 0.55, 0.18), vec3(0.15, 0.9, 1.0), uElec), uBurn.div(max(uCold.add(uBurn), 0.001))).mul(max(uCold, uBurn).mul(2.6).add(0.04));
   for (const p of NZ) {
     // (lathe outlines [radius, out along the axle]: the bell from deep inside to its lip, then the lip's bright rim)
     const bell = new THREE.Mesh(new THREE.LatheGeometry([[0.027, -0.12], [0.03, -0.05], [0.035, -0.008], [0.0372, 0], [0.0425, 0], [0.0428, -0.06]].map(([a, b]) => new THREE.Vector2(a, b)), 28), M.nozzle);
@@ -762,14 +763,16 @@ export function buildRoadster(THREE, o = {}) {
     return mergeGeometries(geos);
   }
   // (floor: how much of it still shows edge on, as when the jet points at the camera)
-  function plumeMat({ c0, c1, gain, level, fade = 1.6, diamonds = 0, edge = 1.4, additive = true, floor = 0 }) {
+  // (e0, e1: its colours while electric, uElec mixing them in)
+  function plumeMat({ c0, c1, e0, e1, gain, level, fade = 1.6, diamonds = 0, edge = 1.4, additive = true, floor = 0 }) {
     const m = new THREE.MeshBasicNodeMaterial({ transparent: true, depthWrite: false, side: THREE.DoubleSide, blending: additive ? THREE.AdditiveBlending : THREE.NormalBlending });
     const t = uv().y, seed = attribute('seed', 'float');
     const facing = mix(float(floor), float(1), pow(abs(normalView.dot(positionViewDirection)), float(edge)));
     const flick = sin(uT.mul(61).add(seed.mul(13))).mul(sin(uT.mul(27).add(seed.mul(7)))).mul(0.14).add(0.9);
     let k = pow(float(1).sub(t), float(fade));
     if (diamonds) k = k.mul(pow(abs(cos(t.mul(diamonds * Math.PI).sub(uT.mul(3)).add(seed))), float(5)).mul(1.6).add(0.3));
-    m.colorNode = mix(vec3(...c0), vec3(...c1), t).mul(gain);
+    const col = mix(vec3(...c0), vec3(...c1), t);
+    m.colorNode = (e0 ? mix(col, mix(vec3(...e0), vec3(...e1), t), uElec) : col).mul(gain);
     m.opacityNode = k.mul(facing).mul(flick).mul(level).clamp(0, 1);
     return m;
   }
@@ -788,18 +791,18 @@ export function buildRoadster(THREE, o = {}) {
   // the burn: a yellow-white tongue with its own diamonds (drawn solid so it reads against a bright sky) inside an
   // orange flame no wider than its own nozzle's share of the tail
   const fireCore = plume(plumeGeo((t) => Math.max(0.004, 0.028 + 0.014 * Math.sin(Math.PI * Math.min(1, t * 1.6)) - 0.036 * t * t)),
-    plumeMat({ c0: [1.0, 0.78, 0.36], c1: [1.0, 0.38, 0.08], gain: 1.6, level: uBurn.mul(0.85), fade: 0.8, diamonds: 4, edge: 0.5, additive: false }), 1.6);
+    plumeMat({ c0: [1.0, 0.78, 0.36], c1: [1.0, 0.38, 0.08], e0: [0.6, 0.98, 1.0], e1: [0.05, 0.78, 1.0], gain: 1.6, level: uBurn.mul(0.85), fade: 0.8, diamonds: 4, edge: 0.5, additive: false }), 1.6);
   const fireOuter = plume(plumeGeo((t) => 0.038 + 0.047 * Math.sin(Math.PI * Math.pow(t, 0.6)) * (1 - 0.35 * t)),
-    plumeMat({ c0: [1.0, 0.42, 0.1], c1: [0.85, 0.14, 0.03], gain: 1.45, level: uBurn.mul(0.75), fade: 1.0, edge: 1.3 }), 3.8);
+    plumeMat({ c0: [1.0, 0.42, 0.1], c1: [0.85, 0.14, 0.03], e0: [0.0, 0.85, 1.0], e1: [0.0, 0.45, 0.9], gain: 1.45, level: uBurn.mul(0.75), fade: 1.0, edge: 1.3 }), 3.8);
   // (and round it, drawn solid, a dark orange flame going to smoke, so the burn reads in daylight too)
   const fireSmoke = plume(plumeGeo((t) => 0.05 + 0.13 * Math.pow(t, 0.8)),
-    plumeMat({ c0: [0.95, 0.4, 0.1], c1: [0.34, 0.3, 0.28], gain: 1.0, level: uBurn.mul(0.4), fade: 1.2, edge: 1.4, additive: false, floor: 0.3 }), 3.0);
+    plumeMat({ c0: [0.95, 0.4, 0.1], c1: [0.34, 0.3, 0.28], e0: [0.05, 0.7, 0.88], e1: [0.26, 0.32, 0.36], gain: 1.0, level: uBurn.mul(0.4), fade: 1.2, edge: 1.4, additive: false, floor: 0.3 }), 3.0);
   fireSmoke.renderOrder = 4;
   // a burst at each nozzle's mouth, always facing the camera, so the jets read even end on, from the chase camera
   const burstM = new THREE.SpriteNodeMaterial({ transparent: true, depthWrite: false });
   {
     const d = uv().sub(vec2(0.5)).length().mul(2), share = uBurn.div(max(uCold.add(uBurn), 0.001));
-    burstM.colorNode = mix(vec3(0.92, 0.96, 1.0), vec3(1.0, 0.62, 0.24), share).mul(1.5);
+    burstM.colorNode = mix(vec3(0.92, 0.96, 1.0), mix(vec3(1.0, 0.62, 0.24), vec3(0.3, 0.92, 1.0), uElec), share).mul(1.5);
     burstM.opacityNode = pow(max(float(1).sub(d), 0), float(1.4)).mul(max(uCold.mul(0.75), uBurn.mul(0.9)));
   }
   const bursts = NZ.map((p) => { const b = new THREE.Sprite(burstM); b.position.set(p.x, p.y, P0 - 0.07); b.renderOrder = 6; g.add(b); plumes.push(b); return b; });
@@ -868,7 +871,8 @@ export function buildRoadster(THREE, o = {}) {
     for (const b of billows) b.scale.setScalar(0.4 + 0.8 * uPuff.value);
     const bs = 0.14 + 0.34 * Math.max(cold, burn) * j; for (const b of bursts) b.scale.setScalar(bs);
     glow.intensity = burn * 2.4 + cold * 0.4;
-    glow.color.setRGB(1, 0.62 + 0.3 * (1 - burn), 0.32 + 0.6 * (1 - burn));
+    const eb = uElec.value * burn;
+    glow.color.setRGB(1 - 0.6 * eb, 0.62 + 0.3 * (1 - burn) + 0.28 * eb, 0.32 + 0.6 * (1 - burn) + 0.68 * eb);
   }
 
   /* -------------------------------------------------------------- driving -- */
@@ -886,7 +890,9 @@ export function buildRoadster(THREE, o = {}) {
   // the doors: setDoor / door(side, t), t 0 shut to 1 up; doorT(side) how far open it is. The cabin: anchor (a group in
   // the car's own frame, for a driver), seat (his marks, the driver's side; mirror x for the passenger's), grip(side) the
   // world point a hand holds the yoke at
-  return { group: g, materials: M, wheels, setThrust, update, length: ZF - ZR, width: 2.0, height: 1.16,
+  // ALL ELECTRIC (wagmi/game.js calls it with the drive mode): the burn cyan, not orange
+  const setElectric = (on) => { uElec.value = on ? 1 : 0; };
+  return { group: g, materials: M, wheels, setThrust, setElectric, update, length: ZF - ZR, width: 2.0, height: 1.16,
     setDoor, door: setDoor, doorT: (sideK) => doors[sideK]?.t ?? 0, doors, anchor, seat: SEAT, grip: gripOf, yoke };
 }
 

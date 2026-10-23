@@ -45,10 +45,20 @@ export function createEngine(M) {
     const spot = o.pos ? M.spot(dest, o.pos, { ref: o.ref ?? 8, verb: o.verb ?? 0.3 }) : o.pan != null || o.d != null ? M.spot(dest, null, { ref: o.ref ?? 8, verb: o.verb ?? 0.3 }).fixed(o.pan ?? 0, o.d ?? 0) : null;
     const v = M.gain(1, spot ? spot.in : dest);
     const L = fn(M, v);
-    let rate = 1;
+    let rate = 1, was = null;
     const h = {
       set(p = {}) {
-        if (p.pos && spot) spot.set(p.pos);
+        if (p.pos && spot) {
+          spot.set(p.pos);
+          // (a loop that wants it, an engine: its doppler, from how fast its place moves)
+          if (L.wantsDop && p.dop == null) {
+            const now = M.now(), [x, y, z] = p.pos;
+            if (was && now - was.t > 0.004) { const dt = now - was.t, k = Math.min(1, dt * 8); was.vx += ((x - was.x) / dt - was.vx) * k; was.vz += ((z - was.z) / dt - was.vz) * k; }
+            if (!was || Math.hypot(x - was.x, z - was.z) > 15) was = { vx: 0, vz: 0 };
+            Object.assign(was, { x, z, t: now });
+            p = { ...p, dop: M.doppler(x, y ?? 1, z, was.vx, was.vz) };
+          }
+        }
         else if ((p.pan != null || p.d != null) && spot && !spot.pos) spot.fixed(p.pan ?? 0, p.d ?? 0, 0.05);
         if (p.rate) rate = p.rate;
         L.set({ ...p, vol: p.vol ?? undefined, rate: p.rate ?? rate });
@@ -57,6 +67,7 @@ export function createEngine(M) {
       stop(secs = 0.3) { L.stop(secs); loops.delete(h); if (M.live) setTimeout(() => { try { v.disconnect(); } catch {} spot?.off(); }, (secs + 0.3) * 1000); },
       spot,
       get mode() { return L.mode; },
+      get engine() { return L.engine ?? null; },
     };
     L.set({ vol: o.vol ?? 1, ...o });
     if (spot && spot.pos) loops.add(h);

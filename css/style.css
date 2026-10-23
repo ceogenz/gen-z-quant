@@ -1450,3 +1450,45 @@ body.touch-enabled .pop-item { min-height: 44px; }
     transition-duration: 0.01ms !important;
   }
 }
+
+/* ---- WAGMI City: a game pad's buttons in place of the key caps (wagmi/pad.js: kbd.wgp, while a pad is the last
+   thing used, body.wg-pad). Sized from the key cap's own font, so they fit wherever a key cap was ---- */
+#wg-prompt kbd:not(.wgp) { all: unset; }
+kbd.wgp {
+  display: inline-flex !important; align-items: center; justify-content: center; vertical-align: middle; flex: none; box-sizing: border-box;
+  height: max(17px, 1.5em) !important; min-width: max(17px, 1.5em) !important; width: auto !important; padding: 0 .38em !important; margin: 0 .12em !important;
+  border: 0 !important; border-radius: 999px !important; font-family: var(--font-sans), system-ui, sans-serif !important; font-weight: 800 !important;
+  line-height: 1 !important; letter-spacing: 0 !important; text-transform: none !important; text-shadow: none !important; text-align: center;
+  color: #fff !important; background: #16191F !important; box-shadow: inset 0 0 0 1.5px rgba(255, 255, 255, 0.42), 0 1px 3px rgba(0, 0, 0, 0.5) !important;
+}
+kbd.wgp > span { font-size: .72em; }
+kbd.wgp svg { width: 72% !important; height: 72% !important; flex: none; transform: none !important; }
+/* (a ring's own svg rules where a key cap sits in it, the hold ring's and the skip's: not the button's) */
+kbd.wgp svg circle, kbd.wgp svg rect, kbd.wgp svg path { stroke-width: inherit !important; }
+kbd.wgp.wgp-dup { display: none !important; }
+/* face buttons: a dark disc, Xbox's letters in their colours (and any other pad's), PlayStation's shapes */
+kbd.wgp-face { width: max(17px, 1.5em) !important; padding: 0 !important; }
+kbd.wgp-face > span { font-size: .86em; }
+kbd.wgp-a { color: #6BD84E !important; box-shadow: inset 0 0 0 1.5px #6BD84E, 0 1px 3px rgba(0, 0, 0, 0.5) !important; }
+kbd.wgp-b { color: #FF5B52 !important; box-shadow: inset 0 0 0 1.5px #FF5B52, 0 1px 3px rgba(0, 0, 0, 0.5) !important; }
+kbd.wgp-x { color: #4FA9FF !important; box-shadow: inset 0 0 0 1.5px #4FA9FF, 0 1px 3px rgba(0, 0, 0, 0.5) !important; }
+kbd.wgp-y { color: #FFD23F !important; box-shadow: inset 0 0 0 1.5px #FFD23F, 0 1px 3px rgba(0, 0, 0, 0.5) !important; }
+kbd.wgp-ps.wgp-a { color: #8FB8FF !important; box-shadow: inset 0 0 0 1.5px rgba(255, 255, 255, 0.42), 0 1px 3px rgba(0, 0, 0, 0.5) !important; }
+kbd.wgp-ps.wgp-b { color: #FF6E78 !important; box-shadow: inset 0 0 0 1.5px rgba(255, 255, 255, 0.42), 0 1px 3px rgba(0, 0, 0, 0.5) !important; }
+kbd.wgp-ps.wgp-x { color: #FF8FD8 !important; box-shadow: inset 0 0 0 1.5px rgba(255, 255, 255, 0.42), 0 1px 3px rgba(0, 0, 0, 0.5) !important; }
+kbd.wgp-ps.wgp-y { color: #3FE3B4 !important; box-shadow: inset 0 0 0 1.5px rgba(255, 255, 255, 0.42), 0 1px 3px rgba(0, 0, 0, 0.5) !important; }
+kbd.wgp-ps svg { fill: none; stroke: currentColor; stroke-width: 2.3; stroke-linecap: round; stroke-linejoin: round; }
+kbd.wgp-sys svg { fill: none; stroke: #fff; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+/* shoulders (a pill) and triggers (squarer below); sticks and their clicks (a ring); the D-pad (its pressed arm lit) */
+kbd.wgp-sh { border-radius: .42em !important; padding: 0 .42em !important; }
+kbd.wgp-tr { border-radius: .7em .7em .32em .32em !important; }
+kbd.wgp-word > span { font-size: .56em; letter-spacing: .06em; }
+kbd.wgp-st { box-shadow: inset 0 0 0 1.5px rgba(255, 255, 255, 0.42), inset 0 0 0 3.5px #16191F, inset 0 0 0 5px rgba(255, 255, 255, 0.16), 0 1px 3px rgba(0, 0, 0, 0.5) !important; padding: 0 .3em !important; }
+kbd.wgp-st > span { font-size: .6em; }
+kbd.wgp-st.wgp-click > span { color: #FFC93C; }
+kbd.wgp-dp { border-radius: .32em !important; padding: 0 !important; width: max(17px, 1.5em) !important; }
+kbd.wgp-dp svg { width: 86% !important; height: 86% !important; }
+kbd.wgp-dp .b { fill: rgba(255, 255, 255, 0.3); }
+kbd.wgp-dp .o { fill: #FFC93C; }
+/* (a line that says one thing for the keyboard and another for a pad) */
+body:not(.wg-pad) .wg-padonly, body.wg-pad .wg-nopad { display: none !important; }

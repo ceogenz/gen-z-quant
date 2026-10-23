@@ -782,7 +782,7 @@ function createMission(W, { keep = false } = {}) {
       // the thrusters: Gears' cold-gas, unlocked now (their own help, after the line above has had its time)
       delay(7.2).then(() => {
         if (W.thrusters?.unlock) W.thrusters.unlock('all', { announce: true });
-        else ui.help(['Cold-gas thrusters: [Space] hops the car, [Q] / [E] dash it sideways.'], 9);
+        else ui.help(['Cold-gas thrusters: [Space] hops the car, [Z] / [C] dash it sideways.'], 9);
       }).catch(() => {});
       delay(9).then(() => junoEscape()).catch(() => {});
       // (they come out of W 8th St onto 5th Ave, ~80 m up from him, out of sight until they turn the corner: from just

@@ -710,15 +710,15 @@ Object.defineProperty(person, 'control', { configurable: true, get: () => contro
 }
 addEventListener('keydown', (e) => {
   if (e.code !== 'KeyF' || e.repeat) return;
-  // (the game's own F: the old way, at once)
-  if (!e.isTrusted) { if (cm.activeMode === 'person' && near()) inQuick(); else if (cm.activeMode === 'car' && Math.abs(car.speed) < 4) outQuick(); return; }
+  // (the game's own F: the old way, at once; a game pad's (wagmi/pad.js, e.wgPad) is the player's, as a real key)
+  if (!e.isTrusted && !e.wgPad) { if (cm.activeMode === 'person' && near()) inQuick(); else if (cm.activeMode === 'car' && Math.abs(car.speed) < 4) outQuick(); return; }
   if (WAGMI.cutscene || WAGMI.directed) return;
   if (ride.phase) return skip();
   if (cm.activeMode === 'person' && near()) getIn(!!WAGMI.combat?.fighting);
   else if (cm.activeMode === 'car') getOut();
 });
 addEventListener('keydown', (e) => {
-  if (!ride.phase || !e.isTrusted || e.repeat || !MOVE.has(e.code)) return;
+  if (!ride.phase || (!e.isTrusted && !e.wgPad) || e.repeat || !MOVE.has(e.code)) return;
   // (braking to get out: the throttle or reverse keeps him driving)
   if (ride.phase === 'stop') { if (/W|S|Up|Down/.test(e.code)) { ride.phase = null; car.halt = 0; } return; }
   if (ride.phase === 'bail') return;
@@ -801,6 +801,7 @@ body[data-mode='car'] #wg-drive { display: inline-flex; }
 }
 
 const hint = document.createElement('div');
+hint.id = 'wg-prompt';
 Object.assign(hint.style, { position: 'fixed', left: '50%', bottom: '120px', transform: 'translateX(-50%)', padding: '10px 18px', borderRadius: '12px',
   background: 'rgba(10,12,18,0.72)', color: '#fff', font: '600 15px system-ui, sans-serif', letterSpacing: '0.04em', zIndex: 20, display: 'none', pointerEvents: 'none',
   transition: 'bottom 0.2s', whiteSpace: 'nowrap' });
@@ -827,7 +828,10 @@ let last = performance.now();
   const pinned = cm.activeMode === 'car' && (WAGMI.carStuck?.() || 0) > 1.2;
   const show = ride.phase || WAGMI.paused || WAGMI.cutscene || WAGMI.directed ? '' : cm.activeMode === 'person' && near() ? 'F  ·  Get in'
     : pinned ? 'X  ·  Reset car to road' : cm.activeMode === 'car' && Math.abs(car.speed) < 4 ? 'F  ·  Get out' : '';
-  if (hint.textContent !== show) hint.textContent = show;
+  // (the key in a key cap that reads as plain text, so a game pad's button can stand in for it: wagmi/pad.js; what is
+  // offered, WAGMI.prompt, for the pad's Y: the car's door, or else the fight's heavy)
+  WAGMI.prompt = show;
+  if (hint.dataset.s !== show) { hint.dataset.s = show; hint.innerHTML = show ? `<kbd>${show[0]}</kbd>${show.slice(1)}` : ''; }
   hint.style.display = show ? 'block' : 'none';
   if (show) placeHint();
   requestAnimationFrame(tick);
@@ -836,6 +840,6 @@ WAGMI.ready = true;
 console.log('[wagmi] Quant and the car are in');
 
 // the rest of the game, a module each (one that fails to load leaves the others running)
-for (const m of ['./audio/index.js', './combat/index.js', './street/index.js', './crash/index.js', './pursuit/index.js', './radio/index.js', './intro.js', './mission/m2.js', './mission/m3.js']) {
+for (const m of ['./pad.js', './audio/index.js', './combat/index.js', './street/index.js', './crash/index.js', './pursuit/index.js', './radio/index.js', './intro.js', './mission/m2.js', './mission/m3.js']) {
   try { const mod = await import(m); if (mod.install) await mod.install(WAGMI); } catch (err) { console.error('[wagmi]', m, err); }
 }

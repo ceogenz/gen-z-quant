@@ -207,8 +207,9 @@ const GEO = {
   broadway: flat(broadway),
   plazas: PLAZAS.map((p) => ({ name: p.name, a: p.a.map(q), b: p.b.map(q), w: p.w })),
   roads: roadLines.map((r) => [r.name, r.w ? q(r.w) : 0, r.dir || '', r.lanes || 0, r.hw ? 1 : 0, flat(r.pts)]),
-  // Street centreline graph south of 14th St (geo-roadgraph.mjs): nodes [x, z, ...], links [node a, node b, name
-  // index, curb-to-curb width, travel lanes, direction (1: a -> b, -1: b -> a, 0: both), inner shape points [x, z, ...]]
+  // Street centreline graph for Lower Manhattan and northern non-grid roads (geo-roadgraph.mjs): nodes [x, z, ...],
+  // links [node a, node b, name index, curb-to-curb width, travel lanes, direction (1: a -> b, -1: b -> a, 0: both),
+  // inner shape points [x, z, ...]]
   roadGraph: buildRoadGraph(),
   // [outline, lot rects, park share, park name, rectangular, frontage frames [[θ, px, pz, lot rects in the frame], ...] | 0]
   blocks: blocks.map((b) => [flat(b.poly), b.rects.map((r) => r.map(q)), b.park || 0, b.parkName || '', b.rect ? 1 : 0,

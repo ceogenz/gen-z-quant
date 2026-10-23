@@ -282,7 +282,7 @@ function buildRoadNetwork(sidewalks, obstacles) {
     for (const n of [p.from, p.to]) n.hz = Math.max(n.hz, Math.abs(p.z - n.z) + Math.min(p.half, 13));
   }
 
-  // 4b. Where the grid ends: Lower Manhattan's streets (south of 14th St and Houston St, Broadway below 10th St...) from
+  // 4b. Non-grid streets: Lower Manhattan, Broadway and the curved avenues farther north, from
   //     the street centreline graph (GEO.roadGraph, tools/geo-roadgraph.mjs), minus the links the grid corridors above
   //     already carry. Its junctions join the grid where they meet it (at a grid intersection, on an avenue corridor or a
   //     cross street); a street's bends get shape nodes, so every edge stays straight.
@@ -353,6 +353,25 @@ function buildRoadNetwork(sidewalks, obstacles) {
     const parent = pos.map((_, i) => i);
     const find = (i) => (parent[i] === i ? i : (parent[i] = find(parent[i])));
     for (const l of links) if (l.len < 14) parent[find(l.a)] = find(l.b);
+    // (WAGMI City) North of Columbus Circle, Broadway's and the other divided roads' two one-way roadways run ~20 m apart
+    // with nothing in the graph across them at the cross streets: a junction on one and the one beside it on the other
+    // (same street, travelling the opposite way, side by side) are one too, so the cross streets still go straight across
+    // and the road runs both ways down its middle (the mall city-config.js removed), as the divided roads below do
+    const ends = [];
+    for (const l of links) {
+      if (!l.dir || pos[l.a].z > -1300 || pos[l.b].z > -1300) continue;
+      const L = Math.hypot(pos[l.b].x - pos[l.a].x, pos[l.b].z - pos[l.a].z) * l.dir;
+      if (!L) continue;
+      for (const i of [l.a, l.b]) ends.push({ i, name: l.name, ux: (pos[l.b].x - pos[l.a].x) / L, uz: (pos[l.b].z - pos[l.a].z) / L });
+    }
+    for (const p of ends) {
+      for (const q of ends) {
+        if (p.i >= q.i || p.name !== q.name || p.ux * q.ux + p.uz * q.uz > -0.7) continue;
+        const dx = pos[q.i].x - pos[p.i].x;
+        const dz = pos[q.i].z - pos[p.i].z;
+        if (Math.hypot(dx, dz) < 26 && Math.abs(dx * p.ux + dz * p.uz) < 8) parent[find(p.i)] = find(q.i);
+      }
+    }
     const sum = new Map();
     const counted = new Set();
     for (const l of links) {
@@ -795,6 +814,14 @@ function buildRoadNetwork(sidewalks, obstacles) {
   const genCreated = edges.filter((e) => e.general).length;
   edges = edges.filter((e) => e.len > (e.general ? 4 : 6));
 
+  // Paint describes the physical streets, including dead ends and roads AI traffic cannot circulate through.
+  // Snapshot their geometry before routing moves stop lines, drops edges and renumbers the surviving junctions.
+  // (WAGMI City: paintEdges and isRoadClear ported from Slop New York by Mr.doob, MIT, commit 30096be)
+  const paintNodes = new Map(nodes.map((n, id) => [n, { id, x: n.x, z: n.z, shape: n.shape }]));
+  const paintEdges = edges.map(({ from, to, axis, x0, z0, sx, sz, dx, dz, rx, rz, span, len, half, lanes }) => ({
+    from: paintNodes.get(from), to: paintNodes.get(to), axis, x0, z0, sx, sz, dx, dz, rx, rz, span, len, half, lanes
+  }));
+
   // 6. Movements at each intersection (no U-turns) and the lane each lane leads to, along obstacle-free curves:
   //    straight on, lane i keeps to lane i + k ahead, k chosen to use as many lanes there as possible with the least
   //    sideways shift; turns go from the lane nearest the turn into the lane nearest it. Lanes left with no way on
@@ -1135,7 +1162,8 @@ function buildRoadNetwork(sidewalks, obstacles) {
     return c;
   }
 
-  return { nodes, edges, connector, curvePoint, walkable, onSidewalk };
+  const isRoadClear = (x, z, clear = 0.15) => !blockedOnStreet(x, z, clear);
+  return { nodes, edges, paintEdges, connector, curvePoint, walkable, onSidewalk, isRoadClear };
 }
 
 // The largest strongly connected set of `list` (a Set), going on from item e to the items next(e)

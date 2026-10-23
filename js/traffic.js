@@ -6,7 +6,9 @@
 //   stop for the signals street-details.js shows, give way to oncoming traffic when turning left, to the avenue at
 //   unsignalized corners and to pedestrians on crosswalks, and never enter an intersection they can't clear.
 // - 340 pedestrians stroll the sidewalks and cross at signalized crosswalks on the WALK signal.
-// - Vehicles and pedestrians are only ever moved while out of the camera's view, so nothing pops in or out.
+// - Vehicles and pedestrians are only ever moved while out of the camera's view, so nothing pops in or out (WAGMI City:
+//   or behind a building; far cars are recycled round the player, the roads round the corners ahead first: ported from
+//   Slop New York by Mr.doob, MIT, commit 7fdaf15).
 // - The player's vehicle or character pushes and is pushed by the traffic (SAT contact, impulses, sparks).
 
 const { THREE, buildRoadNetwork, signalPhase, walkSignal } = window.NYC;
@@ -49,10 +51,15 @@ const LOOKAHEAD = 70; // metres a driver looks ahead for vehicles, stop lines an
 
 // Vehicles further than VEHICLE_RADIUS from the camera and out of its view move to a free lane 100-300 m away,
 // also out of view; pedestrians likewise beyond PED_RADIUS, to 60-260 m away. After a teleport, everything
-// further than NEAR_RADIUS is placed around the new spot.
+// further than NEAR_RADIUS is placed around the new spot. (WAGMI City, ported from Slop New York by Mr.doob, MIT, commit
+// 7fdaf15: a few vehicles a frame, round the whole pool, so the far ones always come back and the roads ahead of a
+// driver don't empty; to 100-350 m away, the roads round the corners ahead first. Out of view here means out of the
+// frustum or behind a building; upstream also lets a car be placed in plain view further than FAR_VIEW_SPAWN m from
+// the camera (250), which fills the road ahead a little more, but a car can be seen appearing; here never)
 const VEHICLE_RADIUS = 380;
 const PED_RADIUS = 320;
 const NEAR_RADIUS = 350;
+const FAR_VIEW_SPAWN = Infinity;
 // A vehicle that has stood still this long (s, longer than a red and the queue behind it) is in a jam: out of view it is
 // put somewhere else. Buses are placed at least BUS_SPACING m from one another.
 const JAM_WAIT = 20; // (WAGMI City: was 45: a jam out of view clears sooner)
@@ -407,6 +414,7 @@ function createTrafficSystem(scene, sidewalks, obstacles) {
   // 4. WHO IS WHERE: LANE OCCUPANCY, INTERSECTIONS, VIEW, PLAYER
   // =========================================================================
   let clock = 0;
+  let tick = 0; // (WAGMI City: update()s so far: place() stamps a vehicle with it, one owner per vehicle per frame)
   let avePhase = 'green';
   let stPhase = 'red';
   let aveWalk = true;
@@ -590,13 +598,24 @@ function createTrafficSystem(scene, sidewalks, obstacles) {
   const nearSignals = [];
   let nearX = Infinity;
   let nearZ = Infinity;
+  // (WAGMI City, from 7fdaf15) In view and nearer the camera than `distance`
+  function nearView(x, z, radius, distance) {
+    return hasView && Math.hypot(x - camX, camY, z - camZ) < distance && visible(x, z, radius);
+  }
+
   function refreshNear() {
     if (Math.hypot(focusX - nearX, focusZ - nearZ) < 40) return;
     nearX = focusX;
     nearZ = focusZ;
     nearEdges.length = 0;
     nearSignals.length = 0;
-    for (const e of edges) if (Math.hypot(e.mx - focusX, e.mz - focusZ) < NEAR_RADIUS) nearEdges.push(e);
+    // (WAGMI City, from 7fdaf15: a road by its nearest point, so a long one beside the player counts)
+    for (const e of edges) {
+      const s = clamp((focusX - e.sx) * e.dx + (focusZ - e.sz) * e.dz, 0, e.len);
+      const dx = e.sx + e.dx * s - focusX;
+      const dz = e.sz + e.dz * s - focusZ;
+      if (dx * dx + dz * dz < NEAR_RADIUS * NEAR_RADIUS) nearEdges.push(e);
+    }
     for (const n of nodes) if (n.signal && Math.hypot(n.x - focusX, n.z - focusZ) < NEAR_RADIUS) nearSignals.push(n);
     // (WAGMI City: the side streets feedSideStreets keeps from standing empty: any within FEED_FAR m of anywhere in the
     // next 40 m)
@@ -722,12 +741,12 @@ function createTrafficSystem(scene, sidewalks, obstacles) {
     return stopAt(v, d);
   }
 
-  // Where to go at the end of the current edge: mostly straight on, sometimes a turn (buses keep to wide roads),
-  // drifting towards the camera when far from it. With `fromLane`, only moves the current lane allows.
+  // Where to go at the end of the current edge: mostly straight on, sometimes a turn (buses keep to wide roads). With
+  // `fromLane`, only moves the current lane allows. (WAGMI City, from 7fdaf15: no more drifting towards the camera
+  // when far from it; far vehicles are recycled instead, and the drift kept them from going far)
   const weights = [];
   function chooseMove(v, fromLane) {
     const e = v.edge;
-    const toFocus = Math.hypot(focusX - v.x, focusZ - v.z) > 250;
     let total = 0;
     for (let k = 0; k < e.moves.length; k++) {
       const m = e.moves[k];
@@ -738,7 +757,6 @@ function createTrafficSystem(scene, sidewalks, obstacles) {
       } else if (Math.abs(nearestLane(m, v.lane) - v.lane) * 22 > e.len - v.s) {
         w *= 0.02; // too little road left to change lanes for it
       }
-      if (toFocus && m.to.dx * (focusX - v.x) + m.to.dz * (focusZ - v.z) > 0) w *= 3;
       if (heldEdges.size && heldEdges.has(m.to)) w *= 1e-6; // (WAGMI City: a hold zone; only when there is no other way)
       weights[k] = w;
       total += w;
@@ -1599,6 +1617,7 @@ function createTrafficSystem(scene, sidewalks, obstacles) {
   }
 
   function place(v, e, lane, s) {
+    v.placedAt = tick; // (WAGMI City)
     v.edge = e;
     v.lane = lane;
     v.s = s;
@@ -1620,23 +1639,51 @@ function createTrafficSystem(scene, sidewalks, obstacles) {
     occupy(e.occ[lane], v, s);
   }
 
-  // Put v in a free spot of a random lane rMin..rMax metres from the focus, out of view if `hidden`
-  function spawnVehicle(v, rMin, rMax, hidden) {
+  // (WAGMI City) A car placed round a corner ahead, on a road ending on the road the camera looks down (its far junction
+  // 40 m or more ahead, within 20 m of that line), turns into it, either way, 3 times in 4: traffic coming out of the
+  // side roads ahead of a driver, not placed in his view
+  function turnIn(v) {
+    const e = v.edge;
+    const f = Math.hypot(camFwdX, camFwdZ) || 1;
+    const hx = camFwdX / f;
+    const hz = camFwdZ / f;
+    const ax = e.to.x - camX;
+    const az = e.to.z - camZ;
+    if (ax * hx + az * hz < 40 || Math.abs(ax * hz - az * hx) > 20 || Math.abs(e.dx * hx + e.dz * hz) > 0.5 || Math.random() < 0.25) return;
+    for (const m of e.moves) {
+      if (Math.abs(m.to.dx * hx + m.to.dz * hz) < 0.9 || Math.abs(nearestLane(m, v.lane) - v.lane) * 22 > e.len - v.s) continue;
+      if (heldEdges.size && heldEdges.has(m.to)) continue;
+      v.move = m;
+      return;
+    }
+  }
+
+  // Put v in a free spot of a random lane rMin..rMax metres from the focus, out of view if `hidden` (WAGMI City: or
+  // behind a building; in plain view past FAR_VIEW_SPAWN m only after 8 tries); `ahead`, the first 8 tries 60 m or
+  // more ahead of the camera. (From 7fdaf15: on a long road, a spot within rMax of the focus along it)
+  function spawnVehicle(v, rMin, rMax, hidden, ahead = false) {
     for (let attempt = 0; attempt < 12; attempt++) {
       const e = nearEdges[Math.floor(Math.random() * nearEdges.length)];
       if (!e || (v.bus && e.axis !== 'ave') || e.len < 2 * v.half + 10 || heldEdges.has(e)) continue;
       const lane = v.bus && Math.random() < 0.8 ? e.lanes.length - 1 : Math.floor(Math.random() * e.lanes.length); // (a bus mostly in the curb lane)
-      const s = v.half + 5 + Math.random() * (e.len - 2 * v.half - 10);
+      const along = (focusX - e.sx) * e.dx + (focusZ - e.sz) * e.dz;
+      const minS = Math.max(v.half + 5, along - rMax);
+      const maxS = Math.min(e.len - v.half - 5, along + rMax);
+      if (minS > maxS) continue;
+      const s = minS + Math.random() * (maxS - minS);
       const x = e.sx + e.dx * s + e.rx * e.lanes[lane];
       const z = e.sz + e.dz * s + e.rz * e.lanes[lane];
       const d = Math.hypot(x - focusX, z - focusZ);
-      if (d < rMin || d > rMax || (hidden && visible(x, z, v.half + 4))) continue;
+      if (d < rMin || d > rMax) continue;
+      if (ahead && attempt < 8 && (x - camX) * camFwdX + (z - camZ) * camFwdZ < 60) continue;
+      if (hidden && visible(x, z, v.half + 4) && !occluded(x, z) && (attempt < 8 || nearView(x, z, v.half + 4, FAR_VIEW_SPAWN))) continue;
       if (player.active && Math.hypot(x - player.x, z - player.z) < 25) continue;
       if (parked.active && Math.hypot(x - parked.x, z - parked.z) < 25) continue;
       if (blockers.some((k) => Math.hypot(x - k.x, z - k.z) < 25)) continue; // (WAGMI City)
       if (v.bus && buses.some((b) => b !== v && b.edge && Math.hypot(b.x - x, b.z - z) < BUS_SPACING)) continue; // (no bus convoys)
       if (!laneClear(e.occ[lane], s, v.half + 8)) continue;
       place(v, e, lane, s);
+      if (ahead) turnIn(v);
       return true;
     }
     return false;
@@ -1717,7 +1764,7 @@ function createTrafficSystem(scene, sidewalks, obstacles) {
     let donor = null;
     let donorD = FEED_DONOR;
     for (const v of cars) {
-      if (!v.edge || v.wreck || v.conn || v.claimed || v.commit) continue;
+      if (!v.edge || v.wreck || v.conn || v.claimed || v.commit || v.placedAt === tick) continue;
       const d = Math.hypot(v.x - focusX, v.z - focusZ);
       if (d > donorD && unseen(v.x, v.z, v.half + 2)) {
         donorD = d;
@@ -2234,9 +2281,11 @@ function createTrafficSystem(scene, sidewalks, obstacles) {
   // =========================================================================
   let lastFocusX = Infinity;
   let lastFocusZ = Infinity;
+  let vehicleCursor = 0; // (WAGMI City, from 7fdaf15)
 
   function update(dt, elapsed, focusPos = null, playerEntity = null, activeMode = 'car', camera = null) {
     clock = elapsed;
+    tick++;
     avePhase = signalPhase(elapsed, true);
     stPhase = signalPhase(elapsed, false);
     aveWalk = walkSignal(elapsed, true);
@@ -2290,6 +2339,22 @@ function createTrafficSystem(scene, sidewalks, obstacles) {
     player.push = activeMode === 'cyclist' ? 0.82 : activeMode === 'person' ? 0.88 : 0.50;
 
     // 1. Cars & buses
+    // (WAGMI City, ported from Slop New York by Mr.doob, MIT, commit 7fdaf15: 4 vehicles a frame, round the pool, further
+    // than VEHICLE_RADIUS, put 100..NEAR_RADIUS m away, while he drives the roads round the corners ahead first (standing,
+    // that would feed one street until it jammed); not a wreck (wagmi/crash has it), nor one in plain view nearer than
+    // 1200 m, which would vanish. After a jump, everything far, anywhere)
+    const driving = !jump && Math.hypot(player.vx, player.vz) > 5;
+    let recycle = jump ? vehicles.length : 4;
+    for (let scanned = 0; scanned < vehicles.length && recycle > 0; scanned++) {
+      const v = vehicles[vehicleCursor];
+      vehicleCursor = (vehicleCursor + 1) % vehicles.length;
+      if (v.wreck) continue;
+      const d = v.edge ? Math.hypot(v.x - focusX, v.z - focusZ) : Infinity;
+      if (d <= (jump ? NEAR_RADIUS : VEHICLE_RADIUS)) continue;
+      if (!jump && d < 1200 && visible(v.x, v.z, v.half + 2) && !occluded(v.x, v.z)) continue;
+      recycle--;
+      spawnVehicle(v, jump ? 0 : 100, NEAR_RADIUS, !jump, driving);
+    }
     buildOccupancy();
     for (const m of bodyMeshes) m.count = 0;
     litVehicleCount = 0;
@@ -2303,12 +2368,12 @@ function createTrafficSystem(scene, sidewalks, obstacles) {
     for (let i = 0; i < vehicles.length; i++) {
       const v = vehicles[i];
       const d = v.edge ? Math.hypot(v.x - focusX, v.z - focusZ) : Infinity;
-      if (!v.edge || (jump && d > NEAR_RADIUS)) {
-        spawnVehicle(v, 0, NEAR_RADIUS, false);
+      if (!v.edge) {
+        // (not placed yet: the recycling above places it)
       } else if (heldEdges.size && (heldEdges.has(v.edge) || held(v.x, v.z, v.half + 1))) {
         if (!spawnVehicle(v, 120, NEAR_RADIUS, true)) spawnVehicle(v, 120, 900, false); // (WAGMI City: a hold zone)
-      } else if (budget > 0 && (d > 1200 || (d > VEHICLE_RADIUS && !visible(v.x, v.z, v.half + 2))) && spawnVehicle(v, 100, 300, true)) {
-        budget--;
+      } else if (v.placedAt === tick) {
+        // (WAGMI City: placed this frame already)
       } else if (budget > 0 && v.wait > JAM_WAIT && !visible(v.x, v.z, v.half + 2) && spawnVehicle(v, 100, 300, true)) {
         budget--; // stuck in a jam out of view: somewhere else
       } else if (budget > 0 && v.bus && !v.wreck && d > 60 && !visible(v.x, v.z, v.half + 2) &&

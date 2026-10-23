@@ -70,6 +70,16 @@ body.wg-paused .hud, body.wg-paused #wg .wg-line, body.wg-paused #wg .wg-help { 
 #wg-pause .cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 6px 28px; }
 #wg-pause .row { display: flex; justify-content: space-between; gap: 14px; font: 600 17px/1.75 'Barlow Condensed'; border-bottom: 1px solid rgba(255,255,255,.07); }
 #wg-pause .row span:last-child { color: rgba(255,255,255,.7); text-align: right; }
+/* the controls: what, the keyboard's, a game pad's */
+#wg-pause .ctl { grid-template-columns: repeat(auto-fit, minmax(268px, 1fr)); }
+#wg-pause .ctl .row { display: grid; grid-template-columns: 1fr auto 58px; align-items: center; gap: 10px; line-height: 1.25; padding: 4px 0; }
+#wg-pause .ctl .row span:nth-child(2) { color: rgba(255,255,255,.7); text-align: right; }
+#wg-pause .ctl .row .pd { display: flex; align-items: center; justify-content: flex-end; gap: 2px; white-space: nowrap; }
+#wg-pause .ctl .row .pd i { font-style: normal; color: rgba(255,255,255,.55); font-size: 14px; margin: 0 2px; }
+#wg-pause .ctl .row .pd kbd { font-size: 15px; }
+#wg-pause .ctl .row.th { border-bottom: 0; line-height: 1; margin-bottom: 4px; }
+#wg-pause .ctl .row.th .t { margin: 0; }
+#wg-pause .ctl .row.th span:not(.t) { font: 700 11px/1 'Barlow Condensed'; letter-spacing: 2px; text-transform: uppercase; color: rgba(255,255,255,.45); }
 #wg-pause .opt { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; font: 700 20px/1 'Barlow Condensed'; letter-spacing: 1px; color: #fff; background: rgba(255,255,255,.04);
   border: 1px solid rgba(255,255,255,.1); border-radius: 10px; padding: 12px 14px; margin: 0 0 8px; cursor: pointer; }
 #wg-pause .opt small { margin-left: auto; font: 600 13px/1 'Barlow Condensed'; letter-spacing: 2px; text-transform: uppercase; color: rgba(255,255,255,.5); }
@@ -89,12 +99,17 @@ body.wg-story #btn-pause { display: inline-flex; }
 body.touch-enabled .wg-track .k kbd { display: none; }
 `;
 
+// [what, the keyboard's, a game pad's] (the pad's: its buttons by their standard names, A B X Y, LB RB LT RT, LS RS
+// (the sticks) L3 R3 (pressed in), Up Down Left Right (the D-pad), View, Start: drawn as the pad's own, wagmi/pad.js)
 const CONTROLS = [
-  ['On foot', [['Move', 'W A S D'], ['Sprint', 'Shift'], ['Jump', 'Space'], ['Get in the car', 'F'], ['Look round', 'drag the mouse']]],
-  ['In the car', [['Drive · brake', 'W · S'], ['Steer', 'A · D'], ['Boost', 'Shift'], ['Get out', 'F (slow down first)'], ['Reset car to road', 'recover'], ['Electric / Engine', 'Q'], ['Thrusters: hop', 'Space'], ['Thrusters: dash left · right', 'Z · C'], ['Next station', 'R'], ['Radio off / on', 'T']]],
-  ['Fighting', [['Strike', 'Left click · J'], ['Heavy', 'Right click · K'], ['Counter (on the cue)', 'Q · L'], ['Dodge', 'C · Space'], ['Grab · pick up · throw', 'E'], ['Lock the mouse to the view', 'click in a fight']]],
-  ['Anywhere', [['Map', 'M'], ['Brief: the objective, the last lines', 'B'], ['Pause', 'Esc · P'], ['Skip a cutscene', 'hold Space']]],
+  ['On foot', [['Move', 'W A S D', 'LS'], ['Sprint', 'Shift', 'LT · L3'], ['Jump', 'Space', 'A'], ['Get in the car', 'F', 'Y'], ['Look round', 'drag the mouse', 'RS']]],
+  ['In the car', [['Drive · brake', 'W · S', 'RT · LT'], ['Steer', 'A · D', 'LS'], ['Boost', 'Shift', 'X'], ['Get out', 'F (slow down first)', 'Y'], ['Reset car to road', 'recover', 'B'], ['Electric / Engine', 'Q', 'Up'], ['Thrusters: hop', 'Space', 'A'], ['Thrusters: dash left · right', 'Z · C', 'LB · RB'], ['Next station', 'R', 'Right'], ['Station back', '', 'Left'], ['Radio off / on', 'T', 'Down'], ['Look round', 'drag the mouse', 'RS']]],
+  ['Fighting', [['Strike', 'Left click · J', 'X'], ['Heavy', 'Right click · K', 'Y'], ['Counter (on the cue)', 'Q · L', 'LB'], ['Dodge', 'C · Space', 'B'], ['Grab · pick up · throw', 'E', 'RB'], ['Lock the mouse to the view', 'click in a fight', '']]],
+  ['Anywhere', [['Map', 'M', 'View'], ['Brief: the objective, the last lines', 'B', 'R3'], ['Pause', 'Esc · P', 'Start'], ['Skip a cutscene', 'hold Space', 'hold A'], ['Menus: choose · OK · back', '↑ ↓ · Enter · Esc', 'Up Down · A · B'], ['Need a hand? options', '1 · 2 · 3', 'Up · Right · Down']]],
 ];
+// (a pad's column: its buttons drawn, the words between them as they are)
+const PAD_IDS = new Set(['A', 'B', 'X', 'Y', 'LB', 'RB', 'LT', 'RT', 'LS', 'RS', 'L3', 'R3', 'Up', 'Down', 'Left', 'Right', 'View', 'Start']);
+const padCol = (s) => (s ? s.split(' ').map((t) => (PAD_IDS.has(t) ? (window.WAGMI?.pad?.glyph?.(t) || `<kbd>${esc(t)}</kbd>`) : `<i>${esc(t)}</i>`)).join('') : '<i>—</i>');
 const VOLS = [['master', 'Master'], ['music', 'Music'], ['voice', 'Voices']];
 
 export function createPause(ui) {
@@ -196,7 +211,7 @@ export function createPause(ui) {
     const id = ITEMS[sel][0];
     panel.classList.toggle('focus', inPanel);
     if (id === 'resume' || id === 'brief') panel.innerHTML = brief();
-    else if (id === 'controls') panel.innerHTML = `<div class="cols">${CONTROLS.map(([h, rows]) => `<div><div class="t${h === 'On foot' ? '' : ''}">${esc(h)}</div>${rows.filter(([, k]) => k !== 'recover' || W.recoverCar).map(([a, k]) => `<div class="row"><span>${esc(a)}</span><span>${esc(k === 'recover' ? recoverKey() : k)}</span></div>`).join('')}</div>`).join('')}</div>`;
+    else if (id === 'controls') panel.innerHTML = `<div class="cols ctl">${CONTROLS.map(([h, rows]) => `<div><div class="row th"><span class="t">${esc(h)}</span><span>Keys</span><span>Controller</span></div>${rows.filter(([, k]) => k !== 'recover' || W.recoverCar).map(([a, k, p]) => `<div class="row"><span>${esc(a)}</span><span>${esc(k === 'recover' ? recoverKey() : k || '—')}</span><span class="pd">${padCol(p)}</span></div>`).join('')}</div>`).join('')}</div>`;
     else if (id === 'recover') panel.innerHTML = `<div class="t">Reset car to road</div><div class="ln">Stuck on a wall, a kerb or a lamp post? Your car goes back on the nearest lane, upright and facing the way the traffic goes.</div>
       <div class="mu" style="margin-top:10px;font-size:15px"><kbd>Enter</kbd> to reset${W.recoverCar?.key ? ` · in the car, any time: <kbd>${esc(recoverKey())}</kbd>` : ''}</div>`;
     else if (id === 'restart') {

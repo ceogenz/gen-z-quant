@@ -14,7 +14,7 @@
   <script>
     // Download the city scripts while Three.js loads; execute them only after its imports are ready below.
     const nycAppScripts = (() => {
-      const assetVersion = '20261022-teleports';
+      const assetVersion = '20261023-upstream';
       return [
         './js/nyc-geodata.js',
         './js/city-config.js',
@@ -34,6 +34,7 @@
         './js/traffic.js',
         './js/controllers.js',
         './js/touch-controls.js',
+        './js/gamepad-controls.js',
         './js/cameras.js',
         './js/nyc-map.js',
         './js/scene-culling.js',
@@ -53,7 +54,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400..800&amp;family=Overpass:wght@600;700&amp;display=swap" />
-  <link rel="stylesheet" href="./css/style.css?v=20261022-repo-link" />
+  <link rel="stylesheet" href="./css/style.css?v=20261023-upstream" />
   <!-- three.js pinned to dev commit bc7d0b3c38 (22 Oct 2026, the build Slop New York last ran on), served by jsDelivr -->
   <style>
     /* (WAGMI City's boot veil: see #wg-boot below) */

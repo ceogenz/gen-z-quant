@@ -35,6 +35,8 @@ const CSS = `
 #wf .wf-combo .wf-m i{position:absolute;inset:0;background:${Y};transform-origin:100% 50%}
 #wf .wf-combo .wf-td{display:inline-block;font:800 16px/1 'Barlow Condensed',system-ui,sans-serif;letter-spacing:.14em;color:${Y};margin-top:9px;padding:5px 9px 5px 10px;border-radius:10px;background:${PANEL};text-shadow:0 1px 3px rgba(0,0,0,.7),0 0 10px rgba(255,201,60,.35);opacity:0;transition:opacity .2s}
 #wf .wf-combo.wf-ready .wf-td{opacity:1}
+#wf .wf-combo .wf-td kbd{font:800 14px/1 'Barlow Condensed',system-ui,sans-serif;border:1.5px solid rgba(255,201,60,.8);border-radius:4px;padding:1px 4px;letter-spacing:.04em}
+#wf .wf-combo .wf-td kbd+kbd{margin-left:4px}
 #wf .wf-combo.wf-ready .wf-m i{box-shadow:0 0 12px ${Y};animation:wfLow .6s ease-in-out infinite}
 #wf .wf-tag{position:fixed;left:0;top:0;width:0;height:0;will-change:transform}
 #wf .wf-tag .wf-bar{position:absolute;left:-28px;top:0;width:56px;height:5px;border-radius:3px;background:${PANEL};box-shadow:0 0 0 1px rgba(255,255,255,.18);overflow:hidden;transition:opacity .25s}
@@ -104,7 +106,7 @@ export function createHud(c) {
   const root = document.createElement('div'); root.id = 'wf';
   root.innerHTML = `<div class="wf-vig"></div><div class="wf-slow"></div>
     <div class="wf-hp"><i class="wf-trail"></i><i class="wf-fill"></i></div>
-    <div class="wf-combo"><div class="wf-n">0</div><div class="wf-t">HITS</div><div class="wf-m"><i></i></div><div class="wf-td">TAKEDOWN READY &middot; RMB / K</div></div>
+    <div class="wf-combo"><div class="wf-n">0</div><div class="wf-t">HITS</div><div class="wf-m"><i></i></div><div class="wf-td">TAKEDOWN READY &middot; <kbd>RMB</kbd><kbd>K</kbd></div></div>
     <div class="wf-tags"></div><div class="wf-foes"></div><div class="wf-arrows"></div>
     <div class="wf-banner"></div><div class="wf-msg"></div>
     <div class="wf-offer"><div><kbd>E</kbd><span>PICK UP <b></b></span></div></div>
