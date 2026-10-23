@@ -20,7 +20,7 @@ export function createDriver(W, { obj, path, halfW = 1.0, halfL = 2.8, plow = fa
     s: 0, v: 0, done: false, pos: new THREE.Vector3(), heading: 0, steer: 0, yawRate: 0, lean: 0, pitch: 0,
     get length() { return S.length; },
     // ahead: the gap to what it is braking for (m), and that thing's speed
-    gap: Infinity, hits: 0, stuckT: 0, pushT: 0,
+    gap: Infinity, hits: 0, stuckT: 0, pushT: 0, idleT: 0,
     place(s = 0) { D.s = clamp(s, 0, S.length); D.v = 0; D.done = false; pose(0); },
     at(s) { return S.at(s); },
     step,
@@ -164,13 +164,18 @@ export function createDriver(W, { obj, path, halfW = 1.0, halfL = 2.8, plow = fa
     // (rotation.x > 0 dips the nose: braking)
     D.pitch += (clamp(-acc * 0.006, -0.04, 0.05) - D.pitch) * Math.min(1, dt * 6);
     pose(dt);
-    // (stuck behind the traffic a while: a horn, then it noses through, shoving what is in its way)
+    // (held up behind the traffic a moment, stopped or crawling at under half its pace: a horn, then it noses through,
+    // shoving what is in its way)
     if (!plow) {
-      if (D.v < 0.6 && want > 2 && gap < 14) D.stuckT += dt; else D.stuckT = Math.max(0, D.stuckT - dt * 2);
-      if (D.stuckT > 2.5 && !D.honked) { D.honked = true; W.audio?.play?.('horn', { pos: [D.pos.x, 1, D.pos.z] }); }
-      if (D.stuckT > 5) { D.pushT = 3.5; D.stuckT = 0; D.honked = false; }
+      if (want > 2 && gap < 14 && D.v < Math.max(0.6, target * 0.45)) D.stuckT += dt; else D.stuckT = Math.max(0, D.stuckT - dt * 2);
+      if (D.stuckT > 1.2 && !D.honked) { D.honked = true; W.audio?.play?.('horn', { pos: [D.pos.x, 1, D.pos.z] }); }
+      if (D.stuckT > 2.4) { D.pushT = 3; D.stuckT = 0; D.honked = false; }
       if (D.pushT > 0) { D.pushT -= dt; shoveTraffic(0.35); }
     }
+    // (and whatever holds it, it never sits still for long: 5 s without moving while it wants to go, and it goes on
+    // through the traffic regardless)
+    D.idleT = want > 2 && !D.done && D.v < 0.3 ? D.idleT + dt : 0;
+    if (D.idleT > 5) { D.idleT = 0; D.pushT = Math.max(D.pushT, 4); }
     if (plow) shoveTraffic(); else holdFollowers();
     collidePlayer();
   }

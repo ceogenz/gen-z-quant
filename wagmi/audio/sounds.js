@@ -9,7 +9,7 @@
 //   engineStart  the car waking: a power-up swell under a two-note chime
 //   footstep     a step (o.surface 'hard' | 'grass', o.run 0..1)       land: a jump landing
 //   whoosh, splash, glass, phoneBuzz, blip, missionStart, missionPassed
-// and the city's own: airBrake, kerb, boostIgnite, coo, chirps, flutter, clang, jackhammer, beeper, whistle, bodyFall
+// and the city's own: airBrake, kerb, boostIgnite, coo, chirps, flutter, clang, jackhammer, beeper, whistle, call, bodyFall
 const VOWEL = { a: [850, 1350, 2800, 3600], o: [520, 900, 2500, 3400], e: [520, 1850, 2600, 3500], u: [360, 800, 2400, 3300], i: [320, 2300, 3000, 3700] };
 
 // a voice: a glottal buzz (two saws a hair apart, a little shaken), through four formant bands moving between vowels
@@ -327,6 +327,14 @@ const S = {
     }
     return 1.4;
   },
+  // someone calling out down the block: a word or two shouted ("hey!", "yo!", "taxi!"), o.voice 'f' | 'm'
+  call(M, out, o, t) {
+    const fem = o.voice ? o.voice === 'f' : M.R() < 0.45, f0 = fem ? M.rr(250, 330) : M.rr(150, 215);
+    const words = M.pick([[['e', 'i']], [['o', 'u']], [['a'], ['i']], [['a', 'e'], ['i']], [['e', 'i'], ['o']]]);
+    let at = 0;
+    for (const v of words) { const d = M.rr(0.2, 0.36); voice(M, out, t + at, { f0: f0 * M.rr(0.95, 1.1), dur: d, vowels: v, peak: 0.3, rise: 1.15, fall: 0.85, breath: 0.1, rough: 0.05 }); at += d + M.rr(0.04, 0.1); }
+    return at + 0.1;
+  },
 };
 // (aliases)
 S.honk = S.horn; S.thud = S.bodyFall; S.crash = S.carHit; S.crowdStep = S.footstep;
@@ -336,6 +344,6 @@ export const META = {
   footstep: { max: 4, ref: 3, far: 60 }, crowdStep: { max: 4, ref: 3, far: 60 }, land: { max: 2, ref: 3, far: 60 }, horn: { max: 4, ref: 9, far: 400 }, honk: { max: 4, ref: 9, far: 400 },
   scream: { max: 3, ref: 7, far: 160 }, pedHit: { max: 4, ref: 8, far: 200 }, carHit: { max: 4, ref: 15, far: 300 }, crash: { max: 4, ref: 15, far: 300 },
   airBrake: { max: 2, ref: 8, far: 160 }, clang: { max: 4, ref: 10, far: 400 }, jackhammer: { max: 2, ref: 10, far: 400 },
-  missionPassed: { max: 1 }, missionStart: { max: 1 }, engineStart: { max: 1 }, phoneBuzz: { max: 1 },
+  missionPassed: { max: 1 }, missionStart: { max: 1 }, engineStart: { max: 1 }, phoneBuzz: { max: 1 }, call: { max: 2, ref: 7, far: 200 },
 };
 export { S as SOUNDS, voice, horn };

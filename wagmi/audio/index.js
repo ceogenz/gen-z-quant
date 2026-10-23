@@ -36,12 +36,21 @@ export function install(W) {
   function unlock() {
     const m = ensure(); if (!m) return null;
     unlocked = true;
-    if (m.ctx.state !== 'running' && document.visibilityState !== 'hidden') m.ctx.resume().catch(() => {});
+    if (m.ctx.state !== 'running' && document.visibilityState !== 'hidden' && !paused) m.ctx.resume().catch(() => {});
     return m.ctx;
   }
   for (const ev of ['keydown', 'pointerdown', 'touchstart']) addEventListener(ev, unlock, { capture: true, passive: true });
   // (a hidden tab goes quiet and stops costing anything)
-  document.addEventListener('visibilitychange', () => { if (!M) return; if (document.hidden) M.ctx.suspend().catch(() => {}); else if (unlocked) M.ctx.resume().catch(() => {}); });
+  document.addEventListener('visibilitychange', () => { if (!M) return; if (document.hidden) M.ctx.suspend().catch(() => {}); else if (unlocked && !paused) M.ctx.resume().catch(() => {}); });
+  // the pause menu (W.paused, wagmi/mission/pause.js): every sound stops where it is (the context held: the radio's
+  // decks, a line half said, the engine, the city) and goes on from there on Resume. (The menu's own dip of the buses is
+  // not wanted on top: it would still be pulling them down after Resume.)
+  let paused = false;
+  function pauseCheck() {
+    const p = !!W.paused; if (!M || p === paused) return;
+    paused = p; M.hold(p);
+    if (!p && unlocked && !document.hidden) M.ctx.resume().catch(() => {});
+  }
 
   const running = () => !!M && M.ctx.state === 'running';
   const A = (W.audio = {
@@ -55,7 +64,7 @@ export function install(W) {
       return E.play(name, o || {});
     },
     loop(name, o) { if (!ensure()) return NOOP; return E.loop(name, o || {}); },
-    duck(bus, amount, secs) { M?.duck(bus, amount, secs); },
+    duck(bus, amount, secs) { pauseCheck(); if (!paused) M?.duck(bus, amount, secs); },
     // a city event now: 'siren' (one far off), 'subway', 'build', 'whistle', 'heli', 'honk', 'coo', 'flutter'
     force(name) { ensure(); city?.force(name); },
     unlock,
@@ -65,7 +74,7 @@ export function install(W) {
       if (!M) return null;
       const vs = traffic.voices || {};
       const who = (list) => (list || []).map((x) => (x.v ? { w: +x.w.toFixed(2), d: +Math.hypot(x.v.x - M.listener.x, x.v.z - M.listener.z).toFixed(1), mode: x.L.mode } : null));
-      return { state: M.ctx.state, where: city.where, cars: who(vs.cars), buses: who(vs.buses), sirens: who(vs.sirens), car: car.built, babble: !!M.babble, played: { ...E.count }, msPerFrame: cost.n ? +(cost.ms / cost.n).toFixed(3) : 0, latency: +(M.ctx.baseLatency || 0).toFixed(4) };
+      return { state: M.ctx.state, paused, where: city.where, cars: who(vs.cars), buses: who(vs.buses), sirens: who(vs.sirens), car: car.built, babble: !!M.babble, played: { ...E.count }, msPerFrame: cost.n ? +(cost.ms / cost.n).toFixed(3) : 0, latency: +(M.ctx.baseLatency || 0).toFixed(4) };
     },
   });
 
@@ -138,7 +147,8 @@ export function install(W) {
   function tick(now) {
     requestAnimationFrame(tick);
     const dt = Math.min(0.1, Math.max(0, (now - last) / 1000)); last = now;
-    if (!running() || !dt) return;
+    pauseCheck();
+    if (!running() || !dt || paused) return;
     const t0 = performance.now();
     try {
       const camera = app.cameraSystem?.camera; if (!camera) return;

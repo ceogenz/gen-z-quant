@@ -8,11 +8,15 @@
 //   go        'Go to Times Square.'  the van at 7th Ave & W 47th St                            checkpoint 'go'
 //   tail      'Follow the van.' stay 18-70 m back (the tail meter); too close or in its mirrors fills SUSPICION:
 //             spotted, it bolts ('Don't lose the van.'); over 140 m for 5 s: 'The van got away.' Juno calls. W 47th St
-//             west, 10th Ave north, W 55th St west to the Degens' container yard on 12th Ave     checkpoint 'tail'
+//             west, 10th Ave north, W 55th St west (the traffic held off its blocks, met at the corners: held up, it
+//             honks and noses through) to the Degens' container yard on 12th Ave; about a minute and a half
+//                                                                                            checkpoint 'tail'
 //   yard      'Sneak up on the stash.' three lookouts with sight cones; E from behind takes one down; seen: the alarm
-//             (arriving spotted: the alarm at once)                                          checkpoint 'yard'
-//   fight     'Beat up the Degens.' DEGENS 0/n, trash cans and bottles about (their help), Lev shouting from his car
-//             checkpoint 'fight'
+//             (arriving spotted: the alarm at once; pulling up behind the van, 6 s to get out of the car unseen)
+//                                                                                            checkpoint 'yard'
+//   fight     'Beat up the Degens.' DEGENS 0/n, trash cans and bottles about (their help), Lev shouting from his car:
+//             the lookouts still up and three at the stash, then (down to their last man) a second wind and two more
+//             out of the containers; health 130 for it, a slow regen out of reach. Lost: back to 'yard'
 //   chase     Lev bolts: 'Take down Lev.' W 55th St, 11th Ave south past Javits, W 34th St east through
 //             the traffic (he plows it), rubber-banded; ram him (LEV'S CAR damage) or keep up; he crashes at Greeley
 //             Square (or where the rams wreck him); over 260 m for 6 s: 'Lev got away.'      checkpoint 'chase'
@@ -42,10 +46,12 @@ const Q = new URLSearchParams(location.search);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const G_AT = { x: -1560, z: 1611 }; // Gears' garage, W 22nd St (Mission 3's giver)
 // the van's way: out of the curb on 7th Ave, right onto W 47th St, right up 10th Ave, left along W 55th St over 11th
-// Ave to 12th Ave, in at the yard's side gate to the stash
+// Ave to 12th Ave, in at the yard's side gate to the stash (its two right turns swung wide, out into the next lane and
+// into the far one: a tight one from the curb lane put its corners over the sidewalk)
 const VAN_ROUTE = [
-  [-591, -447], [-591, -433], [-592, -422], [-596, -413], [-603, -406.5], [-614, -404.5], [-860, -404.5], [-1134, -404.5], [-1384, -404.5],
-  [-1394, -406.5], [-1400.5, -413], [-1403, -424], [-1403, -1018], [-1405, -1029], [-1411, -1036.5], [-1422, -1039.5], [-1683, -1039.5],
+  [-591, -447], [-590, -432], [-589, -420], [-589.5, -410], [-592.5, -403.5], [-599, -400], [-612, -400], [-660, -404.5], [-860, -404.5],
+  [-1134, -404.5], [-1300, -404.5], [-1375, -401.5], [-1392, -400], [-1401, -402], [-1407, -407.5], [-1409.5, -416], [-1409.5, -430],
+  [-1405, -465], [-1403, -480], [-1403, -1018], [-1405, -1029], [-1411, -1036.5], [-1422, -1039.5], [-1683, -1039.5],
   [-1880, -1039.5], [-1897, -1039.5], [-1906, -1040.5], [-1914, -1041],
 ];
 // Lev's: out of the side gate, east along W 55th St (the wrong way: nobody else is on it this side of 11th Ave), south
@@ -55,11 +61,14 @@ const LEV_ROUTE = [
   [-1688, -1005], [-1688, 0], [-1688, 600], [-1686.5, 626], [-1679, 640], [-1664, 645], [-1400, 645], [-1100, 645], [-860, 645], [-600, 645],
   [-430, 645], [-392, 644], [-370, 637], [-354, 623], [CRASH.x, CRASH.z],
 ];
-// the traffic kept off the van's way while the mission needs it (the 7th Ave block behind it, W 47th St between the
-// avenues: the avenues keep theirs; on 10th Ave and W 49th St it drives in the traffic)
+// the traffic kept off the van's way while the mission needs it (the 7th Ave block behind it, W 47th St, 10th Ave and
+// W 55th St between the cross streets: the crossings keep theirs, so it still meets the traffic at every corner; held
+// up there, it honks and noses through)
 const TAIL_HOLDS = [
   { minX: -592, maxX: -586, minZ: -470, maxZ: -416 },
   { minX: -844, maxX: -598, minZ: -409.5, maxZ: -397.5 }, { minX: -1121, maxX: -875, minZ: -409.5, maxZ: -397.5 }, { minX: -1395, maxX: -1149, minZ: -409.5, maxZ: -397.5 },
+  ...[[-413, -470], [-494, -549], [-573, -630], [-651, -709], [-732, -789], [-810, -869], [-889, -948], [-969, -1028]].map(([a, b]) => ({ minX: -1412, maxX: -1406, minZ: b, maxZ: a })),
+  { minX: -1676, maxX: -1416, minZ: -1045.5, maxZ: -1033.5 }, { minX: -1896, maxX: -1700, minZ: -1045.5, maxZ: -1033.5 },
 ];
 
 class Fail extends Error { constructor(reason, rekt = false) { super(reason); this.reason = reason; this.rekt = rekt; } }
@@ -291,7 +300,7 @@ function createMission(W) {
   // into the car at (x, z), facing h
   function inTheCar(x, z, h) { place(W, { car: [x, z, h] }); P.inVehicle = true; P.mesh.visible = false; P.speed = 0; app.selectMode('car'); }
   const blipCar = () => gps.blip('car', { x: car.position.x, z: car.position.z, kind: 'car', edge: true, name: car.label || "Quant's car" });
-  const vanDriver = () => createDriver(W, { obj: S.C.van.group, path: VAN_ROUTE, halfW: 1.0, halfL: 2.8, onWheels: (dt, v, st) => S.C.van.update(dt, v, st) });
+  const vanDriver = () => createDriver(W, { obj: S.C.van.group, path: VAN_ROUTE, halfW: 1.0, halfL: 2.8, accel: 3.6, onWheels: (dt, v, st) => S.C.van.update(dt, v, st) });
 
   /* --------------------------------------------------------- the phases -- */
   const PHASES = {
@@ -307,9 +316,9 @@ function createMission(W) {
       W.combat?.clear?.();
       const def = burnerScene(W, { U, say, van: S.C.van });
       def.setup();
-      // (the street crowd kept off his stretch of the sidewalk, curb to terrace, while it plays: nobody walks through
-      // its close shots; the avenue's traffic is left be)
-      W.street?.crowd?.hold([{ minX: J_AT.x - 3, maxX: J_AT.x + 5, minZ: J_AT.z - 10, maxZ: J_AT.z + 10 }]);
+      // (the street crowd kept off his stretch of the sidewalk, curb to terrace, and the curb by the van in Times Square
+      // for the cutaway, while it plays: nobody walks through its close shots; the avenues' traffic is left be)
+      W.street?.crowd?.hold([{ minX: J_AT.x - 3, maxX: J_AT.x + 5, minZ: J_AT.z - 12, maxZ: J_AT.z + 12 }, { minX: -598, maxX: -584, minZ: -462, maxZ: -432 }]);
       try { await runScene(W, def); } finally { W.street?.crowd?.hold([]); }
       place(W, { quant: [J_AT.x, J_AT.z, PI] });
     },
@@ -336,6 +345,9 @@ function createMission(W) {
     },
     // the tail
     async tail(fresh) {
+      // (played straight in: the light and his car first, the sets after: a slow load doesn't leave him at the city's
+      // own start in its golden hour)
+      if (fresh) { twilight(); inTheCar(-589.5, -512, 0); }
       await sets(); twilight();
       const { C } = S;
       if (fresh || !S.vanD) {
@@ -345,7 +357,10 @@ function createMission(W) {
       }
       const vanD = S.vanD;
       gps.unblip('van');
-      let sus = 0, farT = 0, lost = false, helped = false, called = false, onFootT = 0, yardUp = false;
+      // (its tail lamps up for the tail, brighter when it brakes: a dark van on a dark street stays in sight)
+      let lamps = null; C.van.group.traverse((o) => { if (!lamps && o.isMesh && o.material?.emissive?.getHex() === 0xFF2A1A) lamps = o.material; });
+      const lamps0 = lamps?.emissiveIntensity ?? 0;
+      let sus = 0, farT = 0, lost = false, helped = false, called = false, onFootT = 0, yardUp = false, lastV = vanD.v;
       const t0 = now();
       // (a tail has no route: the van's blip and the chevron over it, GTA's way)
       const vanTarget = null;
@@ -355,11 +370,15 @@ function createMission(W) {
       const off = hook(() => {
         const dt = frameDt(), t = (now() - t0) / 1000;
         const p = me(), d = dist(p, vanD.pos.x, vanD.pos.z);
-        // the van's pace: its own, slowed when he falls behind (a tail is followed, not raced), quicker when he's close
-        let want = S.flee ? 22 : 15.5;
-        if (d > 70) want *= S.flee ? 0.75 : 0.72; if (d > 100) want *= 0.7; if (d > 130) want *= 0.6; if (!S.flee && d < 18) want *= 1.15;
+        // the van's pace: its own (brisk: the tail is a minute and a half, not three), slowed when he falls behind (a tail
+        // is followed, not raced), quicker when he's close; pulling out from the curb it takes its time (he has the
+        // corner to make)
+        let want = (S.flee ? 27 : 23.5) * (d < 70 ? 1 : d < 100 ? 0.8 : d < 130 ? 0.6 : 0.35);
+        if (!S.flee && d < 18) want *= 1.12;
+        if (!S.flee) want = Math.min(want, 9 + t * 1.5);
         if (!inCar()) want = Math.min(want, 7);
         vanD.step(dt, want);
+        if (lamps && dt > 0) { lamps.emissiveIntensity += ((vanD.v < lastV - dt * 1.5 || vanD.v < 0.5 ? 9 : 3.5) - lamps.emissiveIntensity) * Math.min(1, dt * 10); lastV = vanD.v; }
         S.chev.at(vanD.pos.x, vanD.pos.y + 3.4, vanD.pos.z, dt);
         gps.blip('van', { x: vanD.pos.x, z: vanD.pos.z, kind: 'enemy', edge: true, name: 'The van' });
         S.engine?.set(clamp(vanD.v / 30), clamp(14 / Math.max(6, d)) * 0.35);
@@ -379,7 +398,8 @@ function createMission(W) {
         if (!helped && t > 1.5) { helped = true; ui.help('Keep the van in sight. Too close and they spot you, too far and you lose it. Watch the meter.', 9); }
         // losing it
         if (d > 110) { farT += dt; if (!lost) { lost = true; objective(["Don't lose the ", { van: 'red' }, '.'], vanTarget); } } else { farT = Math.max(0, farT - dt); if (lost && d < 80) { lost = false; say1(); } }
-        if ((d > 140 && farT > 5) || d > 240) fail('The van got away.');
+        // (not in its first seconds: he's still making the corner)
+        if (t > 12 && ((d > 140 && farT > 5) || d > 240)) fail('The van got away.');
         // out of the car on the way
         if (!inCar()) { onFootT += dt; if (onFootT > 1.5 && onFootT - dt <= 1.5) objective(['Get back in your ', { car: 'blue' }, '.'], null); blipCar(); } else if (onFootT) { onFootT = 0; gps.unblip('car'); say1(); }
         // Juno calls a little way in
@@ -387,7 +407,7 @@ function createMission(W) {
         // the yard goes up before it can be seen
         if (!yardUp && dist(vanD.pos, YARD.cx, YARD.cz) < 750) { yardUp = true; S.Y.show(true); parkInYard({ van: false, lev: true }); spawnYard(); }
       });
-      try { await wait(() => vanD.done); } finally { off(); U.tail.hide(); S.chev.hide(); S.engine?.stop(0.8); S.engine = null; }
+      try { await wait(() => vanD.done); } finally { off(); U.tail.hide(); S.chev.hide(); S.engine?.stop(0.8); S.engine = null; if (lamps) lamps.emissiveIntensity = lamps0; }
       holds([]);
       gps.unblip('van');
       parkInYard({ van: true, lev: true });
@@ -395,16 +415,19 @@ function createMission(W) {
     },
     // the yard: the lookouts
     async yard(fresh) {
+      if (fresh) { twilight(); inTheCar(-1800, -1039.5, -PI / 2); place(W, { quant: [-1802, -1043.5, -PI / 2] }); }
       await sets(); twilight();
       if (fresh) { S.Y.show(true); parkInYard(); inTheCar(-1800, -1039.5, -PI / 2); place(W, { quant: [-1802, -1043.5, -PI / 2] }); await spawnYard(); }
       parkInYard();
       const stealth = S.stealth;
       if (S.flee) { S.alarm = true; return; }
+      // (pulled up behind the van at the side gate, in the gate lookout's eye: a moment to stop and get out, told so)
+      if (!fresh && stealth && inCar()) { stealth.grace = 6; ui.help(['Stop and get out: a lookout spots a ', { car: 'blue' }, ' from further off than a man on foot.'], 7); }
       objective(['Sneak up on the ', { stash: 'green' }, '.'], { x: S.Y.stash.x, z: S.Y.stash.z, name: 'The stash' });
       sfx?.play('buzz', { gain: 0.14, times: 1 }); W.audio?.play?.('phoneBuzz');
       ui.dm('Juno', "that's a lot of shipping containers for a moving company. lookouts on the gates. go quiet.", 8);
       gps.blip('stash', { x: S.Y.stash.x, z: S.Y.stash.z, kind: 'object', edge: true, name: 'The stash' });
-      delay(1.2).then(() => ui.help(['Lookouts see down the ', { 'yellow cones': 'yellow' }, '. Get behind one and press [E] to take him down quietly.'], 10)).catch(() => {});
+      delay(stealth?.grace > 0 ? 7 : 1.2).then(() => ui.help(['Lookouts see down the ', { 'yellow cones': 'yellow' }, '. Get behind one and press [E] to take him down quietly.'], 10)).catch(() => {});
       let spotted = null, reached = false;
       const off = hook(() => {
         const dt = frameDt();
@@ -426,25 +449,44 @@ function createMission(W) {
     },
     // the fight in the yard
     async fight(fresh) {
+      if (fresh) { twilight(); place(W, { car: [-1840, -1039.5, -PI / 2], quant: [-1928, -1040, PI / 2] }); }
       await sets(); twilight();
       const combat = W.combat;
       if (fresh) { S.Y.show(true); parkInYard(); place(W, { car: [-1840, -1039.5, -PI / 2], quant: [-1928, -1040, PI / 2] }); await spawnYard(); }
       if (!combat?.spawnCrew) { ui.help('The fight is coming soon.', 4); await delay(3); return; }
+      // (a yard of them: his health stretched for it (130), a slow second wind when he's kept out of reach a few
+      // seconds, and a top-up between the waves)
+      const maxHp0 = combat.player.maxHp; combat.player.maxHp = 130;
       combat.player.hp = combat.player.maxHp; lastHp = combat.player.hp;
       const autoGetUp = combat.player.autoGetUp; combat.player.autoGetUp = false;
       const offDown = combat.player.onDown(() => fail('Quant got rekt.', true));
       let offFight = null;
       try {
         S.alarm = true; S.stealth?.alarm(); wakeCrew();
-        const crews = [S.crew, S.stealth?.crew].filter(Boolean);
-        const total = crews.reduce((n, c) => n + c.alive(), 0);
-        const down = () => total - crews.reduce((n, c) => n + c.alive(), 0);
+        // two waves: the lookouts still up and the crew at the stash; down to their last man, two more out of the
+        // containers at the back (a brute among them)
+        const crews = [S.crew, S.stealth?.crew].filter(Boolean), WAVE2 = 2;
+        const alive = () => crews.reduce((n, c) => n + c.alive(), 0);
+        let wave2 = null;
+        const total = alive() + WAVE2;
+        const down = () => total - alive() - (wave2 ? 0 : WAVE2);
         objective(['Beat up the ', { Degens: 'red' }, '.'], null);
         ui.counter('DEGENS', `0/${total}`);
         delay(1.5).then(() => ui.help(['Press [E] by a ', { 'trash can': 'green' }, ' or a ', { bottle: 'green' }, ' to pick it up. [E] again throws it.'], 9)).catch(() => {});
-        let warned = false, half = false, barkT = now() + 9000;
+        let warned = false, half = false, barkT = now() + 9000, hurtT = now(), hp0 = combat.player.hp;
         const barks = ["I'm too leveraged to fight! Somebody hit him!", 'Number go up! Hit him harder!', 'Do you know what my liquidation price is?'];
         offFight = hook(() => {
+          const dt = frameDt(), hp = combat.player.hp;
+          if (hp < hp0 - 0.5) hurtT = now(); hp0 = hp;
+          if (hp > 0 && !combat.player.down && now() - hurtT > 3500 && hp < combat.player.maxHp * 0.6) combat.player.hp = hp + 4 * dt;
+          if (!wave2 && alive() <= 1) {
+            wave2 = W.combat.spawnCrew({ x: -1932, z: -1062, count: 1, brute: 1, weapons: ['bottle'], aggro: true, props: false }).engage();
+            crews.push(wave2);
+            combat.player.hp = Math.max(combat.player.hp, combat.player.maxHp * 0.8);
+            sfx?.play('ding', { gain: 0.14 });
+            ui.help(['Second wind: ', { 'health topped up': 'green' }, '. More of them coming out of the containers.'], 6);
+            say([['Lev', ACID, "Everybody out of the boxes! You're all on payroll!"]]).catch(() => {});
+          }
           const live = new Set();
           for (const e of combat.enemies) if (e.alive && dist(e.pos, P.position.x, P.position.z) < 150) { live.add('e:' + e.id); gps.blip('e:' + e.id, { x: e.pos.x, z: e.pos.z, kind: 'enemy' }); }
           for (const id of [...gps.blips.keys()]) if (id.startsWith('e:') && !live.has(id)) gps.unblip(id);
@@ -456,15 +498,16 @@ function createMission(W) {
           else if (d > 90 && !warned) { warned = true; ui.objective(['Get back to the ', { fight: 'yellow' }, '.']); }
           else if (d < 80 && warned) { warned = false; ui.objective(['Beat up the ', { Degens: 'red' }, '.']); }
         });
-        await wait(() => crews.every((c) => c.alive() === 0));
+        await wait(() => wave2 && crews.every((c) => c.alive() === 0));
         stats.rekt = total;
-      } finally { offFight?.(); offDown?.(); combat.player.autoGetUp = autoGetUp; }
+      } finally { offFight?.(); offDown?.(); combat.player.autoGetUp = autoGetUp; combat.player.maxHp = maxHp0; combat.player.hp = Math.min(combat.player.hp, maxHp0); }
       for (const id of [...gps.blips.keys()]) if (id.startsWith('e:')) gps.unblip(id);
       ui.counter(null);
       await delay(1.0);
     },
     // Lev bolts: the chase
     async chase(fresh) {
+      if (fresh) { twilight(); inTheCar(-1886, -1049, PI / 2); }
       await sets(); twilight();
       if (fresh) { S.Y.show(true); parkInYard({ van: true, lev: true }); inTheCar(-1886, -1049, PI / 2); }
       W.combat?.clear?.(); S.stealth?.dispose(); S.stealth = null; S.crew = null;
@@ -533,6 +576,9 @@ function createMission(W) {
       if (dc < 10) { const k = 10 / Math.max(0.5, dc); car.position.x = at.x + (car.position.x - at.x) * k; car.position.z = at.z + (car.position.z - at.z) * k; car.mesh.position.copy(car.position); }
       const lev = await levRig();
       S.L.smoke(true);
+      // (the crash site kept clear of the traffic and the walkers, M1's way, while the scene plays and his phone lies
+      // there: let go at the mission's end)
+      holds([{ minX: at.x - 18, maxX: at.x + 18, minZ: at.z - 18, maxZ: at.z + 18 }]);
       const def = crashScene(W, { levCar: S.L, lev, phone: S.phone, say, at });
       def.setup();
       await runScene(W, def);
@@ -546,6 +592,7 @@ function createMission(W) {
         place(W, { car: [at.x + 14, at.z - 16, PI], quant: [at.x + 7, at.z - 6, -PI * 0.75] });
       }
       const drop = S.phoneAt || crashScene(W, { levCar: S.L, lev: null, phone: S.phone, say, at }).drop;
+      holds([{ minX: Math.min(at.x, drop[0]) - 18, maxX: Math.max(at.x, drop[0]) + 18, minZ: Math.min(at.z, drop[1]) - 18, maxZ: Math.max(at.z, drop[1]) + 18 }]);
       S.phone.visible = true; S.phone.position.set(drop[0], cm.getGroundHeight(drop[0], drop[1], 'person') + 0.012, drop[1]); S.phone.rotation.set(0, 0.6, 0);
       objective(['Take ', { "Lev's phone": 'green' }, '.'], null);
       gps.blip('phone', { x: drop[0], z: drop[1], kind: 'object', edge: true, name: "Lev's phone" });
@@ -573,7 +620,8 @@ function createMission(W) {
     },
   };
   const ORDER = ['start', 'go', 'tail', 'yard', 'fight', 'chase', 'crash', 'phone'];
-  const CHECKPOINT = { start: 'start', go: 'go', tail: 'tail', yard: 'yard', fight: 'fight', chase: 'chase', crash: 'chase', phone: 'phone' };
+  // (the fight lost: back to the yard's own start, the lookouts at their posts again, the quiet way open again)
+  const CHECKPOINT = { start: 'start', go: 'go', tail: 'tail', yard: 'yard', fight: 'yard', chase: 'chase', crash: 'chase', phone: 'phone' };
   const LABELS = { start: 'Bryant Park', go: 'To Times Square', tail: 'The tail', yard: 'The yard', fight: 'The fight', chase: 'The chase', phone: "Lev's phone" };
 
   // the yard's people: the lookouts at their posts, the crew at the stash (none of them awake yet)
@@ -582,9 +630,10 @@ function createMission(W) {
     const Y = S.Y;
     const stealth = S.stealth = createStealth(W, { posts: Y.posts, U, center: { x: YARD.cx, z: YARD.cz } });
     await stealth.spawn();
-    // six at the stash, trash cans and bottles about, facing their table (until the alarm)
+    // three at the stash, trash cans and bottles about, facing their table (until the alarm; two more wait in the
+    // containers for the fight's second wave)
     const cx = Y.stash.x - 1.5, cz = Y.stash.z - 5;
-    const crew = S.crew = W.combat.spawnCrew({ x: cx, z: cz, count: 5, brute: 1, weapons: ['bottle'], aggro: false, props: { cans: 3, bottles: 4 } });
+    const crew = S.crew = W.combat.spawnCrew({ x: cx, z: cz, count: 3, brute: 0, weapons: ['bottle'], aggro: false, props: { cans: 3, bottles: 4 } });
     crew.enemies.forEach((e, i) => {
       const a = i / crew.enemies.length * PI * 2, r = 3.0 + (i % 2) * 1.3, x = cx + Math.sin(a) * r, z = cz + Math.cos(a) * r;
       e.pos.set(x, cm.getGroundHeight(x, z, 'person'), z);
@@ -675,7 +724,7 @@ function createMission(W) {
         } catch (e) {
           if (e instanceof Quit) return;
           if (!(e instanceof Fail)) { console.error('[m2]', phase, e); tidy(); return; }
-          tidy();
+          tidy(); cm.resetInput?.();
           if (e.rekt) { ui.rekt(true); sfx?.play('failed'); await sleep(2600); ui.rekt(false); } else sfx?.play('failed');
           const cp = CHECKPOINT[phase]; fails[cp] = (fails[cp] || 0) + 1;
           const choice = await ui.failed(e.reason, { skip: fails[cp] >= 3 });
@@ -697,7 +746,7 @@ function createMission(W) {
   };
   missions(W).register({
     id: 'm2', act: 'Act I · Mission 2', title: 'Burner',
-    checkpoints: ['start', 'go', 'tail', 'yard', 'fight', 'chase', 'phone'].map((id) => ({ id, label: LABELS[id] })),
+    checkpoints: ['start', 'go', 'tail', 'yard', 'chase', 'phone'].map((id) => ({ id, label: LABELS[id] })),
     active: () => running && !!M._phase && M._phase !== 'passed',
     at: () => CHECKPOINT[M._phase] || 'start',
     restart: (at) => { ui.rekt(false); start(W, { at }).catch((e) => console.error('[m2]', e)); },

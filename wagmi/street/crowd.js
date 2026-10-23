@@ -30,14 +30,28 @@ export function createCrowd(W) {
   const ground = (owner, x, z) => cm.getGroundHeight(x, z, 'person');
   const groundXZ = (x, z) => cm.getGroundHeight(x, z, 'person');
   const collide = (pos, r) => cm.resolveHorizontalCollision(pos, r, pos.y + 1.0);
-  // (under a body thrown about: the street, or Quant's car's bonnet and roof where it's in the way: they land on it and
-  // slide off it as it goes)
-  const bodyGround = (x, z) => {
-    const g = groundXZ(x, z), c = W.car, B = c.body || { hx: 0.95, z0: -2.12, z1: 2.26 };
-    if (!c.mesh?.visible) return g;
+  // (under a body thrown about: the street, the sidewalk, a park's raised lawn; never Quant's car, see carAt)
+  const bodyGround = groundXZ;
+  // Quant's car to a body thrown about (thrown.js carAt): null clear of its box (r m out), else its surface's height
+  // there (the bonnet and the deck lower than the roof), over (over its body or its nose, not beside it), its velocity,
+  // and the way out of it: over its body, out of its nearest side; beside it, the nearest way out
+  const carAt = (x, z, r, out) => {
+    const c = W.car, B = c.body || { hx: 0.95, z0: -2.12, z1: 2.26 };
+    if (!c.mesh?.visible) return null;
     const cs = Math.cos(c.heading), sn = Math.sin(c.heading), dx = x - c.position.x, dz = z - c.position.z;
     const lx = dx * cs - dz * sn, lz = dx * sn + dz * cs;
-    return Math.abs(lx) < B.hx && lz > B.z0 && lz < B.z1 ? Math.max(g, c.position.y + (B.top ?? 1.2) - 0.15) : g;
+    const side = B.hx + r - Math.abs(lx), back = lz - (B.z0 - r), front = B.z1 + r - lz;
+    if (side <= 0 || back <= 0 || front <= 0) return null;
+    const top = B.top ?? 1.2, sx = Math.sign(lx || 1);
+    out.top = c.position.y + (lz > B.z1 - 1.4 ? top - 0.45 : lz < B.z0 + 0.9 ? top - 0.3 : top);
+    out.over = Math.abs(lx) < B.hx && lz > B.z0;
+    const sp = c.speed || 0;
+    out.vx = Math.sin(c.heading) * sp + (c.vx || 0); out.vz = Math.cos(c.heading) * sp + (c.vz || 0);
+    // (the way out, in its frame, then the world's)
+    let nx = sx, nz = 0, d = side;
+    if (!out.over && Math.min(back, front) < side) { nx = 0; nz = back < front ? -1 : 1; d = Math.min(back, front); }
+    out.sx = nx * cs + nz * sn; out.sz = -nx * sn + nz * cs; out.d = d;
+    return out;
   };
   const hash = (i, k) => { const v = Math.sin(i * 12.9898 + k * 78.233) * 43758.5453; return v - Math.floor(v); };
 
@@ -285,7 +299,7 @@ export function createCrowd(W) {
   function knock(p, how) {
     if (p.body) return null;
     if (p.state === 'wait' || p.state === 'cross') leaveCorner(p);
-    const body = new Thrown(p.rig, p.x, groundXZ(p.x, p.z), p.z, p.rig.yaw ?? p.yaw, bodyGround, collide);
+    const body = new Thrown(p.rig, p.x, groundXZ(p.x, p.z), p.z, p.rig.yaw ?? p.yaw, bodyGround, collide, carAt);
     body.onLand = (bd, impact) => { if (impact > 4) W.audio?.play?.('pedHit', { pos: [bd.pos.x, bd.pos.y, bd.pos.z], vol: Math.min(0.6, impact / 14) }); };
     p.body = body; p.state = 'down'; p.cross = null; p.shove = null;
     how(body);

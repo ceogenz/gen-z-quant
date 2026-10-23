@@ -310,7 +310,7 @@ function offsetConvexPolygon(pts, d) {
 
 /**
  * Tags every vertex of a mesh using the shared park paving material with its paving style (uv.x, see
- * createParkPavingMaterial: 0 hex asphalt pavers, 1 light granite plaza pavers, 2 bluestone slabs).
+ * createParkPavingMaterial: 0 hex asphalt pavers, 1 light granite plaza pavers, 2 bluestone slabs, 3 gravel).
  */
 /**
  * A simple polygon ([{x, z}], either winding, convex or not) offset inward by d with mitred corners (miters clamped
@@ -1594,7 +1594,7 @@ function buildCityGrid(scene) {
     createParkWallMaterial
   } = window.NYC;
   const pavingMat = createParkPavingMaterial();
-  const graniteMat = new THREE.MeshStandardNodeMaterial({ color: 0x86837c, roughness: 0.8 }); // benches, planters, copings
+  const graniteMat = new THREE.MeshStandardNodeMaterial({ color: 0x75726b, roughness: 0.82 }); // benches, planters, copings (mid grey: paler read as white in the noon sun)
   const benchMatrices = []; // NYC Parks "World's Fair" slatted benches
   const lampMatrices = []; // NYC Parks cast-iron lampposts with glass globes
   const parkTreeSites = []; // { x, y, z, scale, species } park & plaza trees planted by street-details.js (section 7)

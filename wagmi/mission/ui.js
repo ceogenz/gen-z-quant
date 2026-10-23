@@ -373,12 +373,15 @@ export function createUI() {
       bigEl.classList.add('on'); bigEl.style.pointerEvents = 'auto';
       return new Promise((res) => {
         let sel = 0;
-        const btns = [...bigEl.querySelectorAll('button')];
+        const btns = [...bigEl.querySelectorAll('button')], t0 = performance.now();
         const done = (o) => { removeEventListener('keydown', onKey, true); bigEl.classList.remove('on'); bigEl.style.pointerEvents = 'none'; res(o); };
+        // (the choices move only on fresh presses: a key still held from the fight, repeating, or pressed in the moment the
+        // screen comes up moves nothing)
         const onKey = (e) => {
+          e.stopImmediatePropagation(); e.preventDefault();
+          if (e.repeat || performance.now() - t0 < 450) return;
           if (['ArrowLeft', 'ArrowRight', 'KeyA', 'KeyD'].includes(e.code)) { sel = (sel + (/Left|KeyA/.test(e.code) ? -1 : 1) + btns.length) % btns.length; btns.forEach((b, i) => b.classList.toggle('sel', i === sel)); }
           else if (e.code === 'Enter' || e.code === 'Space') done(opts[sel]);
-          e.stopImmediatePropagation(); e.preventDefault();
         };
         addEventListener('keydown', onKey, true);
         btns.forEach((b) => b.addEventListener('click', () => done(b.dataset.o)));

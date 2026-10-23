@@ -2,6 +2,9 @@
 // its turn, velocity and spin, under gravity, off the walls, onto the street with a bounce or two and a slide; lying
 // there, then up again. The limbs fly about in the air, go limp on the ground and draw in to get up
 // (PersonRig.tumble in js/pedestrians.js poses them). A dive is the same with less in it.
+// Quant's car (carAt) is never ground to them: a body that comes down on it is carried a little with it, popped up and
+// shoved out over its nearest side, so it falls past it to the street; one lying (or getting up) where the car comes is
+// rolled out of its way, aside. Nobody lies on it, rides on it or stands up on it.
 import * as THREE from 'three/webgpu';
 
 const G = 15; // a touch more than real gravity: a hit reads quicker
@@ -12,13 +15,16 @@ const SUPPORT = [[0, -0.92, 0.04], [0, 0.76, 0], [0.34, 0.36, 0], [-0.34, 0.36, 
   [0, 0.42, 0.13], [0, 0.42, -0.14], [0.16, -0.48, 0], [-0.16, -0.48, 0]].map((p) => new THREE.Vector3(...p));
 const _v = new THREE.Vector3(), _w = new THREE.Vector3(), _n = new THREE.Vector3(), _q = new THREE.Quaternion();
 const _x = new THREE.Vector3(), _y = new THREE.Vector3(), _z = new THREE.Vector3(), _m = new THREE.Matrix4();
+const _c = { top: 0, over: false, vx: 0, vz: 0, sx: 0, sz: 0, d: 0 };
 const smooth = (x) => { x = Math.min(1, Math.max(0, x)); return x * x * (3 - 2 * x); };
 
 export class Thrown {
   // rig: its PersonRig; standing at (x, y, z) facing yaw; ground(x, z) the walking surface; collide(pos, r) keeps a
-  // point out of the buildings (moves it)
-  constructor(rig, x, y, z, yaw, ground, collide) {
-    this.rig = rig; this.s = rig.s; this.ground = ground; this.collide = collide;
+  // point out of the buildings (moves it); carAt(x, z, r, out): null clear of Quant's car (its box r m out), else out
+  // filled: top (its surface's height there), over (over its body, not just beside it), vx vz (its velocity), sx sz
+  // (out of its nearest side, unit) and d (m to there)
+  constructor(rig, x, y, z, yaw, ground, collide, carAt = null) {
+    this.rig = rig; this.s = rig.s; this.ground = ground; this.collide = collide; this.carAt = carAt;
     this.pos = new THREE.Vector3(x, y + PELVIS * this.s, z);
     this.q = new THREE.Quaternion().setFromAxisAngle(UP, yaw);
     this.v = new THREE.Vector3(); this.w = new THREE.Vector3();
@@ -82,7 +88,9 @@ export class Thrown {
       if (ang > 1e-5) { _q.setFromAxisAngle(_w.copy(this.w).divideScalar(ang), ang * dt); this.q.premultiply(_q).normalize(); }
       this.wall(0.35);
       const g = this.ground(this.pos.x, this.pos.z), lo = this.pos.y + this.low();
-      if (lo < g) {
+      if (this.offCar(lo)) {
+        // (on the car: off it again, see offCar)
+      } else if (lo < g) {
         this.pos.y += g - lo;
         if (this.v.y < 0) {
           const impact = -this.v.y;
@@ -101,12 +109,15 @@ export class Thrown {
       this.v.x *= f; this.v.z *= f; this.v.y = 0;
       this.pos.x += this.v.x * dt; this.pos.z += this.v.z * dt;
       this.wall(0.35);
+      this.aside();
       this.q.slerp(this.qLie, 1 - Math.exp(-9 * dt));
       const g = this.ground(this.pos.x, this.pos.z);
       this.pos.y += (g + 0.12 * s - this.pos.y) * (1 - Math.exp(-14 * dt));
       this.flail = Math.max(0, this.flail - dt * 3);
       if (this.t > 0.45 && Math.hypot(this.v.x, this.v.z) < 0.35) { this.state = 'lie'; this.t = 0; }
     } else if (this.state === 'lie') {
+      // (the car coming over them: rolled aside, sliding)
+      if (this.aside() > 1) { this.state = 'slide'; this.t = 0; return this.state; }
       this.q.slerp(this.qLie, 1 - Math.exp(-9 * dt));
       // (on whatever is under them: off a car's bonnet as it goes, they drop)
       const g = this.ground(this.pos.x, this.pos.z) + 0.12 * s;
@@ -116,6 +127,7 @@ export class Thrown {
       if (this.t > this.lieFor) { this.state = 'getup'; this.t = 0; this.qUp.setFromAxisAngle(UP, this.upYaw); }
     } else if (this.state === 'getup') {
       const u = Math.min(1, this.t / 1.15), e = smooth(u);
+      this.aside();
       this.q.slerpQuaternions(this.qLie, this.qUp, e);
       this.curl = Math.sin(Math.PI * Math.min(1, u * 1.1)) * 0.85;
       const g = this.ground(this.pos.x, this.pos.z);
@@ -123,6 +135,37 @@ export class Thrown {
       if (u >= 1) { this.state = 'up'; this.curl = 0; }
     }
     return this.state;
+  }
+
+  // in the air, come down on Quant's car (lo: the body's lowest point): put on its surface, carried a little with it,
+  // popped up and shoved out over its nearest side, every frame it's on it (so it is off it within a beat); beside it,
+  // pushed out of its way. True when it touched it
+  offCar(lo) {
+    const C = this.carAt && this.carAt(this.pos.x, this.pos.z, 0.3, _c);
+    if (!C || lo > C.top) return false;
+    const cvs = C.vx * C.sx + C.vz * C.sz, out = 1.6 + 0.06 * Math.hypot(C.vx, C.vz);
+    if (C.over) {
+      this.pos.y += C.top - lo;
+      this.v.x += (C.vx - this.v.x) * 0.5; this.v.z += (C.vz - this.v.z) * 0.5;
+      this.v.y = Math.max(this.v.y, 1.4);
+      this.w.multiplyScalar(0.8);
+    } else { this.pos.x += C.sx * C.d; this.pos.z += C.sz * C.d; }
+    const vs = this.v.x * C.sx + this.v.z * C.sz - cvs;
+    if (vs < out) { this.v.x += C.sx * (out - vs); this.v.z += C.sz * (out - vs); }
+    return true;
+  }
+
+  // on the ground where the car comes: rolled out from under it, aside (out of its nearest side), as fast as it pushes;
+  // the speed it was pushed with (0: clear of it)
+  aside() {
+    const C = this.carAt && this.carAt(this.pos.x, this.pos.z, 0.35, _c);
+    if (!C || this.pos.y > C.top + 0.3) return 0;
+    this.pos.x += C.sx * C.d; this.pos.z += C.sz * C.d;
+    const cvs = C.vx * C.sx + C.vz * C.sz, vs = this.v.x * C.sx + this.v.z * C.sz;
+    const want = Math.max(0, cvs) + 0.8 + 0.12 * Math.hypot(C.vx, C.vz);
+    if (vs < want) { this.v.x += C.sx * (want - vs); this.v.z += C.sz * (want - vs); }
+    this.wall(0.35);
+    return want;
   }
 
   // off the walls (the buildings): pushed out, bouncing back off them

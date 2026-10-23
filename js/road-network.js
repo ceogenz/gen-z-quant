@@ -93,8 +93,47 @@ function buildRoadNetwork(sidewalks, obstacles) {
     }
     return false;
   }
+  // (WAGMI City) ...and a park's raised paving or lawn under the point itself (the ground patches city-grid.js lays,
+  // standing above the sidewalks' 0.22 m): a street drawn across a park's ground (Washington Square's four sides, whose
+  // centrelines run inside the square's paving) is no road, so traffic and the GPS go round by the streets outside it
+  const RAISED = 0.25;
+  const raisedCells = new Map(); // 32 m cells -> the raised patches reaching into them
+  for (const p of window.NYC.groundPatches || []) {
+    if (!(p.top >= RAISED) || p.stair) continue;
+    for (let ix = Math.floor(p.minX / CELL); ix <= Math.floor(p.maxX / CELL); ix++) {
+      for (let iz = Math.floor(p.minZ / CELL); iz <= Math.floor(p.maxZ / CELL); iz++) {
+        const k = cellKey(ix, iz);
+        if (!raisedCells.has(k)) raisedCells.set(k, []);
+        raisedCells.get(k).push(p);
+      }
+    }
+  }
+  function onRaisedGround(x, z) {
+    for (const p of raisedCells.get(cellKey(Math.floor(x / CELL), Math.floor(z / CELL))) || []) {
+      if (x < p.minX || x > p.maxX || z < p.minZ || z > p.maxZ) continue;
+      if (p.r) {
+        if ((x - p.cx) ** 2 + (z - p.cz) ** 2 > p.r * p.r) continue;
+      } else if (p.poly) {
+        let inside = false;
+        for (let i = 0, j = p.poly.length - 1; i < p.poly.length; j = i++) {
+          const a = p.poly[i];
+          const b = p.poly[j];
+          if ((a.z > z) !== (b.z > z) && x < ((b.x - a.x) * (z - a.z)) / (b.z - a.z) + a.x) inside = !inside;
+        }
+        if (!inside) continue;
+      }
+      // (a terrace's edge rising from the street: only where it has risen above the sidewalk)
+      if (p.edge && p.base < RAISED) {
+        const d = Math.min(x - p.minX, p.maxX - x, z - p.minZ, p.maxZ - z) / p.edge;
+        if (d < 1 && p.base + (p.top - p.base) * d * d * (3 - 2 * d) < RAISED) continue;
+      }
+      return true;
+    }
+    return false;
+  }
   const blockedOnStreet = (x, z, clear) => !onLand(x - clear, x + clear, z - clear, z + clear) ||
     query(x - 0.3, x + 0.3, z - 0.3, z + 0.3, (r) => r.curb) ||
+    onRaisedGround(x, z) ||
     nearMedian(x, z, clear) ||
     query(x - clear, x + clear, z - clear, z + clear, (r) => !r.curb && (r.maxX - r.minX < 50 || r.maxZ - r.minZ < 50) && !medianBox(r));
 

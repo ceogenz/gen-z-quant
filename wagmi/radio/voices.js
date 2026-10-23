@@ -41,7 +41,11 @@ export async function createVoice(W, out) {
     if (kind === 'video') return [f('highpass', 160), f('peaking', 2500, 1, 2), f('lowpass', 6500)];
     return [];
   };
+  // (a line that runs on past the next one's subtitle, said at a natural pace, is let finish if it is nearly done: the
+  // next one waits for it, up to HOLD s; a line further from done is cut)
+  const HOLD = 1.0;
   let cur = null, shown = null;
+  const live = new Set();
   function play(l) {
     if (!graph()) return;
     warm();
@@ -49,18 +53,20 @@ export async function createVoice(W, out) {
     load(l).then((buf) => {
       // (still the line on screen; started late by however long the load took, so it keeps to the picture)
       if (shown !== l) return;
-      const late = Math.max(0, ctx.currentTime - asked); if (late > buf.duration - 0.2) return;
-      V.stop(0.05);
+      const left = cur ? cur.end - ctx.currentTime : 0, wait = left > 0 && left <= HOLD ? left + 0.04 : 0;
+      const late = wait ? 0 : Math.max(0, ctx.currentTime - asked); if (late > buf.duration - 0.2) return;
+      if (!wait) V.stop(0.05);
       const src = ctx.createBufferSource(); src.buffer = buf;
       const g = ctx.createGain(); g.gain.value = 1;
       const chain = filters(l.speaker in fxOf ? fxOf[l.speaker] : l.fx);
       let n = src; for (const f of chain) { n.connect(f); n = f; } n.connect(g); g.connect(bus);
-      src.start(ctx.currentTime, late);
-      const me = (cur = { src, g, l });
-      V.log.push({ id: l.id, at: +(performance.now() / 1000).toFixed(3), late: +late.toFixed(3), intro: W.intro?.t != null ? +W.intro.t.toFixed(2) : null }); if (V.log.length > 60) V.log.shift();
-      src.onended = () => { if (cur === me) cur = null; };
+      src.start(ctx.currentTime + wait, late);
       const secs = buf.duration - late;
-      if (out.via() === 'mixer') W.audio.duck('music', 0.6, secs + 0.2); else W.radio?.duck?.(0.3, secs + 0.2);
+      const me = (cur = { src, g, l, end: ctx.currentTime + wait + secs });
+      live.add(me);
+      V.log.push({ id: l.id, at: +(performance.now() / 1000).toFixed(3), late: +late.toFixed(3), wait: +wait.toFixed(3), intro: W.intro?.t != null ? +W.intro.t.toFixed(2) : null }); if (V.log.length > 60) V.log.shift();
+      src.onended = () => { live.delete(me); if (cur === me) cur = null; };
+      if (out.via() === 'mixer') W.audio.duck('music', 0.6, wait + secs + 0.2); else W.radio?.duck?.(0.3, wait + secs + 0.2);
     }).catch(() => {});
   }
   const V = {
@@ -77,11 +83,13 @@ export async function createVoice(W, out) {
     // a line spoken without a subtitle
     say(speaker, text) { const l = byKey.get(key(speaker, text)); if (!l) return false; shown = l; play(l); return true; },
     stop(secs = 0.15) {
-      if (!cur) return; const { src, g } = cur; cur = null;
-      try { g.gain.setTargetAtTime(0, ctx.currentTime, secs / 3); src.stop(ctx.currentTime + secs + 0.05); } catch {}
+      cur = null;
+      for (const p of live) try { p.g.gain.setTargetAtTime(0, ctx.currentTime, secs / 3); p.src.stop(ctx.currentTime + secs + 0.05); } catch {}
+      live.clear();
     },
     level() {
-      if (!cur || !ana) return 0;
+      // (nothing while the sound is held: the pause menu)
+      if (!cur || !ana || ctx.state !== 'running') return 0;
       ana.getFloatTimeDomainData(data); let e = 0; for (const v of data) e += v * v;
       return Math.min(1, Math.sqrt(e / data.length) * 5);
     },

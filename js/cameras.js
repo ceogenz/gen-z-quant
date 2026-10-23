@@ -238,7 +238,8 @@ class CameraSystem {
     switch (this.activePresetId) {
       case 'chase': {
         // (WAGMI City: a car that frames itself, entity.chase: its own lens, a short pull back with speed instead of the
-        // long one, and the lens widening with speed and more on the boost, so the car stays big and speed still reads)
+        // long one, and the lens widening with speed and more on the boost, so the car stays big and speed still reads;
+        // its shake flat out, below)
         const ch = entity.chase;
         const dist = ch
           ? entity.chaseDistance * this.zoomMultiplier + ch.pull * this.smoothedSpeed
@@ -424,6 +425,18 @@ class CameraSystem {
     this._look.copy(this.currentLookAt);
     if ((this.activePresetId === 'chase' || this.activePresetId === 'action') && this.followEntity === entity) this.keepInView(entity, dt);
     else this._view = null;
+    // (WAGMI City: a car's own lens trembles a little flat out, from about its top speed up to its boost's: the speed
+    // reads without the camera dropping back off it)
+    const ch = this._lens && entity.chase;
+    if (ch && ch.shake) {
+      const k = Math.max(0, Math.min(1, (this.smoothedSpeed - ch.vmax * 0.7) / ((ch.vtop || ch.vmax * 1.6) - ch.vmax * 0.7)));
+      if (k > 0) {
+        const a = ch.shake * k * k, t = elapsed ?? performance.now() / 1000;
+        this.camera.position.x += a * (Math.sin(t * 71.3) + 0.6 * Math.sin(t * 43.1)) * Math.cos(totalYaw);
+        this.camera.position.z -= a * (Math.sin(t * 71.3) + 0.6 * Math.sin(t * 43.1)) * Math.sin(totalYaw);
+        this.camera.position.y += a * (Math.sin(t * 59.7) + 0.5 * Math.sin(t * 97.9));
+      }
+    }
     this.camera.lookAt(this._look);
   }
 

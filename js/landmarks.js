@@ -649,10 +649,25 @@ function buildLandmarks(scene) {
       bpGroup.add(lion);
     }
 
-    const lawnWall = new THREE.Mesh(new THREE.BoxGeometry(46, 0.85, 60), limestoneTrimMat);
+    // The raised terrace round the lawn: weathered granite walls (not the library's pale marble: in the sun a slab that
+    // colour read as a white void), topped with the park's warm grey crushed-stone gravel (paving style 3)
+    const terraceWallMat = new THREE.MeshStandardNodeMaterial({ color: 0x77726a, roughness: 0.86, metalness: 0.0 });
+    const lawnWall = new THREE.Mesh(new THREE.BoxGeometry(46, 0.85, 60), terraceWallMat);
     lawnWall.position.set(-14, 0.42, 0);
     lawnWall.receiveShadow = true;
     bpGroup.add(lawnWall);
+    if (window.NYC.createParkPavingMaterial) {
+      const gravelGeo = new THREE.PlaneGeometry(45.6, 59.6).rotateX(-Math.PI / 2);
+      const uvs = gravelGeo.attributes.uv;
+      for (let i = 0; i < uvs.count; i++) uvs.setXY(i, 3, 0);
+      const gravelMat = window.NYC.createParkPavingMaterial();
+      gravelMat.polygonOffset = true; // (a centimetre over the wall's own top: no fighting with it far off)
+      gravelMat.polygonOffsetFactor = -1;
+      const gravel = new THREE.Mesh(gravelGeo, gravelMat);
+      gravel.position.set(-14, 0.854, 0);
+      gravel.receiveShadow = true;
+      bpGroup.add(gravel);
+    }
 
     const lawnGrassMat = new THREE.MeshStandardNodeMaterial({
       color: 0x388c42,
@@ -664,13 +679,13 @@ function buildLandmarks(scene) {
     lawn.receiveShadow = true;
     bpGroup.add(lawn);
 
-    const fountainBasin = new THREE.Mesh(new THREE.CylinderGeometry(5.8, 6.2, 1.1, 20), limestoneTrimMat);
+    const fountainBasin = new THREE.Mesh(new THREE.CylinderGeometry(5.8, 6.2, 1.1, 20), new THREE.MeshStandardNodeMaterial({ color: 0x6f6a63, roughness: 0.82 }));
     fountainBasin.position.set(-29, 0.9, 0);
     bpGroup.add(fountainBasin);
 
     const fountainWater = new THREE.Mesh(
       new THREE.CylinderGeometry(5.2, 5.2, 0.16, 20),
-      new THREE.MeshStandardNodeMaterial({ color: 0x24789c, emissive: 0x0a2e40, roughness: 0.12, metalness: 0.65 })
+      new THREE.MeshStandardNodeMaterial({ color: 0x1f4c5c, emissive: 0x05161e, roughness: 0.1, metalness: 0.15 })
     );
     fountainWater.position.set(-29, 1.42, 0);
     bpGroup.add(fountainWater);
@@ -694,6 +709,9 @@ function buildLandmarks(scene) {
       maxY: 24
     });
     fitToSite([bpGroup], blockSite('Bryant Park'), c0, { height: 30, stretch: true, name: 'bryant' });
+    // (the park is stretched to fill its block, about 1.6 times more east-west than north-south: the round fountain and
+    // carousel kept round, not drawn out into 40 m ellipses)
+    for (const m of [fountainBasin, fountainWater, carouselBase, carouselRoof]) m.scale.x = bpGroup.scale.z / bpGroup.scale.x;
     bpGroup.updateMatrixWorld(true);
     const lb = new THREE.Box3().setFromObject(lawn);
     window.NYC.bryantParkLawn = { minX: lb.min.x, maxX: lb.max.x, minZ: lb.min.z, maxZ: lb.max.z, top: lb.max.y };

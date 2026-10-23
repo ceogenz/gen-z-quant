@@ -4,7 +4,8 @@
 // in it, Quant fills his suspicion (faster close up, running, or in a car); a sprint near him is heard. Full: 'You were
 // spotted.' From behind, a step away, E takes him down (the fight's takedown), and whoever sees that gets suspicious.
 //   const S = createStealth(W, { posts, U });  await S.spawn();  S.step(dt) -> null | 'spotted';  S.alarm();  S.dispose()
-//   S.lookouts: [{ e, sus, quiet, ... }] · S.down (taken down) · S.quiet (taken down unseen)
+//   S.lookouts: [{ e, sus, quiet, ... }] · S.down (taken down) · S.quiet (taken down unseen) · S.grace (s: nobody's
+//   suspicion fills yet: pulling up behind the van, he has a moment to stop and get out)
 import * as THREE from 'three/webgpu';
 
 const PI = Math.PI;
@@ -13,7 +14,7 @@ const angWrap = (a) => { a = (a + PI) % (2 * PI); if (a < 0) a += 2 * PI; return
 
 export function createStealth(W, { posts, U, center }) {
   const app = W.app, cm = app.controllerManager, P = W.person, car = W.car, combat = W.combat, scene = app.scene, cam = app.cameraSystem.camera;
-  const S = { lookouts: [], crew: null, down: 0, quiet: 0, alarmed: false };
+  const S = { lookouts: [], crew: null, down: 0, quiet: 0, alarmed: false, grace: 0 };
   // a wall, a container or a building between two points (the city's colliders, the yard's among them)
   function blocked(ax, ay, az, bx, by, bz) {
     const L = Math.hypot(bx - ax, bz - az), n = Math.ceil(L / 0.6);
@@ -95,6 +96,7 @@ export function createStealth(W, { posts, U, center }) {
   S.step = (dt) => {
     if (S.alarmed) return null;
     const p = me(), car_ = inCar(), sp = car_ ? Math.abs(car.speed) : P.speed || 0;
+    if (S.grace > 0) S.grace -= dt;
     let spotted = null;
     for (const L of S.lookouts) {
       const e = L.e;
@@ -120,8 +122,8 @@ export function createStealth(W, { posts, U, center }) {
       const dx = p.x - e.pos.x, dz = p.z - e.pos.z, d = Math.hypot(dx, dz), off = Math.abs(angWrap(Math.atan2(dx, dz) - L.yaw));
       const range = car_ ? RANGE * 1.5 : RANGE;
       const inCone = d < range && (off < HALF || (d < CLOSE * 1.6 && off < HALF * 1.6));
-      const sees = inCone && !blocked(e.pos.x, e.pos.y + 1.6, e.pos.z, p.x, p.y + 1.1, p.z);
-      const heard = !car_ && sp > 5.4 && d < 7;
+      const sees = S.grace <= 0 && inCone && !blocked(e.pos.x, e.pos.y + 1.6, e.pos.z, p.x, p.y + 1.1, p.z);
+      const heard = S.grace <= 0 && !car_ && sp > 5.4 && d < 7;
       if (sees) { L.sus += dt * (0.55 + (range - d) / range * 1.6) * (sp > 4 ? 1.6 : 1) * (car_ ? 1.8 : 1); if (d < CLOSE) L.sus = 1; L.look = { x: p.x, z: p.z }; }
       else if (heard) { L.sus += dt * 0.9; L.look = { x: p.x, z: p.z }; }
       else L.sus = Math.max(0, L.sus - dt * 0.22);

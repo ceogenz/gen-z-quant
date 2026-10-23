@@ -8,7 +8,7 @@
 //           behind it (built inside the building's shell: its walls face out, so from in here only ours are seen):
 //           concrete, a tool wall, a bench, tyres, strip lights and a work lamp
 //   suv     Fiona's black SUV (the city's SUV body, acid-green rims), parked on 5th Ave by the arch
-//   people  Gears (thug.glb in navy overalls, a beard, a cap: a big gentle mechanic) and Floor Price Fiona (thug.glb in a
+//   people  Gears (his own model, gears.glb: navy overalls, a beard, a cap: a big gentle mechanic) and Floor Price Fiona (thug.glb in a
 //           white puffer, platinum hair, white shades, a megaphone), each posed by its clips (rig) plus an arm to a point
 //   const R = buildRally(W); R.show(true); R.screen.mode('pump' | 'dump'); R.rigs[i].hit(dmg, from); R.update(dt, cam)
 //   const G = buildGarage(W); G.show(true); G.inside(true)     const suv = buildSUV(W)
@@ -16,6 +16,7 @@
 import * as THREE from 'three/webgpu';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { clone as skClone } from 'three/addons/utils/SkeletonUtils.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { rig, clamp } from './cine.js';
 
 const PI = Math.PI;
@@ -420,8 +421,6 @@ export function buildGarage(W) {
   const red = new THREE.MeshStandardMaterial({ color: '#B22A24', roughness: 0.4, metalness: 0.4 });
   box(0.7, 1.1, 0.5, red, BX1 - 0.55, Y + 0.55, GZ + 10.6, inn); // a tool chest
   const tyre = new THREE.MeshStandardMaterial({ color: '#141416', roughness: 0.9 });
-  for (let i = 0; i < 4; i++) { const t = new THREE.Mesh(new THREE.TorusGeometry(0.33, 0.13, 10, 24), tyre); t.rotation.x = PI / 2; t.position.set(BX0 + 0.8, Y + 0.13 + i * 0.27, GZ + 10.5); t.castShadow = true; inn.add(t); }
-  box(1.4, 2.2, 0.5, benchMat, BX0 + 0.4, Y + 1.1, GZ + 4.5, inn); // a shelf
   // oil drums in the back corner, a rolling tool cart, a floor jack, and two things on the back wall: a poster of a
   // car Gears built (an original) and his shop sign about the nitrogen
   const drum = (col, x0, z0) => { const d = new THREE.Mesh(new THREE.CylinderGeometry(0.29, 0.29, 0.88, 18), new THREE.MeshStandardMaterial({ color: col, roughness: 0.5, metalness: 0.5 })); d.position.set(x0, Y + 0.44, z0); d.castShadow = d.receiveShadow = true; inn.add(d); };
@@ -460,11 +459,146 @@ export function buildGarage(W) {
   box(0.46, 0.05, 1.05, red, 0, 0.11, 0, creeper);
   for (const [cx2, cz2] of [[-0.18, -0.42], [0.18, -0.42], [-0.18, 0.42], [0.18, 0.42]]) { const w = new THREE.Mesh(new THREE.SphereGeometry(0.04, 8, 6), tyre); w.position.set(cx2, 0.045, cz2); creeper.add(w); }
 
+  /* the shop's kit, merged by material (a draw call each): a two-post lift in the back west corner, its arms down; a
+     tyre rack and a workbench with a vice on the back wall; steel shelving of boxes and cans on the west wall under a
+     second tool wall; pendant work lights over the car; an air compressor in the front east corner; more drums; the
+     bay's yellow lines and oil stains on the floor; conduit along the walls; a clock */
+  const kit = new Map();
+  const _m4 = new THREE.Matrix4(), _e = new THREE.Euler(), _qk = new THREE.Quaternion(), _s = new THREE.Vector3();
+  const put = (mat, geo, x, y, z, rx = 0, ry = 0, rz = 0) => { geo.applyMatrix4(_m4.compose(V(x, y, z), _qk.setFromEuler(_e.set(rx, ry, rz)), _s.set(1, 1, 1))); if (!kit.has(mat)) kit.set(mat, []); kit.get(mat).push(geo); };
+  const cube = (mat, w, h, d, x, y, z, ry = 0) => put(mat, new THREE.BoxGeometry(w, h, d), x, y, z, 0, ry);
+  const steel = new THREE.MeshStandardMaterial({ color: '#5E646C', roughness: 0.45, metalness: 0.75 });
+  const liftMat = new THREE.MeshStandardMaterial({ color: '#C9A227', roughness: 0.5, metalness: 0.35 });   // (safety yellow)
+  const wood = new THREE.MeshStandardMaterial({ color: '#8A6440', roughness: 0.75 });
+  const card = new THREE.MeshStandardMaterial({ color: '#A88660', roughness: 0.9 });
+  const tin = new THREE.MeshStandardMaterial({ color: '#8C3A2A', roughness: 0.5, metalness: 0.5 });
+  const green = new THREE.MeshStandardMaterial({ color: '#2F5D45', roughness: 0.5, metalness: 0.5 });
+  const paint = new THREE.MeshStandardMaterial({ color: '#E2B53A', roughness: 0.7 });
+  const bulb = new THREE.MeshBasicMaterial({ color: new THREE.Color(3.2, 2.6, 1.8) });
+  // the lift: two posts, their feet, the beam over them, two arms each folded down by the posts, the power unit
+  const LX0 = GX - 5.7, LX1 = GX - 2.5, LZ = GZ + 10.6;
+  for (const lx of [LX0, LX1]) {
+    cube(liftMat, 0.32, 3.6, 0.32, lx, Y + 1.8, LZ); cube(steel, 0.6, 0.06, 0.6, lx, Y + 0.03, LZ);
+    cube(steel, 0.14, 0.4, 0.2, lx + (lx < GX - 4 ? 0.22 : -0.22), Y + 0.5, LZ);
+    for (const dz of [-1, 1]) put(steel, new THREE.BoxGeometry(0.1, 0.07, 1.05), lx + (lx < GX - 4 ? 0.35 : -0.35), Y + 0.32, LZ + dz * 0.55, 0, dz * (lx < GX - 4 ? -0.45 : 0.45), 0);
+  }
+  cube(liftMat, LX1 - LX0 + 0.32, 0.22, 0.26, (LX0 + LX1) / 2, Y + 3.7, LZ);
+  cube(green, 0.34, 0.5, 0.26, LX0 - 0.05, Y + 1.35, LZ + 0.3);
+  // the tyre rack (back wall, east): two shelves of tyres stood on their treads
+  const RX0 = GX + 2.6, RX1 = GX + 5.6, RZ = BZ1 - 0.45;
+  for (const ry of [0.55, 1.45]) cube(steel, RX1 - RX0, 0.05, 0.6, (RX0 + RX1) / 2, Y + ry, RZ);
+  for (const rx of [RX0, RX1]) for (const dz of [-0.27, 0.27]) cube(steel, 0.05, 2.0, 0.05, rx, Y + 1.0, RZ + dz);
+  for (const ry of [0.55, 1.45]) for (let i = 0; i < 7; i++) put(tyre, new THREE.TorusGeometry(0.3, 0.11, 8, 20), RX0 + 0.3 + i * 0.4 + (ry > 1 ? 0.12 : 0), Y + ry + 0.43, RZ, 0, PI / 2 + (i % 2 ? 0.06 : -0.05), 0);
+  for (let i = 0; i < 3; i++) put(tyre, new THREE.TorusGeometry(0.33, 0.13, 8, 20), BX1 - 1.1, Y + 0.13 + i * 0.27, BZ1 - 1.6, PI / 2, 0, 0);
+  // the workbench (back wall, middle): a thick wooden top on steel legs, a shelf under it, a vice, a toolbox, cans
+  const WX = GX + 0.4, WZ = BZ1 - 0.42;
+  cube(wood, 2.6, 0.07, 0.8, WX, Y + 0.92, WZ); cube(wood, 2.5, 0.03, 0.7, WX, Y + 0.25, WZ);
+  for (const dx of [-1.22, 1.22]) for (const dz of [-0.34, 0.34]) cube(steel, 0.06, 0.9, 0.06, WX + dx, Y + 0.45, WZ + dz);
+  cube(steel, 0.18, 0.12, 0.2, WX - 0.95, Y + 1.02, WZ - 0.32); cube(steel, 0.05, 0.14, 0.05, WX - 0.95, Y + 1.15, WZ - 0.32); cube(steel, 0.3, 0.03, 0.03, WX - 0.95, Y + 1.08, WZ - 0.45);
+  cube(red, 0.55, 0.22, 0.26, WX + 0.6, Y + 1.07, WZ + 0.05); cube(tin, 0.12, 0.2, 0.08, WX + 0.1, Y + 1.06, WZ + 0.15);
+  for (let i = 0; i < 4; i++) put(i % 2 ? tin : green, new THREE.CylinderGeometry(0.06, 0.06, 0.16, 10), WX - 0.3 + i * 0.14, Y + 1.04, WZ - 0.1);
+  for (let i = 0; i < 5; i++) cube(card, 0.4, 0.28, 0.35, WX - 0.9 + i * 0.48, Y + 0.42, WZ + (i % 2 ? 0.05 : -0.05), (i % 3) * 0.08);
+  // the shelving (west wall, by the door): four steel shelves of boxes, oil and parts
+  const SX = BX0 + 0.38, SZ0 = GZ + 2.6, SZ1 = GZ + 5.4;
+  for (const sz of [SZ0, SZ1]) for (const dx of [-0.25, 0.25]) cube(steel, 0.05, 2.3, 0.05, SX + dx, Y + 1.15, sz);
+  for (let k = 0; k < 4; k++) {
+    const sy = Y + 0.2 + k * 0.62; cube(steel, 0.55, 0.04, SZ1 - SZ0, SX, sy, (SZ0 + SZ1) / 2);
+    for (let i = 0; i < 5; i++) { const z = SZ0 + 0.35 + i * 0.52, kind = (i * 7 + k * 3) % 5;
+      if (kind < 2) cube(card, 0.42, 0.26 + kind * 0.08, 0.42, SX, sy + 0.15 + kind * 0.04, z, (i + k) * 0.13);
+      else if (kind < 4) for (let j = 0; j < 3; j++) put(kind === 2 ? tin : green, new THREE.CylinderGeometry(0.075, 0.075, 0.24, 10), SX - 0.1 + (j % 2) * 0.18, sy + 0.14, z - 0.15 + j * 0.15);
+      else cube(red, 0.36, 0.18, 0.3, SX, sy + 0.11, z); }
+  }
+  // pendant work lights over the car and the bench: a shade, its bulb, a cord to the ceiling
+  for (const [lx, lz, drop] of [[GX + 1.2, GZ + 4.6, 1.6], [GX + 1.2, GZ + 7.8, 1.6], [WX, BZ1 - 1.3, 1.9], [GX - 3.6, GZ + 6.6, 1.5]]) {
+    put(steel, new THREE.CylinderGeometry(0.09, 0.32, 0.26, 14, 1, true), lx, Y + BH - drop, lz);
+    put(bulb, new THREE.SphereGeometry(0.075, 10, 6), lx, Y + BH - drop - 0.08, lz);
+    put(steel, new THREE.CylinderGeometry(0.008, 0.008, drop - 0.13, 4), lx, Y + BH - (drop - 0.13) / 2, lz);
+  }
+  // the compressor (front east corner): a red tank on its side, the motor on it, the gauge, a coiled hose
+  const CX = BX1 - 0.9, CZ = GZ + 1.1;
+  put(red, new THREE.CylinderGeometry(0.28, 0.28, 1.2, 16), CX, Y + 0.38, CZ, 0, 0, PI / 2);
+  cube(steel, 0.42, 0.3, 0.34, CX - 0.15, Y + 0.8, CZ); put(steel, new THREE.CylinderGeometry(0.12, 0.12, 0.08, 14), CX + 0.3, Y + 0.78, CZ, PI / 2, 0, 0);
+  put(tyre, new THREE.TorusGeometry(0.22, 0.02, 6, 24), BX1 - 0.06, Y + 1.4, CZ + 0.9, 0, PI / 2, 0);
+  for (const [dx, dz] of [[-0.45, -0.18], [0.45, -0.18], [-0.45, 0.18], [0.45, 0.18]]) cube(steel, 0.06, 0.12, 0.06, CX + dx, Y + 0.06, CZ + dz);
+  // two more drums by the lift, one on its side on a stand
+  put(green, new THREE.CylinderGeometry(0.29, 0.29, 0.88, 16), BX0 + 2.1, Y + 0.44, BZ1 - 0.55);
+  put(tin, new THREE.CylinderGeometry(0.29, 0.29, 0.88, 16), BX0 + 2.0, Y + 0.62, BZ1 - 1.6, 0, 0, PI / 2); cube(steel, 0.9, 0.3, 0.5, BX0 + 2.0, Y + 0.17, BZ1 - 1.6);
+  // the bay's yellow lines round the car, and the lift's
+  const line = (x0, z0, x1, z1) => { const l = Math.hypot(x1 - x0, z1 - z0); put(paint, new THREE.PlaneGeometry(0.08, l), (x0 + x1) / 2, Y + 0.04, (z0 + z1) / 2, -PI / 2, 0, Math.atan2(x1 - x0, z1 - z0)); };
+  const box2 = (x0, z0, x1, z1) => { line(x0, z0, x1, z0); line(x1, z0, x1, z1); line(x1, z1, x0, z1); line(x0, z1, x0, z0); };
+  box2(GX - 0.4, GZ + 2.5, GX + 2.8, GZ + 9.9); box2(LX0 - 0.6, LZ - 2.6, LX1 + 0.6, LZ + 1.4);
+  // conduit: along the back and east walls under the ceiling, down to a switch box by the bench
+  put(steel, new THREE.CylinderGeometry(0.025, 0.025, BX1 - BX0, 6), GX, Y + BH - 0.35, BZ1 - 0.06, 0, 0, PI / 2);
+  put(steel, new THREE.CylinderGeometry(0.025, 0.025, BZ1 - BZ0, 6), BX1 - 0.06, Y + BH - 0.35, (BZ0 + BZ1) / 2, PI / 2, 0, 0);
+  put(steel, new THREE.CylinderGeometry(0.02, 0.02, BH - 1.75, 6), WX + 1.5, Y + 1.4 + (BH - 1.75) / 2, BZ1 - 0.06); cube(steel, 0.22, 0.3, 0.1, WX + 1.5, Y + 1.3, BZ1 - 0.08);
+  for (const [mat, geos] of kit) { const m = new THREE.Mesh(mergeGeometries(geos, false), mat); m.castShadow = mat !== bulb && mat !== paint; m.receiveShadow = true; inn.add(m); }
+  // oil stains under the car and the lift (a sheet of them)
+  const stains = canvasTex(512, 512, (x, w, h) => { for (let i = 0; i < 18; i++) { const cx = 60 + Math.random() * (w - 120), cy = 60 + Math.random() * (h - 120), r = 14 + Math.random() * 50; const gr = x.createRadialGradient(cx, cy, 0, cx, cy, r); gr.addColorStop(0, 'rgba(16,13,10,.55)'); gr.addColorStop(0.7, 'rgba(16,13,10,.3)'); gr.addColorStop(1, 'rgba(16,13,10,0)'); x.fillStyle = gr; x.beginPath(); x.ellipse(cx, cy, r, r * (0.5 + Math.random() * 0.5), Math.random() * 3, 0, PI * 2); x.fill(); } });
+  const stainMat = new THREE.MeshStandardMaterial({ map: stains, transparent: true, depthWrite: false, roughness: 0.25 });
+  for (const [sx, sz, sw, sd] of [[GX + 1.2, GZ + 6.2, 3.2, 6.4], [(LX0 + LX1) / 2, LZ - 0.6, 3.6, 3.2]]) { const st = new THREE.Mesh(new THREE.PlaneGeometry(sw, sd), stainMat); st.rotation.x = -PI / 2; st.position.set(sx, Y + 0.037, sz); st.receiveShadow = true; inn.add(st); }
+  // a second tool wall (west, over the lift's end): spanners in a row by size, hammers, pliers, saws, a coil of hose
+  const peg2 = canvasTex(512, 256, (x, w, h) => {
+    x.fillStyle = '#5B636B'; x.fillRect(0, 0, w, h); x.fillStyle = 'rgba(20,24,28,.55)'; for (let r = 8; r < h; r += 16) for (let c = 8; c < w; c += 16) x.fillRect(c, r, 3, 3);
+    const sp = (px, py, len) => { x.fillStyle = '#C3C8CE'; x.fillRect(px - 3, py, 6, len); x.beginPath(); x.arc(px, py, 9, 0, PI * 2); x.arc(px, py + len, 7, 0, PI * 2); x.fill(); x.fillStyle = '#5B636B'; x.fillRect(px - 3, py - 10, 6, 8); };
+    for (let i = 0; i < 12; i++) sp(24 + i * 22, 24, 50 + i * 6);
+    x.fillStyle = '#2A2C30'; for (let i = 0; i < 3; i++) { x.fillRect(320 + i * 50, 30, 10, 90); x.fillStyle = '#9AA0A8'; x.fillRect(306 + i * 50, 26, 38, 16); x.fillStyle = '#2A2C30'; }
+    x.fillStyle = '#C9302C'; for (let i = 0; i < 4; i++) { x.save(); x.translate(40 + i * 46, 170); x.rotate(0.2); x.fillRect(-4, 0, 8, 60); x.fillRect(4, 0, 8, 60); x.restore(); }
+    x.strokeStyle = '#E2B53A'; x.lineWidth = 7; for (let i = 0; i < 4; i++) { x.beginPath(); x.ellipse(420, 180, 48 - i * 9, 44 - i * 9, 0, 0, PI * 2); x.stroke(); }
+    x.fillStyle = '#B9BEC4'; x.beginPath(); x.moveTo(230, 150); x.lineTo(330, 150); x.lineTo(330, 170); x.lineTo(230, 200); x.closePath(); x.fill();
+  });
+  plane(5.2, 2.0, new THREE.MeshStandardMaterial({ map: peg2, roughness: 0.75, metalness: 0.2 }), BX0 + 0.03, Y + 2.3, GZ + 9.4, PI / 2, inn);
+  // two more posters of the shop's own (originals: no names but the shop's): a street rod on the west wall, the shop's
+  // rules by the door
+  const rod = canvasTex(256, 360, (x, w, h) => {
+    x.fillStyle = '#E9E1CF'; x.fillRect(0, 0, w, h); x.fillStyle = '#B4342C'; x.fillRect(0, 0, w, 70);
+    x.fillStyle = '#E9E1CF'; x.font = 'italic 800 40px "Barlow Condensed", sans-serif'; x.textAlign = 'center'; x.fillText('WEST CHELSEA', w / 2, 48);
+    x.fillStyle = '#1D2430'; x.beginPath(); x.moveTo(26, 230); x.lineTo(44, 196); x.lineTo(110, 188); x.lineTo(140, 160); x.lineTo(196, 160); x.lineTo(214, 192); x.lineTo(236, 200); x.lineTo(236, 232); x.closePath(); x.fill();
+    for (const [cx3, r3] of [[66, 26], [196, 30]]) { x.fillStyle = '#1D2430'; x.beginPath(); x.arc(cx3, 238, r3, 0, PI * 2); x.fill(); x.fillStyle = '#C9CDD2'; x.beginPath(); x.arc(cx3, 238, r3 * 0.45, 0, PI * 2); x.fill(); }
+    x.fillStyle = '#1D2430'; x.font = '800 30px "Barlow Condensed", sans-serif'; x.fillText('STREET MACHINES', w / 2, 300); x.font = '600 18px "Barlow Condensed", sans-serif'; x.fillText('SATURDAY NIGHTS · PIER 64 · 1994', w / 2, 330);
+  });
+  plane(1.0, 1.4, new THREE.MeshStandardMaterial({ map: rod, roughness: 0.7 }), BX0 + 0.03, Y + 2.7, GZ + 6.8, PI / 2, inn);
+  const rules = canvasTex(256, 320, (x, w, h) => {
+    x.fillStyle = '#16181C'; x.fillRect(0, 0, w, h); x.strokeStyle = '#FFC93C'; x.lineWidth = 6; x.strokeRect(8, 8, w - 16, h - 16);
+    x.fillStyle = '#FFC93C'; x.font = 'italic 800 34px "Barlow Condensed", sans-serif'; x.textAlign = 'center'; x.fillText('SHOP RULES', w / 2, 52);
+    x.fillStyle = '#F2EFE8'; x.font = '700 22px "Barlow Condensed", sans-serif'; x.textAlign = 'left';
+    ['1. PUT IT BACK', '2. NO ROCKETS INDOORS', '3. ASK BEFORE THE LIFT', '4. COFFEE IS FOR', '    CLOSERS AND GEARS', '5. MOSTLY SAFE'].forEach((t, i) => x.fillText(t, 26, 100 + i * 34));
+  });
+  plane(0.8, 1.0, new THREE.MeshStandardMaterial({ map: rules, roughness: 0.7 }), BX0 + 2.0, Y + 2.0, BZ0 + 0.04, 0, inn);
+  // the clock over the bench
+  const clock = canvasTex(128, 128, (x, w) => { x.fillStyle = '#F4F1EA'; x.beginPath(); x.arc(64, 64, 62, 0, PI * 2); x.fill(); x.lineWidth = 6; x.strokeStyle = '#1A1C20'; x.stroke();
+    x.fillStyle = '#1A1C20'; for (let i = 0; i < 12; i++) { const a = i / 12 * PI * 2; x.fillRect(64 + Math.sin(a) * 50 - 2, 64 - Math.cos(a) * 50 - 2, 4, 4); }
+    x.lineCap = 'round'; x.lineWidth = 5; x.beginPath(); x.moveTo(64, 64); x.lineTo(64 + 24, 64 - 30); x.stroke(); x.lineWidth = 3; x.beginPath(); x.moveTo(64, 64); x.lineTo(64 - 4, 64 - 46); x.stroke(); void w; });
+  const cl = new THREE.Mesh(new THREE.CircleGeometry(0.22, 24), new THREE.MeshStandardMaterial({ map: clock, roughness: 0.5 })); cl.position.set(WX, Y + 3.2, BZ1 - 0.03); cl.rotation.y = PI; inn.add(cl);
+
+  // the city's walls inside the bay: the party wall between two of the block's buildings runs the length of the bay
+  // (x = GX + 1.6, through the car), so while the bay is seen the city's boxes that stand in it are folded away (found
+  // the first time by rays across the bay at head height: every instanced face they meet inside it), and put back
+  // when it is not (their shadow stand-ins are left: the bay has its own ceiling)
+  let cityIn = null; const _zero = new THREE.Matrix4().makeScale(0, 0, 0);
+  function cityWalls(on) {
+    if (on && !cityIn) {
+      cityIn = []; const seen = new Set(), targets = [], rc = new THREE.Raycaster(); rc.far = 15;
+      scene.traverse((o) => { if (o.isInstancedMesh && o.visible !== false && !o.isSkinnedMesh) targets.push(o); });
+      const rays = [];
+      for (const oz of [BZ0 + 1.5, (BZ0 + BZ1) / 2, BZ1 - 1.5]) for (const ox of [GX - 3, GX + 4]) rays.push([ox, oz, 1, 0], [ox, oz, -1, 0]);
+      for (const ox of [GX - 4.5, GX, GX + 4.5]) rays.push([ox, BZ0 + 1, 0, 1], [ox, BZ1 - 1, 0, -1]);
+      for (const [ox, oz, dx, dz] of rays) {
+        rc.set(V(ox, Y + 1.6, oz), V(dx, 0, dz));
+        for (const h of rc.intersectObjects(targets, false)) {
+          const p = h.point; if (h.instanceId == null || p.x < BX0 + 0.1 || p.x > BX1 - 0.1 || p.z < BZ0 + 0.1 || p.z > BZ1 - 0.1) continue;
+          const k = h.object.uuid + ':' + h.instanceId; if (seen.has(k)) continue; seen.add(k);
+          const m = new THREE.Matrix4(); h.object.getMatrixAt(h.instanceId, m); cityIn.push([h.object, h.instanceId, m]);
+        }
+      }
+    }
+    for (const [mesh, id, m] of cityIn || []) { mesh.setMatrixAt(id, on ? _zero : m); mesh.instanceMatrix.needsUpdate = true; }
+  }
+
   const G = {
     group: g, creeper, lamp,
     bay: { x0: BX0, x1: BX1, z0: BZ0, z1: BZ1 },
     show(on) { g.visible = !!on; },
-    inside(on) { inn.visible = !!on; warm.intensity = on ? 9 : 0; fill.intensity = on ? 7 : 0; },
+    inside(on) { inn.visible = !!on; warm.intensity = on ? 9 : 0; fill.intensity = on ? 7 : 0; if (on || cityIn) cityWalls(!!on); },
   };
   return G;
 }
@@ -517,7 +651,6 @@ function repaint(inner, fn) {
   });
   if (done) inner.traverse((o) => { if (o.isMesh && o.material) { o.material.map = done; o.material.needsUpdate = true; } });
 }
-const lerp3 = (a, b, k) => a + (b - a) * k;
 const isGreen = (r, g, b) => g > 140 && g - b > 70 && r < 215;
 const isDark = (r, g, b) => Math.max(r, g, b) < 92 && Math.max(r, g, b) - Math.min(r, g, b) < 34;
 const isSkin = (r, g, b) => r > 110 && r > g + 12 && g > b - 5 && g < 190;
@@ -553,10 +686,11 @@ async function person(W, name, look, { scale = 1, paint = null } = {}) {
 }
 
 // two-bone reach for a thug.glb arm (side 'L' | 'R'): the hand to a world point, the elbow toward pole, by weight w
+// (names: the arm's three bones less the side, the thug's by default; Quant's skeleton's are MH_ARM)
 const _q = new THREE.Quaternion(), _w = new THREE.Quaternion();
 function turnWorld(b, q) { b.getWorldQuaternion(_w); const want = q.clone().multiply(_w); b.parent.getWorldQuaternion(_w); b.quaternion.copy(_w.invert().multiply(want)); b.updateMatrixWorld(true); }
-export function armTo(B, side, target, pole, w = 1) {
-  const b1 = B['upperArm' + side], b2 = B['forearm' + side], b3 = B['hand' + side];
+export function armTo(B, side, target, pole, w = 1, names = ['upperArm', 'forearm', 'hand']) {
+  const b1 = B[names[0] + side], b2 = B[names[1] + side], b3 = B[names[2] + side];
   if (!b1 || !b2 || !b3 || w <= 0) return;
   const q1 = b1.quaternion.clone(), q2 = b2.quaternion.clone();
   const a = b1.getWorldPosition(V()), b = b2.getWorldPosition(V()); let c = b3.getWorldPosition(V());
@@ -628,32 +762,31 @@ export async function buildFiona(W) {
   return P;
 }
 
-// Gears: big, gentle, navy overalls, a beard, a cap, a red rag
+// Gears: big, gentle, in his late forties: his own model (assets/characters/gears.glb, made the way Quant's is, from the
+// GameMog human: a heavy build 1.9 m tall, a full beard going grey, cropped hair under a navy cap, navy work overalls
+// over a white tee, worn boots; idle, talk, arms, shrug, wave, walk, jog, pickup, shift and phone), on Quant's
+// skeleton, so his arms are Quant's (upperarm01_, lowerarm01_, wrist_). The scenes ask for the thug's 'thugIdle':
+// it is his idle. His idle already lets his arms hang, so relax() leaves them be. A red rag in his back pocket.
+let gearsP = null;
+const gearsGLB = () => gearsP || (gearsP = new GLTFLoader().loadAsync('assets/characters/gears.glb'));
+const MH_ARM = ['upperarm01_', 'lowerarm01_', 'wrist_'];
 export async function buildGears(W) {
-  const P = await person(W, 'Gears', 'a', { scale: 1.1, paint: (r, g, b, zone, u, v) => {
-    // (the mask: his face, the nose and cheeks bare, a dark brown beard round the mouth, chin and jaw, up the sides as
-    // sideburns (the head is a fan out from the crown: further out is further down the face, the front straight down
-    // the atlas); the crown under the cap navy as the cap; the beanie navy, the hoodie navy overalls, its stripes
-    // hi-vis orange)
-    if ((zone === 'face' && !isSkin(r, g, b)) || (zone === 'eyes' && isGreen(r, g, b))) {
-      const k = Math.hypot(u - 0.205, v - 0.365), side = Math.abs(Math.atan2(u - 0.205, v - 0.365)), n = 0.9 + Math.random() * 0.2;
-      if (zone !== 'eyes' && k < 0.03) return [34 * n, 50 * n, 80 * n];
-      const at = side > 0.55 ? 0.071 : 0.084;
-      if (zone === 'eyes' || k < at) return [177 * n, 123 * n, 92 * n];
-      const edge = clamp((k - at) / 0.008, 0, 1), m = 0.8 + Math.random() * 0.4;
-      return [lerp3(177, 74 * m, edge), lerp3(123, 48 * m, edge), lerp3(92, 30 * m, edge)];
-    }
-    if (zone !== 'eyes' && isGreen(r, g, b)) return [226, 120, 42];
-    if (zone !== 'eyes' && isDark(r, g, b)) { const k = 0.55 + Math.max(r, g, b) / 92 * 0.9; return [38 * k, 58 * k, 92 * k]; }
-    return null;
-  } });
-  const B = P.bones, hp = B.head.getWorldPosition(V()), top = P.top;
-  const capMat = new THREE.MeshStandardMaterial({ color: '#22324A', roughness: 0.8 });
-  const cap = new THREE.Mesh(new THREE.SphereGeometry(0.115, 18, 10, 0, PI * 2, 0, PI / 2), capMat); cap.scale.set(1, 0.8, 1.08);
-  const brim = new THREE.Mesh(new THREE.CylinderGeometry(0.085, 0.085, 0.012, 16, 1, false, -PI / 2, PI), capMat); brim.scale.set(1, 1, 1.3); brim.position.set(0, 0.005, 0.1); cap.add(brim);
-  onBone(P, 'head', cap, 0, top - 0.1, hp.z);
-  const sp = (B.spine || B.hips).getWorldPosition(V());
-  const rag = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.22, 0.02), new THREE.MeshStandardMaterial({ color: '#C2302A', roughness: 0.9 }));
-  onBone(P, 'hips', rag, 0.13, sp.y - 0.12, sp.z - 0.14);
+  const gltf = await gearsGLB();
+  const root = new THREE.Group(); root.name = 'Gears';
+  const inner = skClone(gltf.scene); root.add(inner);
+  inner.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; o.frustumCulled = false; } });
+  const bones = {}; inner.traverse((o) => { if (o.isBone) bones[o.name] = o; });
+  inner.updateMatrixWorld(true);
+  const top = new THREE.Box3().setFromObject(inner).max.y;
+  const mixer = new THREE.AnimationMixer(inner);
+  const clipMap = Object.fromEntries(gltf.animations.map((c) => [c.name, c]));
+  if (clipMap.idle) clipMap.thugIdle = clipMap.idle;
+  root.visible = false; W.app.scene.add(root);
+  const P = { root, inner, bones, mixer, rig: rig(mixer, clipMap), clips: Object.keys(clipMap), top, arm: (side, target, pole, w) => armTo(bones, side, target, pole, w, MH_ARM), relax: () => {} };
+  // the rag: hanging from his right back pocket (on the hips' bone, placed in the rest pose)
+  const hip = (bones.root || bones.pelvis_R).getWorldPosition(V());
+  const rag = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.2, 0.012), new THREE.MeshStandardMaterial({ color: '#B42B26', roughness: 0.95 }));
+  rag.rotation.z = 0.12;
+  onBone(P, bones.root ? 'root' : 'pelvis_R', rag, -0.1, hip.y - 0.13, hip.z - 0.16);
   return P;
 }

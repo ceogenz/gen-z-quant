@@ -20,16 +20,22 @@
 //     he wrecks them) and is wrecked: smoking, out of
 //     the chase ('wrecked'). At heat 3 and up more come to replace the wrecked. One stuck or left far behind out of view,
 //     while they still have him, is put back in a lane behind him (GTA does).
-//   - Quant on foot: they pull up a few metres off him (they don't run him down); stopped within 10 m of him 2.5 s, or
-//     his car stood still 4.5 s with one of them within 11 m (ramming him counts): 'caught' (the mission decides what
-//     that means). The traffic
-//     brakes for them (trafficSystem.blockers).
+//   - Quant on foot: with a clear line to him (or close), they pull up in the lane next to him, just past him, so the
+//     car stands in his view; the Degens' crew jumps out at the door on his side (W.combat.spawnCrew: 2 men, 3 from heat
+//     3; a bat from heat 2, a bottle too from heat 3, a brute once from heat 4; never more than 2 + 2h of them up at once)
+//     and the car waits while they're up. Out in the road, one car (or one whose crew is all down) tries to run him
+//     down: it stops, revs and leans on the horn (FOOT.wind s: the tell), then floors it along a line it fixes then, so
+//     a step aside dodges it; a hit knocks him down (W.combat's takeHit, heavy) and it brakes off ('runover').
+//     'caught': the police, stopped within 10 m of him 2.5 s; the Degens, him beaten down (W.combat.player.onDown).
+//     In his car: his car stood still 4.5 s with one of them within 11 m (ramming him counts): 'caught' (the mission
+//     decides what that means). The traffic brakes for them (trafficSystem.blockers).
 // API (window.WAGMI.pursuit):
 //   start({ heat = 2, kind = 'degens' | 'police', count, from: { x, z }, target: () => ({ x, z }), lose = true,
 //           reinforce, speed }) -> chase { on(ev, cb), off(ev, cb), stop(), heat (get / set), state, view() }
 //     (one chase at a time: a new start ends the last; stop() after 'lost' lets the cars drive off out of view)
 //     events: 'lost' (escaped), 'caught' ({ onFoot }), 'wrecked' ({ car, left }), 'spotted' / 'hidden' (sight
-//     changes), 'hit' ({ speed }: a chase car hit Quant's car)
+//     changes), 'hit' ({ speed }: a chase car hit Quant's car), 'crew' ({ car, crew }: Degens out of a car at him on
+//     foot), 'runover' ({ speed, car }: a chase car ran him down on foot)
 //     from: where they set out (the nearest lane to it, in a column facing him); else 45-90 m off him, out of view.
 //     target: what they chase (default: Quant, in his car or on foot). lose: false, they can't be lost (an escort);
 //     reinforce: replace the wrecked (default: heat 3 and up); speed: m/s they set out at
@@ -57,6 +63,10 @@ const RULE = {
   vmax: (h) => 24 + 3 * h,      // m/s on a straight (Quant's car: 34, 56 on the boost)
   count: (h) => clamp(Math.round(h), 1, 5),
 };
+// Quant on foot: the pull-up (m past his level, in the lane next to him; how far off the lane he may be for it), the
+// jump-out (stopped within m of him), the run-down (him within m of a lane; the car facing him, dot, from m to m; the
+// tell s; its time out s; the next one after s; the blow by speed, at least and at most)
+const FOOT = { past: 1.5, offLane: 14, jump: 16, inRoad: 2.6, face: 0.85, near: 10, far: 45, wind: 0.75, run: 2.6, again: 7, dmg: 2.4, dmgMin: 18, dmgMax: 55 };
 
 export function install(W) {
   const app = W.app, cm = app.controllerManager, car = W.car, TS = app.trafficSystem, scene = app.scene, cam = app.cameraSystem.camera;
@@ -85,6 +95,7 @@ export function install(W) {
       path: null, pi: 0, planT: rnd(0, 0.6), planTo: null, goal: null, search: null, mode: 'chase', sees: true, seeT: rnd(0, 0.25),
       stuck: 0, back: 0, backSteer: 0, stucks: 0, ramCool: 0, hitCool: 0, horn: rnd(3, 7), smoke: 0, t: 0,
       side: i % 2 ? 1 : -1, leaveTo: null, hum: null, siren: null, dmg: {}, prog: { t: 0, want: 0, x: at.x, z: at.z }, farT: 0, blockT: 0,
+      los: false, pull: null, pullT: 0, crew: null, crewOut: false, ram: null, ramNext: 0,
       blocker: { x: at.x, z: at.z, yaw: at.h, halfW: c.hw, halfL: c.hl, vx: 0, vz: 0 },
     });
     c.group.position.set(P.x, P.y, P.z); c.group.rotation.y = P.h;
@@ -108,8 +119,9 @@ export function install(W) {
       P.goal = P.leaveTo; vt = 15;
     } else if (ch.seen) {
       P.goal = T; vt = vmax0;
-      // (in sight and this close, straight at him: the last corner's queue at a light doesn't hold it up)
-      direct = P.sees && d < (T.onFoot ? 60 : 62);
+      // (in sight and this close, straight at him: the last corner's queue at a light doesn't hold it up; on foot, with a
+      // clear line to him (not just heard through a wall), or close)
+      direct = T.onFoot ? (P.los && d < 60) || d < 18 : P.sees && d < 62;
     } else {
       // out of sight: to where he was last seen, then round there
       const L = ch.lastSeen;
@@ -121,8 +133,10 @@ export function install(W) {
     if (P.mode === 'chase' && !inView(P.x, P.z, 4) && d > 70) vt += Math.min(12, (d - 70) * 0.08);
     if (direct) {
       if (T.onFoot) {
-        // (on foot: up to him and stop a few metres off, never into him)
-        ax = T.x; az = T.z; vt = clamp((d - 8) * 1.1, 0, vmax0);
+        // (on foot: the run-down, or the pull-up beside him, see onFoot)
+        const g = onFoot(P, ch, dt, T, d, vmax0);
+        ax = g.ax; az = g.az; vt = g.vt;
+        if (g.raw) return { ax, az, vt, d };
       } else {
         // straight at where he will be by the time it gets there, a little to one side of his tail
         const close = P.speed - (T.vx * dx + T.vz * dz) / (d || 1), lead = clamp(d / Math.max(8, close), 0, 1.1);
@@ -170,13 +184,56 @@ export function install(W) {
         const vc = 9 + (vmax0 - 9) * (1 - Math.min(1, turn / 1.3)), dc = Math.hypot(c[0] - P.x, c[1] - P.z);
         vt = Math.min(vt, Math.sqrt(vc * vc + 2 * 9 * Math.max(0, dc - 5)));
       }
-      if (T.onFoot && P.mode === 'chase' && ch.seen) vt = Math.min(vt, clamp((d - 8) * 1.1, 0, vmax0));
+      if (T.onFoot && P.mode === 'chase' && ch.seen) vt = Math.min(vt, clamp((d - 6) * 1.4, 0, vmax0));
     }
     // something slow in the way (the traffic, another chase car): round it, or brake
     const av = avoid(P, dt);
     if (av) { if (av.pass) { ax = av.x; az = av.z; } vt = Math.min(vt, av.v); }
     return { ax, az, vt, d };
   }
+  // Quant on foot, a car with him in reach: where it heads and how fast. Its crew up: it waits. Running him down: the
+  // tell (stopped, revving, the horn), then flat out along the line it fixed, past him, for FOOT.run s. Else the pull-up:
+  // the lane point nearest him (nav.onRoad), FOOT.past m past his level the way it comes along that lane, straightened
+  // along the lane over the last few metres; him too far off any lane (a park, a plaza): stopped 8 m short, as before
+  function onFoot(P, ch, dt, T, d, vmax0) {
+    const out = { ax: T.x, az: T.z, vt: 0, raw: false };
+    if (P.crew && P.crew.alive() > 0) { out.vt = 0; out.ax = P.x + Math.sin(P.h) * 5; out.az = P.z + Math.cos(P.h) * 5; out.raw = true; return out; }
+    const R = P.ram;
+    if (R) {
+      R.t += dt;
+      if (R.t < FOOT.wind) {
+        // (the tell: stood, nose on him, the engine roaring, the horn)
+        out.ax = T.x; out.az = T.z; out.vt = 0; out.raw = true;
+        return out;
+      }
+      if (!R.go) { R.go = true; R.x = P.x + (T.x - P.x) * 3; R.z = P.z + (T.z - P.z) * 3; }
+      out.ax = R.x; out.az = R.z; out.vt = vmax0 + 4; out.raw = true;
+      // (past him, or its time up: the run is over; he gets a few seconds before the next)
+      const past = (T.x - P.x) * Math.sin(P.h) + (T.z - P.z) * Math.cos(P.h) < -4;
+      if (R.t > FOOT.wind + FOOT.run || (past && R.t > FOOT.wind + 0.4)) { P.ram = null; ch.ramNext = ch.t + FOOT.again; }
+      return out;
+    }
+    // (the pull-up point, found again twice a second)
+    if ((P.pullT -= dt) <= 0 || !P.pull) {
+      P.pullT = 0.5;
+      const L = nav.onRoad(T.x, T.z);
+      if (L && Math.hypot(L.x - T.x, L.z - T.z) < FOOT.offLane) {
+        // (the way along the lane it comes from: from behind his level it carries on past him)
+        let fx = Math.sin(L.h), fz = Math.cos(L.h);
+        if ((L.x - P.x) * fx + (L.z - P.z) * fz < 0) { fx = -fx; fz = -fz; }
+        P.pull = { x: L.x + fx * FOOT.past, z: L.z + fz * FOOT.past, fx, fz, dRoad: Math.hypot(L.x - T.x, L.z - T.z) };
+      } else P.pull = null;
+    }
+    const U = P.pull;
+    if (!U) { out.vt = clamp((d - 8) * 1.1, 0, vmax0); return out; }
+    const dp = Math.hypot(U.x - P.x, U.z - P.z);
+    // (the last few metres along the lane, not across it)
+    if (dp < 6) { out.ax = U.x + U.fx * 6; out.az = U.z + U.fz * 6; } else { out.ax = U.x; out.az = U.z; }
+    const ahead = (U.x - P.x) * U.fx + (U.z - P.z) * U.fz;
+    out.vt = ahead < 0.3 ? 0 : clamp(Math.min(dp, ahead + 0.5) * 1.3, 0, vmax0);
+    return out;
+  }
+
   // the nearest thing in a corridor ahead of it: a point to pass it by (beside it, on the side with room: not a wall nor
   // another car) and the speed to be at to stop behind it if it can't; held up behind it a second and a half, it
   // shoves its way through for a couple of seconds (the crash's rules knock the city's cars aside)
@@ -236,6 +293,8 @@ export function install(W) {
       const g = steerFor(P, ch, dt, T);
       const err = wrap(Math.atan2(g.ax - P.x, g.az - P.z) - P.h);
       st = clamp(err * 1.8, -0.62, 0.62); vt = g.vt;
+      // (stood waiting for its crew, or in the tell before a run at him: no backing about)
+      if (T.onFoot && (P.crew?.alive() > 0 || (P.ram && !P.ram.go))) { P.back = 0; P.stuck = 0; P.prog.want = 0; }
       // turned away from where it must go, and slow: back up turning, so the nose comes round (a J-turn)
       if (P.back <= 0 && Math.abs(err) > 2.0 && Math.abs(P.speed) < 8 && vt > 2) { P.back = 1.0; P.backSteer = -Math.sign(err) * 0.62; }
       // stuck (against a wall, a wreck): back off a little the other way
@@ -458,7 +517,8 @@ export function install(W) {
     const at = [P.x, 0.7, P.z];
     if (d < 140 && W.audio?.ready) {
       if (!P.hum) P.hum = loop('carHum', { pos: at, vol: 0 });
-      P.hum?.set({ pos: at, speed: P.speed, load: clamp(0.35 + P.acc * 0.08, 0.2, 1), vol: 0.9 });
+      const rev = P.ram && !P.ram.go; // (the tell before a run at him: revving where it stands)
+      P.hum?.set({ pos: at, speed: rev ? 14 : P.speed, load: rev ? 1 : clamp(0.35 + P.acc * 0.08, 0.2, 1), vol: rev ? 1.1 : 0.9 });
       if (P.kind === 'police') { const sp = [P.x, 1.6, P.z]; if (!P.siren) P.siren = loop('siren', { pos: sp, vol: 0.55, mode: 'wail' }); P.siren?.set({ pos: sp, mode: d < 45 ? 'yelp' : 'wail' }); }
     } else if (d > 170) { P.hum?.stop(0.4); P.hum = null; P.siren?.stop(0.4); P.siren = null; }
     if (P.kind !== 'police' && P.mode === 'chase' && P.ch.seen && (P.horn -= dt) <= 0) {
@@ -495,6 +555,7 @@ export function install(W) {
     const ch = {
       kind, cars: [], state: 'on', seen: true, lastSeen: { x: 0, z: 0 }, esc: 0, hideT: 0, t: 0, lose, target,
       reinforce: opts.reinforce, want: 0, refill: 0, caughtT: 0, caughtSent: false, _heat: clamp(opts.heat ?? 2, 1, 5),
+      crews: [], ramNext: 0, brute: false,
       on(ev, cb) { (listeners[ev] || (listeners[ev] = [])).push(cb); return ch; },
       off(ev, cb) { listeners[ev] = (listeners[ev] || []).filter((x) => x !== cb); return ch; },
       emit(ev, d) { for (const cb of listeners[ev] || []) { try { cb(d); } catch (e) { console.error('[pursuit]', ev, e); } } },
@@ -561,7 +622,9 @@ export function install(W) {
         if ((P.seeT -= dt) > 0) continue;
         P.seeT = 0.25;
         const d = Math.hypot(T.x - P.x, T.z - P.z);
-        P.sees = d < RULE.hear || (d < sight && nav.sees(P.x, P.z, T.x, T.z));
+        // (los: a clear line to him; sees: that, or heard through a wall this close)
+        P.los = d < sight && nav.sees(P.x, P.z, T.x, T.z);
+        P.sees = d < RULE.hear || P.los;
       }
       // (at first they know where he is: long enough to get near him from where they set out)
       const seen = ch.t < ch.grace || live.some((P) => P.sees);
@@ -576,7 +639,9 @@ export function install(W) {
       // caught: they've stopped by him on foot; or in his car, he's sat stopped with them on him (ramming him or pulled
       // up by him: the time adds up through their back-off-and-ram, and only driving off clears it)
       let held;
-      if (T.onFoot) { held = live.some((P) => Math.hypot(P.x - T.x, P.z - T.z) < 10 && Math.abs(P.speed) < 2.5); ch.caughtT = held ? ch.caughtT + dt : 0; }
+      // (the Degens on foot: his being beaten down is 'caught', see W.combat.player.onDown below)
+      if (T.onFoot && ch.kind !== 'police' && W.combat) { held = false; ch.caughtT = 0; }
+      else if (T.onFoot) { held = live.some((P) => Math.hypot(P.x - T.x, P.z - T.z) < 10 && Math.abs(P.speed) < 2.5); ch.caughtT = held ? ch.caughtT + dt : 0; }
       else {
         held = cm.activeMode === 'car' && Math.abs(car.speed) < 2.5 && live.some((P) => Math.hypot(P.x - T.x, P.z - T.z) < 11);
         ch.caughtT = held ? ch.caughtT + dt : Math.abs(car.speed) > 8 ? 0 : Math.max(0, ch.caughtT - dt);
@@ -593,8 +658,10 @@ export function install(W) {
         }
       } else ch.refill = 0;
     }
+    if (ch.state === 'on' && T.onFoot) afoot(ch, live, T);
     for (const P of ch.cars) if (!P.gone) drive(P, ch, dt, T);
     collide(ch);
+    if (ch.state === 'on') runOver(ch);
     for (const P of ch.cars) {
       if (P.gone) continue;
       pose(P, dt);
@@ -604,6 +671,79 @@ export function install(W) {
     }
     if (ch.state !== 'on' && ch.cars.every((P) => P.gone) && chase === ch) chase = null;
   }
+  // Quant on foot, every frame: the Degens out of a car stopped near him (once a car), and one car at a time picked to run
+  // him down while he's out in the road
+  function afoot(ch, live, T) {
+    const h = ch._heat, C = W.combat;
+    if (ch.kind !== 'police' && C && C.enabled && !W.cutscene && !W.directed) {
+      const up = ch.crews.reduce((n, cr) => n + cr.alive(), 0);
+      for (const P of live) {
+        if (P.crewOut || P.mode !== 'chase' || Math.abs(P.speed) > 1.5 || Math.hypot(P.x - T.x, P.z - T.z) > FOOT.jump) continue;
+        if (up >= 2 + 2 * h) break;
+        jumpOut(P, ch, T, Math.min(h >= 3 ? 3 : 2, 2 + 2 * h - up));
+        break; // (one car a frame)
+      }
+    }
+    // the run-down: him in the road, no other car at it, the next one's time come; a car with nobody of its own still up
+    // (one yet to stop for him, or whose crew is all down), facing him with a clear line, near enough and not too near
+    if (live.some((P) => P.ram) || ch.t < ch.ramNext || (W.combat?.player?.down)) return;
+    const L = nav.onRoad(T.x, T.z);
+    if (!L || Math.hypot(L.x - T.x, L.z - T.z) > FOOT.inRoad) return;
+    for (const P of live) {
+      if (P.mode !== 'chase' || (P.crew && P.crew.alive() > 0)) continue;
+      const dx = T.x - P.x, dz = T.z - P.z, d = Math.hypot(dx, dz);
+      if (d < FOOT.near || d > FOOT.far || (dx * Math.sin(P.h) + dz * Math.cos(P.h)) / d < FOOT.face || !P.los) continue;
+      P.ram = { t: 0, go: false, x: 0, z: 0 };
+      play('horn', { pos: [P.x, 1, P.z], kind: 'suv', len: 'long', vol: 1 });
+      break;
+    }
+  }
+  // the crew out of car P at the door on his side: n men (and the brute once, from heat 4), the bat from heat 2, the
+  // bottle too from heat 3; a door's sounds, the car rocking as they get out
+  function jumpOut(P, ch, T, n) {
+    const h = ch._heat, rx = Math.cos(P.h), rz = -Math.sin(P.h), fx = Math.sin(P.h), fz = Math.cos(P.h);
+    const side = (T.x - P.x) * rx + (T.z - P.z) * rz >= 0 ? 1 : -1, lat = P.hw + 0.6;
+    const brute = h >= 4 && !ch.brute ? 1 : 0; if (brute) ch.brute = true;
+    const weapons = h >= 3 ? ['bat', 'bottle'] : h >= 2 ? ['bat'] : [];
+    const dx = P.x + rx * side * lat, dz = P.z + rz * side * lat;
+    let crew = null;
+    try { crew = W.combat.spawnCrew({ x: dx, z: dz, count: n, brute, weapons, props: false }); } catch (err) { console.error('[pursuit] crew', err); }
+    P.crewOut = true;
+    if (!crew) return;
+    // (each at a door spot: along the car's side, either side of its middle, the third behind)
+    const along = [0.9, -0.9, -2.2, 2.0];
+    crew.enemies.forEach((e, k) => {
+      const ax = dx + fx * along[k % along.length], az = dz + fz * along[k % along.length];
+      e.pos.x = ax; e.pos.z = az; e.pos.y = cm.getGroundHeight(ax, az, 'person');
+    });
+    P.crew = crew; ch.crews.push(crew);
+    play('doorOpen', { pos: [dx, 1, dz], vol: 0.9 });
+    setTimeout(() => play('doorClose', { pos: [dx, 1, dz], vol: 0.9 }), 650);
+    P.rollV += side * 1.6;
+    console.log(`[pursuit] car ${P.i}: ${crew.enemies.length} out`);
+    ch.emit('crew', { car: P, crew });
+  }
+  // a chase car's box against Quant on foot: going 4.5 m/s or more, it runs him down (once, until he's up again)
+  function runOver(ch) {
+    const C = W.combat, c = C?.debug?.c;
+    if (!c || cm.activeMode !== 'person' || !c.live() || c.me.down() || c.me.invulnUntil > c.time) return;
+    const p = W.person.position;
+    for (const P of ch.cars) {
+      if (P.gone || P.wrecked) continue;
+      const sp = Math.hypot(Math.sin(P.h) * P.speed + P.vx, Math.cos(P.h) * P.speed + P.vz);
+      if (sp < 4.5) continue;
+      const cs = Math.cos(P.h), sn = Math.sin(P.h), dx = p.x - P.x, dz = p.z - P.z, lx = dx * cs - dz * sn, lz = dx * sn + dz * cs;
+      if (Math.abs(lx) > P.hw + 0.35 || Math.abs(lz) > P.hl + 0.35) continue;
+      c.me.takeHit({ pos: { x: P.x, z: P.z }, weapon: null }, clamp(sp * FOOT.dmg, FOOT.dmgMin, FOOT.dmgMax), true);
+      play('pedHit', { pos: [p.x, 1, p.z], vol: clamp(0.5 + sp / 30, 0.5, 1), speed: sp });
+      W.crash?.jolt?.(clamp(sp / 20, 0.2, 0.9), lx >= 0 ? -cs : cs, lx >= 0 ? sn : -sn);
+      P.speed *= 0.35; P.ram = null; ch.ramNext = ch.t + FOOT.again;
+      console.log(`[pursuit] car ${P.i} ran him down at ${sp.toFixed(1)} m/s`);
+      ch.emit('runover', { speed: sp, car: P });
+      return;
+    }
+  }
+
   function lost(ch) {
     ch.state = 'lost'; ch.seen = false;
     for (const P of ch.cars) { P.mode = 'leave'; P.t = 0; P.path = null; }
@@ -671,6 +811,29 @@ export function install(W) {
     }
     return any;
   };
+  // ...nor can the Degens on foot (the fight moves them with c.world.collide: kept out of the chase cars' boxes too); and
+  // the Degens' chase on foot is caught when he is beaten down
+  const hookCombat = () => {
+    const c = W.combat?.debug?.c;
+    if (!c || !c.world || c.world.__chase) return !!c;
+    const base = c.world.collide;
+    c.world.collide = (pos, r) => { base(pos, r); if (chase) for (const P of chase.cars) { if (P.gone) continue;
+      const cs = Math.cos(P.h), sn = Math.sin(P.h), dx = pos.x - P.x, dz = pos.z - P.z, lx = dx * cs - dz * sn, lz = dx * sn + dz * cs;
+      const side = P.hw + r - Math.abs(lx), back = lz + P.hl + r, front = P.hl + r - lz;
+      if (side <= 0 || back <= 0 || front <= 0) continue;
+      let nx = lx, nz = lz;
+      if (side < Math.min(back, front)) nx = Math.sign(lx || 1) * (P.hw + r); else nz = back < front ? -P.hl - r : P.hl + r;
+      pos.x = P.x + nx * cs + nz * sn; pos.z = P.z - nx * sn + nz * cs; } };
+    c.world.__chase = true;
+    W.combat.player.onDown(() => {
+      const ch = chase;
+      if (!ch || ch.state !== 'on' || ch.kind === 'police' || cm.activeMode === 'car' || ch.caughtSent) return;
+      ch.caughtSent = true; ch.emit('caught', { x: W.person.position.x, z: W.person.position.z, onFoot: true });
+    });
+    return true;
+  };
+  // (the fight installs after this: hooked on the first chase, or as soon as it's there)
+  { const t = setInterval(() => { if (hookCombat()) clearInterval(t); }, 500); }
 
   // (built once now, out of sight, so the first chase doesn't stall on its shaders)
   try {

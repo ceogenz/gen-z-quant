@@ -1465,7 +1465,19 @@ const pavingJoints = Fn(([style, wx, wz]) => {
   const granJoint = max(gridLine(wx.add(offG), 0.9, 0.01), gridLine(wz, 0.45, 0.01));
   const blueJoint = max(gridLine(wx, 0.6, 0.012), gridLine(wz, 0.6, 0.012));
   const isGranite = step(0.5, style).mul(float(1.0).sub(step(1.5, style)));
-  return mix(mix(hexJoint, granJoint, isGranite), blueJoint, step(1.5, style));
+  return mix(mix(hexJoint, granJoint, isGranite), blueJoint, step(1.5, style)).mul(float(1.0).sub(step(2.5, style)));
+});
+
+// Crushed-stone gravel at world xz: x = 1 on a pebble (one to most 3.5 cm cells, jittered, its own size), 0 in the
+// fines between; y = the pebble's tone
+const gravelPebble = Fn(([wx, wz]) => {
+  const p = vec2(wx, wz).div(0.035);
+  const id = floor(p);
+  const j = vec2(hash2D(id), hash2D(id.add(7.1))).sub(0.5).mul(0.4);
+  const d = length(fract(p).sub(0.5).sub(j));
+  const r = hash2D(id.add(3.3)).mul(0.18).add(0.27);
+  const aa = fwidth(d).max(0.0001);
+  return vec2(smoothstep(r.add(aa), r.sub(aa.add(0.1)), d), hash2D(id.add(11.7)));
 });
 
 /**
@@ -1474,6 +1486,7 @@ const pavingJoints = Fn(([style, wx, wz]) => {
  * - 0: NYC Parks hexagonal asphalt paver blocks (charcoal 8-inch hexes with sanded joints)
  * - 1: Light-grey granite plaza pavers in running bond with scattered dark pavers (Times Sq, Herald Sq, Flatiron)
  * - 2: Bluestone & granite square slabs (fountain & monument plazas)
+ * - 3: Warm grey crushed-stone gravel, compacted along the walks (Bryant Park's allees & terraces)
  */
 function createParkPavingMaterial() {
   const mat = new THREE.MeshStandardNodeMaterial({
@@ -1509,14 +1522,23 @@ function createParkPavingMaterial() {
     // 2: bluestone squares
     const blueCol = mix(color(0x62686d), color(0x878b8c), hash2D(floor(vec2(wx, wz).div(0.6))));
 
+    // 3: gravel: warm grey pebbles (one in eight dark) over darker fines, the walk's worn line paler and finer, all of
+    //    it settling to its average tone with distance (no shimmer)
+    const peb = gravelPebble(wx, wz);
+    const stone = mix(mix(color(0x6b645a), color(0x877f72), peb.y), color(0x4d4842), step(0.875, peb.y));
+    const fines = color(0x58534c);
+    const wear = smoothstep(0.35, 0.75, noise2D(vec2(wx.mul(0.12), wz.mul(0.12))));
+    const gravelNear = mix(fines, stone, peb.x.mul(mix(float(1.0), float(0.7), wear)));
+    const gravelCol = mix(color(0x69625a), gravelNear, smoothstep(60.0, 8.0, camDist)).mul(wear.mul(0.06).add(0.97));
+
     const isGranite = step(0.5, style).mul(float(1.0).sub(step(1.5, style)));
-    const base = mix(mix(hexCol, granCol, isGranite), blueCol, step(1.5, style));
+    const base = mix(mix(mix(hexCol, granCol, isGranite), blueCol, step(1.5, style)), gravelCol, step(2.5, style));
     return base.mul(grime.mul(0.18).add(0.91)).add(grit).mul(float(1.0).sub(joints.mul(0.42)));
   })();
 
   mat.roughnessNode = Fn(() => {
     const style = uv().x;
-    return mix(mix(float(0.9), float(0.72), step(0.5, style)), float(0.78), step(1.5, style));
+    return mix(mix(mix(float(0.9), float(0.72), step(0.5, style)), float(0.78), step(1.5, style)), float(0.95), step(2.5, style));
   })();
 
   mat.normalNode = Fn(() => {
@@ -1525,7 +1547,8 @@ function createParkPavingMaterial() {
     const camDist = length(positionWorld.sub(cameraPosition));
     const detail = smoothstep(110.0, 10.0, camDist);
     const grain = noise2D(vec2(wx.mul(5.0), wz.mul(5.0))).sub(0.5).mul(0.0025);
-    return bumpNormal(grain.sub(pavingJoints(uv().x, wx, wz).mul(0.006)).mul(detail));
+    const pebbles = gravelPebble(wx, wz).x.mul(0.004).mul(step(2.5, uv().x)).mul(smoothstep(30.0, 4.0, camDist));
+    return bumpNormal(grain.add(pebbles).sub(pavingJoints(uv().x, wx, wz).mul(0.006)).mul(detail));
   })();
 
   return mat;

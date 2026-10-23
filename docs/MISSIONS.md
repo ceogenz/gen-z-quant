@@ -139,7 +139,21 @@ minimum. Phone calls show the caller card bottom-right (name, small avatar, "On 
 - Knocked out: **REKT** (our WASTED): 96 px, #EF4444, Barlow Condensed 800 italic, the world desaturated and in
   0.3x slow motion for 2.5 s. In a mission it leads to the fail screen; in free roam Quant wakes at the last safehouse.
 - Fail screen: **MISSION FAILED** (72 px, #EF4444), the reason under it (26 px, white), then "Retry" and "Quit".
-  After 3 failures at the same checkpoint, a third option: "Skip" (to the next checkpoint).
+  After 3 failures at the same checkpoint, a third option: "Skip" (to the next checkpoint). As built (ui.js
+  `failed()`): only fresh presses move or pick (a key repeating, or pressed in the first 0.45 s, is ignored), so a
+  key still held from the fight can't choose for the player.
+- Pause (as built, mission/pause.js): Esc or P pauses in play and in cutscenes too (the cutscene's clock stops with the
+  city's; Space held still skips it, and a Space held into the pause is let go); "Restart checkpoint" from inside a
+  cutscene skips it first. The mission timers (TIME on MISSION PASSED) are game time (`W.clock.now()`): paused time
+  doesn't count. Restarting Mission 1 at "Drive to Chelsea Park" puts Quant a step from the car's door and plays the
+  get-in (`WAGMI.ride.getIn()`).
+- A checkpoint played straight in (`?m2=`, `?m3=`, a retry) puts the light and Quant / his car in place first and
+  loads the sets after, so a slow load never shows him at the city's own start (5th Ave & E 37th St, golden hour).
+- Cutscenes keep their set clear (as built): Mission 1's and Mission 3's with the traffic's hold zones
+  (`trafficSystem.hold`, which holds the city's walkers and the street crowd too); Mission 2's Bryant Park call with
+  the street crowd's own hold (`WAGMI.street.crowd.hold`: the avenue's traffic left be), its crash and phone scenes
+  with a hold round the crash site; Mission 3's rally with 5th Ave's last block, the stage and the lawn to the rigs,
+  its dump with the stage's east side.
 - Reasons: "Quant got rekt." "The van got away." "Moon's trail went cold." "You were spotted." "Pete got rekt."
   "You abandoned Pete." "You left the fight." "Lev got away."
 
@@ -309,6 +323,22 @@ Twilight (Times Square lights on). Juno traces the burner's twin to a Degens cou
   tail, the van bolts and the yard is on alert. Lev's chase runs W 55th St, 11th Ave south past Javits, W 34th St
   east to Greeley Square (or wherever the rams wreck his car). No "Get home" and no act-end scene yet: Mission
   Passed, then Juno's call, Pete's DM and the **G** at Gears' garage ("Pete will DM you tomorrow.").
+  - The tail (23 Oct): about a minute and a half (it was three: 2.0 km at ~13 m/s, crawling up 10th Ave in the
+    traffic). The van cruises at 23.5 m/s (27 spotted), pulling out of the curb at 9 m/s + 1.5 a second so he can make
+    the first corner; it waits for him (x0.8 past 70 m, x0.6 past 100 m, x0.35 past 130 m); 'The van got away.' not in
+    its first 12 s. W 47th St, 10th Ave and W 55th St are held clear of traffic between the cross streets (the
+    crossings keep theirs: it meets cross traffic at every corner); held up (stopped, or under half its pace) it honks
+    after 1.2 s and noses through after 2.4 s, shoving cars aside, and whatever holds it, 5 s without moving makes it
+    go on through regardless (it can't stall). Its two right turns swing wide (out into the next lane, into the far
+    one): the tight ones put its corners over the sidewalk. Its tail lamps are up for the tail (3.5, 9 braking): a dark
+    van on a dark street stays in sight.
+  - The yard (23 Oct): pulling up behind the van at the side gate puts the car in the gate lookout's cone (a car is
+    seen from 22.5 m): the lookouts give him 6 s before their suspicion fills, with the help line "Stop and get out: a
+    lookout spots a car from further off than a man on foot." (it was the alarm at once).
+  - The yard fight (23 Oct): two waves, not nine at once: the lookouts still up and three at the stash, then (down to
+    their last man) a second wind (health topped up to 80%) and two more out of the containers at the back (a grunt with
+    a bottle, a brute); Quant's health is 130 for the fight, with a slow regen (4/s up to 60%) when nothing has hit him
+    for 3.5 s. Losing it restarts at the **yard** checkpoint (the lookouts at their posts again, the quiet way open).
 
 #### M3 · Pump and Dump (Act II) · West Chelsea -> Washington Square -> West Village
 Midday. The Degens launch $MOON2, a copycat coin with Moon's photo on it, at a rally under the Washington Square arch.
@@ -341,9 +371,13 @@ Midday. The Degens launch $MOON2, a copycat coin with Moon's photo on it, at a r
     the doc's spots (a blow 1, a heavy 2, a bat or a bottle 3, a thrown can or bottle 3, the car 3; 2 hp: two punches).
     Fiona is thug.glb repainted (white puffer, platinum hood, no mask) with hair, white shades and a megaphone (arm IK).
     Gears is thug.glb repainted (navy overalls, a beard), a cap, a rag. No fiona.glb yet.
-  - Arrival scene (~11 s): the arch from 5th Ave, the crowd, Fiona close, Wick spots Quant. Fight: 3 grunts (2 bats) +
-    a brute, 2 more at 2/3 (a bat, a bottle); bats and cans laid out with their help; Fiona barks every ~10 s and when a
-    stream dies; the chart dips with each rig. 90 m: "Get back to the fight."; 150 m: "You left the fight."
+  - Arrival scene (~11 s): the arch from 5th Ave, the crowd, Fiona close, Wick spots Quant. Fight (23 Oct, eased: it
+    was 3 grunts with 2 bats + a brute, 2 more at 2/3): 2 grunts by the rigs (one bat), a brute by the stage who holds
+    back till the first rig goes down (or Quant goes for him), 1 more (a bottle) at 2/3; Quant's health 130 for it, a
+    slow regen out of reach, +25 a rig smashed; a blow lands on a rig right by him (1.5 m) whoever else is near, reach
+    2.4 m (a bat 3.0). A retry keeps the rigs he smashed and starts him by the next one standing. Bats and cans laid
+    out with their help; Fiona barks every ~10 s and when a stream dies; the chart dips with each rig. 100 m: "Get back
+    to the fight."; 160 m: "You left the fight."
   - **Changed from the plan:** Fiona's SUV waits on **5th Ave at the arch** (6, 2782), not Washington Sq S: the city's
     park block covers Washington Sq S and N (their lanes run over the park's lawn: the road at z 2951-2957 is grass).
     The dump scene (~10.6 s): the chart crashes red (-99.8%), Fiona drops the megaphone, runs off the stage round the
@@ -353,7 +387,11 @@ Midday. The Degens launch $MOON2, a copycat coin with Moon's photo on it, at a r
     own help, Space hop, Q/E dash). Return: the GPS to the bay door, a corona; Juno calls. Home scene (~13 s): Gears at
     the door, "...in one piece." "Mostly."
   - Passed: TIME, RIGS SMASHED, DEGENS REKT, HITS TAKEN, FOLLOWERS +18,500, "NEW: bats · cold-gas thrusters"; the save;
-    Pete's DM; the **P** at Sara D. Roosevelt Park (925, 3560) with a corona and a "MISSION 4 · COMING SOON" sign.
+    Pete's DM; the **P** at Sara D. Roosevelt Park (933, 3561: by the benches, clear of the park's trees) with a corona
+    and a "MISSION 4 · COMING SOON" sign.
+  - Fail screen choices: Quit leaves the mission (the **G** at the garage again: "Go to Gears' garage."); Skip (after
+    three fails) goes on to the next beat with its scene: the rigs' Skip plays the dump (Fiona runs, the chart red)
+    and starts the escape in the car on 5th Ave at the arch.
   - The progress save (m3-save.js): localStorage `wagmi.save.v1` = { done, unlocks, followers } after each pass (all
     access in try/catch). The start gate with a save: CONTINUE (on foot by the next mission's blip, unlocks applied, no
     opening) or NEW GAME. Pause menu: "Mission select" replays a passed mission from the top; the way on is put back to
@@ -361,7 +399,7 @@ Midday. The Degens launch $MOON2, a copycat coin with Moon's photo on it, at a r
 
 #### M4 · Paper Hands (Act II) · Lower East Side -> Chinatown -> Two Bridges -> the Seaport
 Golden hour. Paper Hands Pete wants out and will trade what he knows.
-- Giver **Q** (Pete's DM): Sara D. Roosevelt Park at Rivington St; Pete waits on a bench at (925, 0, 3560).
+- Giver **Q** (Pete's DM): Sara D. Roosevelt Park at Rivington St; Pete waits on a bench at (933, 0, 3561) (the P corona as built, clear of the park's trees).
 - Beats:
   1. "Go to **Sara D. Roosevelt Park**." Lookouts on the corners: Chrystie & Houston (880, 0, 3330), Forsyth &
      Rivington (962, 0, 3555), Forsyth & Delancey (975, 0, 3700). "Don't let the **lookouts** see you." Approach
@@ -610,11 +648,12 @@ library. try not to get mugged on the way." The **J** blip drops at Bryant Park,
 
 | Checkpoint | Restart state |
 |---|---|
-| 1 · after the opening | Quant (109, 0.22, 390.8) h -PI/2, person mode; Quant's car (88, 0, 394.4) h -PI/2. |
+| 1 · after the opening | Quant (109, 0.22, 390.8) h -PI/2, person mode; Quant's car (88, 0, 394.4) h -PI/2. (The pause menu's "Drive to Chelsea Park": Quant (86.6, 391.7) a step from the door, the get-in played.) |
 | 2 · after the arrival | Quant (-1145.5, 0.22, 1160) h -PI/2, person mode; Quant's car (-1139, 0, 1160) h 0; the van, and the four Degens round (-1153, 0, 1160); the SUV gone. |
 | 3 · after the fight | Quant (-1240, 0.22, 1125) h PI, beside the van. |
 
 Fails: "Quant got rekt." (knocked out, any phase), "You left the fight." (phase 3). The drive cannot fail.
+After MISSION PASSED, Juno's DM and the J: the tracker's objective is "Meet Juno at **Bryant Park**." with the route.
 
 ### 5.10 Option B (upgrade once the van drives well): a live chase
 Instead of the tag, the van leaves in shot 10 and the player chases it: "Follow the **van**." The van drives the GPS

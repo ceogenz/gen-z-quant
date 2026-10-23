@@ -1,10 +1,15 @@
 // WAGMI City: New York's own sound, always on (the amb bus), shaped by where the camera is (where: traffic 0..1, the
 // cars about; crowd 0..1, the people about; park 0..1; avenue 0..1, near an avenue and its subway line):
-//   a bed      the deep roar of traffic blocks away; the wash of tyres and engines nearer; a hiss of air; a crowd's murmur
-//              (babble made once, from a dozen voices that never quite say a word); window air conditioners humming
+//   a bed      the low roar of traffic blocks away, steady; the block's engines (a few cars and trucks down the street,
+//              idling at the light, pulling away up through a gear, gone, the next one along); the city's hum (the
+//              mains, rooftop fans, window units); a thin grain of tyres; a crowd's murmur (babble made once, from a
+//              dozen voices that never quite say a word)
 //   events     distant honks (constant on avenues, rare in a park), a siren a long way off now and then, the subway
-//              rumbling under the avenue, pigeons cooing and taking off, sparrows in the parks, a building site's clangs,
-//              jackhammer and backing truck, a doorman whistling for a cab, a helicopter going over, the crowd's footfalls
+//              rumbling under the avenue, someone calling out down the block, pigeons cooing and taking off, sparrows in
+//              the parks, a building site's clangs, jackhammer and backing truck, a doorman whistling for a cab, a
+//              helicopter going over, the crowd's footfalls
+// Nothing in the bed swells and falls on its own: broadband noise breathing slowly is the sea, not a street. The noise
+// is kept low and steady and the street's life is in tones (engines, horns, sirens, voices) that come and go.
 // Calmer in parks (the traffic falls away, the birds come up); the whole bus is muffled inside the car (core.js).
 import { SOUNDS } from './sounds.js';
 
@@ -55,15 +60,68 @@ export async function makeBabble(sr = 44100, secs = 8) {
 export function createCity(M, E) {
   const out = M.bus.amb, R = M.R;
   const layer = (buf, type, f, q, rate = 1) => { const s = M.src(buf, { rate }), fl = M.filt(type, f, q), g = M.gain(0, out); s.connect(fl); fl.connect(g); s.start(0, R() * 2); return { s, fl, g }; };
-  const rumble = layer(M.brown, 'lowpass', 150, 0.6, 0.8);
-  const wash = layer(M.pink, 'bandpass', 620, 0.45);
-  const hiss = layer(M.white, 'highpass', 3200, 0.5);
-  // the wash breathes as traffic comes and goes in the distance
-  const breathe = M.osc('sine', 0.045), bg = M.gain(0.35); breathe.connect(bg); bg.connect(wash.fl.frequency); breathe.start();
-  const sway = M.osc('sine', 0.07), sg = M.gain(0); sway.connect(sg); sg.connect(wash.g.gain); sway.start();
-  // window units: a mains hum and a fan
-  const acG = M.gain(0, out), ac1 = M.osc('sine', 120), ac2 = M.osc('sine', 240), acn = M.src(M.pink), acf = M.filt('bandpass', 420, 1.2), acg2 = M.gain(0.08);
-  ac1.connect(acG); ac2.connect(acg2); acg2.connect(acG); acn.connect(acf); acf.connect(acG); for (const s of [ac1, ac2, acn]) s.start();
+  // the far traffic: a low roar, nothing in it above a few hundred hertz (nor much of the deepest, felt more than heard),
+  // and steady
+  const roar = layer(M.brown, 'bandpass', 120, 0.55, 0.8);
+  // the road: a thin band of tyre grain, well under the engines; a breath of air over the top
+  const road = layer(M.pink, 'bandpass', 1050, 0.9);
+  const hiss = layer(M.white, 'highpass', 3600, 0.5);
+  // the city's hum: the mains (60 Hz: its 120 and 180 off the transformers), a rooftop fan's blades, the window units'
+  // air (a fan's noise, narrow)
+  const humG = M.gain(0, out), hum = [];
+  for (const [f, v] of [[120, 0.55], [180, 0.18], [240, 0.22]]) { const o = M.osc('sine', f); o.connect(M.gain(v, humG)); hum.push(o); }
+  const fan = M.osc('triangle', 58.5), fanLp = M.filt('lowpass', 320, 1.5); fan.connect(fanLp); fanLp.connect(M.gain(0.5, humG)); hum.push(fan);
+  const acn = M.src(M.pink), acf = M.filt('bandpass', 430, 2.2); acn.connect(acf); acf.connect(M.gain(0.5, humG)); acn.start(0, R() * 2);
+  for (const o of hum) o.start();
+
+  // the block's engines: three cars or trucks somewhere down the street, each on its own little story: idling at the
+  // light, then pulling away up through a gear (or not), fading off, and a while later another one, somewhere else
+  // (a saw at the firing rate with a half-order under it for the lope, a body's resonance, the air's low-pass)
+  const engOut = M.gain(0, out);
+  const engines = [0, 1, 2].map((i) => {
+    const sp = M.spot(engOut, null, { ref: 8, verb: 0.5 });
+    const a = M.osc('sawtooth', 30), b = M.osc('square', 15), bg = M.gain(0.3), body = M.filt('peaking', 210, 1.6), lp = M.filt('lowpass', 420, 0.7), hp = M.filt('highpass', 55, 0.7), g = M.gain(0);
+    body.gain.value = 9;
+    a.connect(body); b.connect(bg); bg.connect(body); body.connect(lp); lp.connect(hp); hp.connect(g); g.connect(sp.in);
+    a.start(); b.start();
+    return { sp, a, b, body, lp, g, st: 'gap', t: 0.5 + i * 1.7 + R() * 2, f0: 30, v: 0, truck: false, pan: 0, d: 60 };
+  });
+  // an engine's next step (the place: how much traffic, how much city)
+  function engine(e, traffic, city, avenue) {
+    const t = M.now(), F = (p, v, k) => p.setTargetAtTime(v, t, k);
+    const pitch = (f, k) => { F(e.a.frequency, f, k); F(e.b.frequency, f / 2, k); };
+    if (e.st === 'gap') {
+      // a new one: a car (or on an avenue now and then a truck or a bus) a block or so off, idling
+      if (city < 0.3 && R() < 0.8) { e.t = 4 + R() * 6; return; }
+      e.truck = R() < 0.12 + 0.2 * avenue;
+      e.f0 = e.truck ? 19 + R() * 5 : 26 + R() * 9;
+      e.pan = R() * 1.8 - 0.9; e.d = (e.truck ? 45 : 30) + R() * (90 - 40 * avenue);
+      e.v = (0.5 + 0.5 * R()) * (e.truck ? 1.25 : 1);
+      e.sp.fixed(e.pan, e.d);
+      e.a.frequency.setValueAtTime(e.f0, t); e.b.frequency.setValueAtTime(e.f0 / 2, t);
+      e.body.frequency.setValueAtTime(e.truck ? 125 : 180 + R() * 90, t);
+      F(e.lp.frequency, e.truck ? 320 : 380, 0.2);
+      F(e.g.gain, e.v * 0.4, 1.2);
+      e.st = 'idle'; e.t = 2 + R() * 6;
+    } else if (e.st === 'idle') {
+      // green: away up through first (most of them), or just fading off (it was round the corner)
+      if (R() < 0.75) { pitch(e.f0 * (e.truck ? 1.9 : 2.4), e.truck ? 1.4 : 0.8); F(e.lp.frequency, e.truck ? 650 : 900, 0.5); F(e.g.gain, e.v, 0.35); e.st = 'pull'; e.t = (e.truck ? 2.2 : 1.3) + R() * 1.2; }
+      else { F(e.g.gain, 0, 1.5); e.st = 'away'; e.t = 4; }
+    } else if (e.st === 'pull') {
+      // the change up: the note drops back and climbs again, the throttle off a moment
+      pitch(e.f0 * (e.truck ? 1.35 : 1.6), 0.07); e.g.gain.setTargetAtTime(e.v * 0.7, t, 0.05);
+      e.a.frequency.setTargetAtTime(e.f0 * (e.truck ? 2.1 : 2.7), t + 0.18, 1.2); e.b.frequency.setTargetAtTime(e.f0 * (e.truck ? 1.05 : 1.35), t + 0.18, 1.2);
+      e.g.gain.setTargetAtTime(e.v, t + 0.18, 0.2);
+      e.st = 'shift'; e.t = 1.4 + R() * 1.6;
+    } else if (e.st === 'shift') {
+      // gone down the avenue: quieter, duller, drifting across
+      F(e.g.gain, 0, 1.3); F(e.lp.frequency, 260, 1.4);
+      e.sp.fixed(Math.max(-1, Math.min(1, e.pan + (R() - 0.5) * 0.8)), e.d * 1.8, 1.5);
+      e.st = 'away'; e.t = 4 + R() * 2;
+    } else {
+      e.st = 'gap'; e.t = 0.4 + R() * 4 / (0.3 + traffic);
+    }
+  }
   let murmur = null;
   const startMurmur = (buf) => { M.babble = buf; murmur = layer(buf, 'bandpass', 1000, 0.45); };
   if (M.babble) startMurmur(M.babble);
@@ -71,21 +129,25 @@ export function createCity(M, E) {
 
   // an event somewhere about: pan -1..1, d metres away
   const at = (name, o) => E.play(name, { bus: 'amb', ...o, pan: o.pan ?? R() * 1.8 - 0.9, d: o.d ?? 60 });
-  const T = { honk: 1, siren: 20 + R() * 40, subway: 25 + R() * 30, coo: 3, chirp: 2, flutter: 30, build: 15 + R() * 30, whistle: 40 + R() * 40, heli: 90 + R() * 120, steps: 0 };
+  const T = { honk: 1, siren: 20 + R() * 40, subway: 25 + R() * 30, coo: 3, chirp: 2, flutter: 30, build: 15 + R() * 30, whistle: 40 + R() * 40, heli: 90 + R() * 120, steps: 0, call: 4 + R() * 8 };
   let farSiren = null, heli = null, subway = null;
   const w = { traffic: 0.5, crowd: 0.3, park: 0, avenue: 0.5 };
+  let bedTraffic = 0.5;
 
   function update(dt, where) {
     // the place, eased (a cut doesn't snap it)
     const k = Math.min(1, dt / 1.2);
     for (const key in w) w[key] += ((where[key] ?? w[key]) - w[key]) * k;
     const { traffic, crowd, park, avenue } = w, city = 1 - 0.75 * park, t = M.now();
-    const set = (p, v) => p.setTargetAtTime(v, t, 0.3);
-    set(rumble.g.gain, city * (0.06 + 0.2 * traffic));
-    set(wash.g.gain, city * (0.07 + 0.22 * traffic));
-    set(sg.gain, city * 0.05 * traffic);
-    set(hiss.g.gain, city * (0.008 + 0.02 * traffic));
-    set(acG.gain, 0.05 * (1 - park) * (1 - 0.6 * traffic));
+    // (the bed follows the traffic slowly: cars bunching past are the traffic voices' to make, not a swell in the bed)
+    bedTraffic += (traffic - bedTraffic) * Math.min(1, dt / 6);
+    const tb = bedTraffic, set = (p, v) => p.setTargetAtTime(v, t, 0.6);
+    set(roar.g.gain, city * (0.05 + 0.05 * avenue + 0.06 * tb));
+    set(road.g.gain, city * (0.01 + 0.022 * avenue + 0.016 * tb));
+    set(hiss.g.gain, city * (0.003 + 0.005 * tb));
+    set(humG.gain, 0.05 * (1 - park) * (1 - 0.4 * tb));
+    set(engOut.gain, city * city * (0.58 + 0.5 * tb));
+    for (const e of engines) if ((e.t -= dt) <= 0) engine(e, tb, city, avenue);
     if (murmur) set(murmur.g.gain, 0.04 + 0.42 * crowd);
 
     // events, each on its own clock (faster where it belongs)
@@ -132,6 +194,8 @@ export function createCity(M, E) {
         else at('beeper', { d: d * 1.5, pan, n: 4 + Math.floor(R() * 5), vol: 0.5 });
       }
     }
+    // someone down the block calling out to someone (more of it where people are)
+    if (T.call <= 0) { if (park < 0.7 || crowd > 0.3) at('call', { d: 30 + R() * 90, vol: 0.4 + 0.4 * R(), verb: 0.85 }); T.call = (5 + R() * 14) / (0.35 + crowd); }
     if (T.whistle <= 0) { if (park < 0.5) at('whistle', { d: 30 + R() * 60, vol: 0.4 + 0.6 * crowd }); T.whistle = 50 + R() * 70; }
     if (T.heli <= 0 && !heli) { heli = { t: 0, dur: 18 + R() * 10, p0: R() * 2 - 1 }; heli.L = E.loop('heli', { bus: 'amb', vol: 0, pan: heli.p0, d: 300, ref: 30 }); T.heli = 120 + R() * 180; }
     if (heli) {
@@ -144,6 +208,6 @@ export function createCity(M, E) {
     // the crowd's footfalls
     if (T.steps <= 0) { if (crowd > 0.05) at('crowdStep', { d: 4 + R() * 12, vol: 0.12 + 0.2 * R(), surface: park > 0.6 ? 'grass' : 'hard', verb: 0.15 }); T.steps = 1 / (0.5 + 7 * crowd); }
   }
-  // (force(name): an event now, for tests and scenes: honk, siren, subway, coo, chirp, flutter, build, whistle, heli)
+  // (force(name): an event now, for tests and scenes: honk, siren, subway, coo, chirp, flutter, build, whistle, heli, call)
   return { update, startMurmur, force(name) { if (name in T) T[name] = 0; }, get where() { return w; } };
 }

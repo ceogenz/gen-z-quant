@@ -19,7 +19,9 @@ export function createMixer(ctx) {
   const glue = ctx.createDynamicsCompressor(); glue.threshold.value = -14; glue.knee.value = 8; glue.ratio.value = 3; glue.attack.value = 0.006; glue.release.value = 0.25;
   const lim = ctx.createDynamicsCompressor(); lim.threshold.value = -3; lim.knee.value = 0; lim.ratio.value = 20; lim.attack.value = 0.001; lim.release.value = 0.12;
   const trim = ctx.createGain(); trim.gain.value = 0.94;
-  master.connect(glue); glue.connect(lim); lim.connect(trim); trim.connect(ctx.destination);
+  // (hold: the whole mix faded out for a pause, see M.hold; apart from master so a volume setting never meets it)
+  const hold = ctx.createGain();
+  master.connect(hold); hold.connect(glue); glue.connect(lim); lim.connect(trim); trim.connect(ctx.destination);
   const LEVEL = { sfx: 0.9, amb: 0.62, music: 0.7, voice: 1 };
   const bus = {}, duckNode = {};
   // the amb bus's muffle (inside the car): a low-pass and a dip
@@ -77,6 +79,31 @@ export function createMixer(ctx) {
     muffleGain.gain.setTargetAtTime(1 - 0.42 * k, t, 0.12);
   };
   M.setLevel = (name, v) => { const g = bus[name]; if (g) g.gain.setTargetAtTime(v, ctx.currentTime, 0.05); };
+  // a pause: hold(true) fades everything out in a few ms and then stops the context where it is (a line half said, a
+  // loop, a fade: each goes on from that point after); hold(false) puts the ducks back as they were and fades it all in
+  // (the caller resumes the context: it knows whether the page may make sound yet)
+  let held = null;
+  M.hold = (on) => {
+    if (!M.live || !!on === !!held) return;
+    const t = ctx.currentTime, p = hold.gain;
+    p.cancelScheduledValues(t); p.setValueAtTime(p.value, t);
+    if (on) {
+      held = { ducks: JSON.parse(JSON.stringify(ducks)) };
+      p.linearRampToValueAtTime(0, t + 0.06);
+      held.timer = setTimeout(() => { if (held) ctx.suspend().catch(() => {}); }, 90);
+      return;
+    }
+    clearTimeout(held.timer);
+    for (const name of Object.keys(duckNode)) {
+      const d = duckNode[name].gain, s = held.ducks[name];
+      d.cancelScheduledValues(t);
+      if (s && s.until > t) { d.setValueAtTime(1 - s.depth, t); d.setTargetAtTime(1, s.until, 0.35); ducks[name] = s; }
+      else { d.setValueAtTime(1, t); delete ducks[name]; }
+    }
+    held = null;
+    p.linearRampToValueAtTime(1, t + 0.2);
+  };
+  M.held = () => !!held;
 
   /* ---------------------------------------------------------- the buffers -- */
   const sr = M.sr;

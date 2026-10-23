@@ -39,21 +39,24 @@ export const LOOPS = {
 
   carHum(M, dest) {
     const out = M.gain(0, dest);
-    const e1 = M.osc('sawtooth', 32), e2 = M.osc('sawtooth', 64.6), elp = M.filt('lowpass', 220, 1.3), eg = M.gain(0.2);
-    e1.connect(elp); e2.connect(elp); elp.connect(eg); eg.connect(out);
+    // (the engine is what says "a car": its firing and the half-order lope under it, through the exhaust's body; the
+    // tyres' band is kept under it, or a street of them passing is surf)
+    const e1 = M.osc('sawtooth', 32), e2 = M.osc('square', 16), e2g = M.gain(0.35), body = M.filt('peaking', 220, 1.5), elp = M.filt('lowpass', 260, 1.1), ehp = M.filt('highpass', 45, 0.7), eg = M.gain(0.2);
+    body.gain.value = 7;
+    e1.connect(body); e2.connect(e2g); e2g.connect(body); body.connect(elp); elp.connect(ehp); ehp.connect(eg); eg.connect(out);
     const rb = M.src(M.brown), rlp = M.filt('lowpass', 150, 0.7), rg = M.gain(0.3); rb.connect(rlp); rlp.connect(rg); rg.connect(out);
-    const ty = M.src(M.pink), tbp = M.filt('bandpass', 700, 0.7), tg = M.gain(0); ty.connect(tbp); tbp.connect(tg); tg.connect(out);
+    const ty = M.src(M.pink), tbp = M.filt('bandpass', 900, 1.1), tg = M.gain(0); ty.connect(tbp); tbp.connect(tg); tg.connect(out);
     const sources = [e1, e2, rb, ty]; for (const s of sources) s.start(0, M.R() * 1.5);
     return {
       sources,
       set({ speed = 0, load = 0.3, dop = 1, vol } = {}) {
         const v = Math.abs(speed), f = (27 + v * 3.3 + load * 9) * dop;
-        ramp(M, e1.frequency, f); ramp(M, e2.frequency, f * 2.02);
-        ramp(M, elp.frequency, 170 + 520 * load + v * 14);
-        ramp(M, eg.gain, 0.05 + 0.12 * load);
-        ramp(M, rg.gain, 0.04 + 0.08 * Math.min(1, v / 12));
-        ramp(M, tbp.frequency, (420 + v * 38) * dop);
-        ramp(M, tg.gain, 0.65 * Math.pow(Math.min(1, v / 14), 1.4));
+        ramp(M, e1.frequency, f); ramp(M, e2.frequency, f / 2); ramp(M, body.frequency, 180 + v * 6);
+        ramp(M, elp.frequency, 220 + 650 * load + v * 16);
+        ramp(M, eg.gain, 0.03 + 0.06 * load);
+        ramp(M, rg.gain, 0.03 + 0.06 * Math.min(1, v / 12));
+        ramp(M, tbp.frequency, (650 + v * 30) * dop);
+        ramp(M, tg.gain, 0.4 * Math.pow(Math.min(1, v / 14), 1.4));
         if (vol != null) ramp(M, out.gain, vol, 0.06);
       },
       stop: finish(M, out, sources),
@@ -67,7 +70,7 @@ export const LOOPS = {
     const n = M.src(M.white), nbp = M.filt('bandpass', 1500, 1.1), ng = M.gain(0), fire = M.osc('square', 24), fd = M.gain(0.12);
     n.connect(nbp); nbp.connect(ng); ng.connect(out); fire.connect(fd); fd.connect(ng.gain);
     const tw = M.osc('sine', 2300), tg = M.gain(0); tw.connect(tg); tg.connect(out);
-    const ty = M.src(M.pink), tbp = M.filt('bandpass', 500, 0.7), tyg = M.gain(0); ty.connect(tbp); tbp.connect(tyg); tyg.connect(out);
+    const ty = M.src(M.pink), tbp = M.filt('bandpass', 650, 1.0), tyg = M.gain(0); ty.connect(tbp); tbp.connect(tyg); tyg.connect(out);
     const sources = [e1, n, fire, tw, ty]; for (const s of sources) s.start();
     return {
       sources,
@@ -76,7 +79,7 @@ export const LOOPS = {
         ramp(M, e1.frequency, f); ramp(M, fire.frequency, f); ramp(M, elp.frequency, 200 + 400 * load + v * 10);
         ramp(M, fd.gain, 0.05 + 0.07 * load);
         ramp(M, tw.frequency, (1800 + v * 120) * dop); ramp(M, tg.gain, 0.012 * load * Math.min(1, v / 4));
-        ramp(M, tyg.gain, 0.45 * Math.pow(Math.min(1, v / 12), 1.5));
+        ramp(M, tyg.gain, 0.3 * Math.pow(Math.min(1, v / 12), 1.5));
         if (vol != null) ramp(M, out.gain, vol, 0.06);
       },
       stop: finish(M, out, sources),

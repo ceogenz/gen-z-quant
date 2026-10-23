@@ -5,10 +5,11 @@
 //                                                                                              checkpoint 'garage'
 //   square  'Go to Washington Square.'  the GPS to the arch at the foot of 5th Ave; Juno calls  checkpoint 'square'
 //   rally   (a scene) the stage under the arch, the chart pumping, Fiona hyping; a Degen spots him
-//   rigs    'Smash the livestream rigs.'  RIGS 0/3: blows (two), a bat, a thrown can or bottle, or the car; the hype
-//           crew with bats (their help), two more run in at 2/3; Fiona on the megaphone; the crowd runs; 100 m from the
-//           fight: 'Get back to the fight.', 160 m: 'You left the fight.'
-//                                                                                              checkpoint 'rigs'
+//   rigs    'Smash the livestream rigs.'  RIGS 0/3: blows (two), a bat, a thrown can or bottle, or the car; two of the
+//           hype crew by the rigs (a bat: their help), a brute by the stage who comes on at the first rig down, one more
+//           at 2/3; health 130 for it, a slow regen out of reach, +25 a rig; Fiona on the megaphone; the crowd runs;
+//           100 m from the fight: 'Get back to the fight.', 160 m: 'You left the fight.'   checkpoint 'rigs' (a retry
+//           keeps the rigs smashed and starts by the next one standing)
 //   dump    (a scene) the chart goes red, Fiona drops the megaphone and runs for her SUV on 5th Ave
 //   escape  'Lose the Degens.'  HEAT 2: two Degens cars (WAGMI.pursuit); the cold-gas thrusters unlock (their help)
 //                                                                                              checkpoint 'escape'
@@ -232,7 +233,7 @@ function createMission(W) {
   /* -------------------------------------------------- the sets, the cast -- */
   // (built once a session, kept on W: a restart reuses them)
   const S = W._m3 || (W._m3 = { R: null, Gar: null, suv: null, fiona: null, gears: null, chev: null, C: null, setsP: null });
-  Object.assign(S, { crew: null, extra: null, chase: null, fionaUp: false, awake: false });
+  Object.assign(S, { crew: null, brute: null, extra: null, chase: null, fionaUp: false, awake: false, bruteUp: false });
   function sets() {
     return S.setsP || (S.setsP = (async () => {
       if (!S.C) S.C = await getCast(W);
@@ -261,19 +262,22 @@ function createMission(W) {
       F.rig.pose(t % 30); F.hype(0, 1, 0.8, t);
     });
     if (crew && !S.crew && W.combat?.spawnCrew) {
-      // three by the rigs (two with bats), a brute by the stage; facing the stage until it starts
-      const C = S.crew = W.combat.spawnCrew({ x: -8, z: 2872, count: 3, brute: 1, weapons: ['bat', 'bat'], aggro: false, props: { cans: 3, bottles: 2, bats: 2 } });
-      const spots = [[-6.5, 2856.5], [-28, 2893], [16.5, 2888], [-9.5, 2822]];
-      C.enemies.forEach((e, i) => {
+      // two by the rigs (one with a bat), and a brute by the stage, a crew of his own: he holds back till the first
+      // rig goes down; facing the stage until it starts. Bats, cans and bottles lying about
+      const C = S.crew = W.combat.spawnCrew({ x: -8, z: 2872, count: 2, brute: 0, weapons: ['bat'], aggro: false, props: { cans: 3, bottles: 2, bats: 2 } });
+      const B = S.brute = W.combat.spawnCrew({ x: -9.5, z: 2822, count: 0, brute: 1, aggro: false, props: false });
+      const spots = [[-6.5, 2856.5], [16.5, 2888], [-9.5, 2822]];
+      [...C.enemies, ...B.enemies].forEach((e, i) => {
         const [x, z] = spots[i % spots.length];
         e.pos.set(x, cm.getGroundHeight(x, z, 'person'), z);
-        const face = Math.atan2(0 - x, 2809.6 - z), up = e.update.bind(e);
-        e.update = (dt) => { up(dt); if (!S.awake && e.alive && e.state === 'idle') { e.yaw = face; e.root.rotation.y = face; } };
+        const face = Math.atan2(0 - x, 2809.6 - z), up = e.update.bind(e), crew = e.crew;
+        e.update = (dt) => { up(dt); if (!(crew === B ? S.bruteUp : S.awake) && e.alive && e.state === 'idle') { e.yaw = face; e.root.rotation.y = face; } };
         e._m3restore = () => { e.update = up; };
       });
     }
   }
   function wake() { S.awake = true; for (const e of S.crew?.enemies || []) e._m3restore?.(); S.crew?.engage(); }
+  function wakeBrute() { if (S.bruteUp) return; S.bruteUp = true; for (const e of S.brute?.enemies || []) e._m3restore?.(); S.brute?.engage(); }
 
   function tidy() {
     hooks.clear(); fionaHook = null; ui.objective(null); ui.sub(null); ui.help(null); ui.counter(null); ui.caller(null); ui.hold(null); ui.phone.hide(); U.call?.hide();
@@ -287,7 +291,7 @@ function createMission(W) {
     if (S.suv) S.suv.group.visible = false;
     if (S.fiona) { S.fiona.root.visible = false; S.fiona.mega.visible = false; } S.fionaUp = false;
     if (S.gears) S.gears.root.visible = false;
-    S.crew = null; S.extra = null; S.awake = false;
+    S.crew = null; S.brute = null; S.extra = null; S.awake = false; S.bruteUp = false;
   }
   function inTheCar(x, z, h) { place(W, { car: [x, z, h] }); P.inVehicle = true; P.mesh.visible = false; P.speed = 0; app.selectMode('car'); }
   const blipCar = () => gps.blip('car', { x: car.position.x, z: car.position.z, kind: 'car', edge: true, name: car.label || "Quant's car" });
@@ -315,8 +319,11 @@ function createMission(W) {
     },
     // to Washington Square (the rally goes up on the way)
     async square(fresh) {
+      // (played straight in: the light and his place first, the sets after: a slow load doesn't leave him at the city's
+      // own start in its golden hour)
+      if (fresh) { midday(); place(W, { car: SPOT.out.car, quant: SPOT.out.quant }); }
       await sets(); midday();
-      if (fresh) { S.Gar.show(true); place(W, { car: SPOT.out.car, quant: SPOT.out.quant }); }
+      if (fresh) S.Gar.show(true);
       // (the blip on the arch; the route down 5th Ave to its last lane, and on foot near the square, to the arch; in the
       // car on that last stretch, no line: the stage is in sight)
       const dest = { ...SQ, follow: () => (inCar() || dist(me(), SQ.x, SQ.z) > 140 ? FIFTH : SQ) };
@@ -345,18 +352,29 @@ function createMission(W) {
       if (fresh) place(W, { car: FRESH.rigs.car, quant: [2.5, 2790, 0] });
       await spawnRally();
       car.speed = 0;
+      // (its shots kept clear while it plays, M1's way: 5th Ave's last block down to the arch, the stage, the lawn to
+      // the rigs; then only the stage again)
+      holds([STAGE_HOLD, { minX: -26, maxX: 26, minZ: 2735, maxZ: 2905 }]);
       const def = rallyScene(W, { say, fiona: S.fiona, rally: S.R, spotter: S.crew?.enemies[0] || null });
       def.setup();
-      await runScene(W, def);
+      try { await runScene(W, def); } finally { holds([STAGE_HOLD]); }
     },
     // the fight round the rigs
     async rigs(fresh) {
+      if (fresh) { midday(); place(W, { car: FRESH.rigs.car, quant: FRESH.rigs.quant }); }
       await sets(); midday();
-      if (fresh) { await spawnRally(); place(W, { car: FRESH.rigs.car, quant: FRESH.rigs.quant }); }
+      if (fresh) {
+        await spawnRally();
+        // (a retry: the rigs he smashed stay smashed, and he starts by the next one standing, a few steps off it)
+        const next = S.R.smashed ? S.R.rigs.filter((r) => !r.down).sort((a, b) => Math.hypot(a.x, a.z - 2836) - Math.hypot(b.x, b.z - 2836))[0] : null;
+        place(W, { car: FRESH.rigs.car, quant: next ? [next.x + 1.2, next.z - 3.4, Math.atan2(-1.2, 3.4)] : FRESH.rigs.quant });
+      }
       const combat = W.combat, R = S.R;
-      const autoGetUp = combat?.player.autoGetUp;
+      const autoGetUp = combat?.player.autoGetUp, maxHp0 = combat?.player.maxHp;
       let offDown = null;
-      if (combat?.player) { combat.player.hp = combat.player.maxHp; lastHp = combat.player.hp; combat.player.autoGetUp = false; offDown = combat.player.onDown(() => fail('Quant got rekt.', true)); }
+      // (his health stretched for it (130), a slow second wind when he's kept out of reach a few seconds, a top-up as
+      // each rig goes down)
+      if (combat?.player) { combat.player.maxHp = 130; combat.player.hp = combat.player.maxHp; lastHp = combat.player.hp; combat.player.autoGetUp = false; offDown = combat.player.onDown(() => fail('Quant got rekt.', true)); }
       let onKey = null, offFight = null;
       try {
         wake();
@@ -375,11 +393,13 @@ function createMission(W) {
           stats.smashed = R.smashed; ui.counter('RIGS', `${R.smashed}/3`);
           R.screen.dip(); S.chev[r.i].hide(); gps.unblip('rig' + r.i);
           sfx?.play('thunk', { gain: 0.3, f: 90 });
+          if (combat?.player && !combat.player.down) combat.player.hp = Math.min(combat.player.maxHp, combat.player.hp + 25);
+          wakeBrute();
           if (R.smashed < 3) { W.voice?.fx?.('Fiona', 'phone'); say([LOST[Math.min(LOST.length - 1, said++)]]).catch(() => {}); barkT = now() + 9000; }
         };
         // a blow at a rig: Quant's swing (the fight's own move, or the keys), what he throws, his car
         let heavyT = -1e9, pressT = -1e9;
-        const reachOf = () => (W.combat?.debug?.c?.me?.holding?.kind === 'bat' ? 2.6 : 2.0);
+        const reachOf = () => (W.combat?.debug?.c?.me?.holding?.kind === 'bat' ? 3.0 : 2.4);
         const blow = (r, heavy) => {
           const held = W.combat?.debug?.c?.me?.holding?.kind, dmg = held === 'bat' || held === 'bottle' ? 3 : heavy ? 2 : 1;
           if (!r.hit(dmg, P.position) && !helped2) { helped2 = true; ui.help(['Hit it again. Or throw a ', { 'trash can': 'green' }, ' at it.'], 7); }
@@ -399,13 +419,13 @@ function createMission(W) {
           }
           if (best) blow(best, heavy);
         };
-        // (a blow pressed with a rig in reach and nearer him than any Degen: the rig's, whichever way the fight turns
-        // him to swing; with a Degen nearer, the fight has it)
+        // (a blow pressed with a rig in reach and nearer him than any Degen, or right by him: the rig's, whichever way
+        // the fight turns him to swing; with a Degen nearer, the fight has it)
         const rigAt = () => {
           const reach = reachOf(), px = P.position.x, pz = P.position.z;
           let best = null, bd = Infinity;
           for (const r of R.rigs) { if (r.down) continue; const d = Math.hypot(r.x - px, r.z - pz); if (d <= reach && d < bd) { bd = d; best = r; } }
-          if (!best) return null;
+          if (!best || bd < 1.5) return best;
           for (const e of W.combat?.enemies || []) if (e.alive && Math.hypot(e.pos.x - px, e.pos.z - pz) < bd - 0.2) return null;
           return best;
         };
@@ -421,9 +441,16 @@ function createMission(W) {
           if (!W.combat?.debug?.c?.me) setTimeout(() => strike(heavy), 160);
         };
         addEventListener('keydown', onKey, true); addEventListener('pointerdown', onKey, true);
+        let hurtT = now(), hp0 = combat?.player?.hp ?? 0;
         offFight = hook(() => {
           const dt = frameDt(); if (W.cutscene) return;
           R.update(dt, app.cameraSystem.camera.position);
+          if (combat?.player) {
+            const hp = combat.player.hp; if (hp < hp0 - 0.5) hurtT = now(); hp0 = hp;
+            if (hp > 0 && !combat.player.down && now() - hurtT > 3500 && hp < combat.player.maxHp * 0.6) combat.player.hp = hp + 4 * dt;
+          }
+          // (the brute at the stage comes for him if he goes for him first)
+          if (!S.bruteUp && S.brute?.enemies.some((e) => !e.alive || e.state !== 'idle' || dist(P.position, e.pos.x, e.pos.z) < 5)) wakeBrute();
           // (his swing: the moment a strike, a heavy or a swing at the air starts, its blow lands ~0.16 s on)
           const mv = W.combat?.debug?.c?.me?.moveName?.() || 'free';
           // (a swing the press already gave to a rig isn't counted twice)
@@ -451,10 +478,10 @@ function createMission(W) {
           for (const id of [...gps.blips.keys()]) if (id.startsWith('e:') && !live.has(id)) gps.unblip(id);
           // Fiona on the megaphone
           if (now() > barkT) { barkT = now() + 9000 + Math.random() * 3000; W.voice?.fx?.('Fiona', 'phone'); say([BARKS[Math.floor(Math.random() * BARKS.length)]]).catch(() => {}); }
-          // two more at two down
+          // one more at two down
           if (!extra && R.smashed >= 2 && W.combat?.spawnCrew) {
             extra = true;
-            S.extra = W.combat.spawnCrew({ x: -24, z: 2944, count: 2, brute: 0, weapons: ['bat', 'bottle'], aggro: true, props: false });
+            S.extra = W.combat.spawnCrew({ x: -24, z: 2944, count: 1, brute: 0, weapons: ['bottle'], aggro: true, props: false });
             S.extra.engage?.();
             say([['Wick', ACID, 'Backup! Protect the last stream!']]).catch(() => {});
           }
@@ -465,11 +492,11 @@ function createMission(W) {
           else if (d < 90 && warned) { warned = false; go(); }
         });
         await wait(() => R.smashed >= 3);
-        stats.rekt = [S.crew, S.extra].filter(Boolean).reduce((n, c) => n + c.enemies.filter((e) => !e.alive).length, 0);
+        stats.rekt = [S.crew, S.brute, S.extra].filter(Boolean).reduce((n, c) => n + c.enemies.filter((e) => !e.alive).length, 0);
       } finally {
         offFight?.();
         if (onKey) { removeEventListener('keydown', onKey, true); removeEventListener('pointerdown', onKey, true); }
-        offDown?.(); if (combat?.player) combat.player.autoGetUp = autoGetUp;
+        offDown?.(); if (combat?.player) { combat.player.autoGetUp = autoGetUp; combat.player.maxHp = maxHp0; combat.player.hp = Math.min(combat.player.hp, maxHp0); }
       }
       for (const id of [...gps.blips.keys()]) if (id.startsWith('e:') || id.startsWith('rig')) gps.unblip(id);
       ui.counter(null);
@@ -480,9 +507,9 @@ function createMission(W) {
       await sets(); midday();
       if (fresh) { await spawnRally({ crew: false }); for (const r of S.R.rigs) if (!r.down) r.hit(3); }
       S.fionaUp = false;
-      W.combat?.clear?.(); S.crew = null; S.extra = null;
+      W.combat?.clear?.(); S.crew = null; S.brute = null; S.extra = null;
       for (const c of S.chev) c.hide();
-      holds([{ minX: -12, maxX: 12, minZ: 2560, maxZ: 2796 }, STAGE_HOLD]);
+      holds([{ minX: -12, maxX: 12, minZ: 2560, maxZ: 2796 }, { minX: -16, maxX: 26, minZ: 2776, maxZ: 2830 }, STAGE_HOLD]);
       inTheCar(...ESCAPE_CAR);
       const def = dumpScene(W, { say, fiona: S.fiona, rally: S.R, suv: S.suv });
       def.setup();
@@ -491,6 +518,7 @@ function createMission(W) {
     },
     // the Degens' cars after him
     async escape(fresh) {
+      if (fresh) { midday(); inTheCar(...ESCAPE_CAR); }
       await sets(); midday();
       if (fresh) { if (!S.R.shown) { S.R.reset(); S.R.show(true); } for (const r of S.R.rigs) if (!r.down) r.hit(3); S.R.screen.mode('dump'); }
       // (a retry starts him back where the dump left him, whatever shoved the car about before)
@@ -527,8 +555,8 @@ function createMission(W) {
     },
     // back to the garage
     async ret(fresh) {
+      if (fresh) { midday(); inTheCar(...FRESH.ret); }
       await sets(); midday();
-      if (fresh) inTheCar(...FRESH.ret);
       S.R.show(false); S.Gar.show(true);
       const door = { x: G_AT.x, z: G_AT.z - 3.2, name: "Gears' garage · W 22nd St" };
       const drive = gps.drive({ dest: door, objective: ['Go back to the ', { garage: 'yellow' }, '.'] });
@@ -632,17 +660,12 @@ function createMission(W) {
           tidy(); cm.resetInput?.();
           if (e.rekt) { ui.rekt(true); sfx?.play('failed'); await sleep(2600); ui.rekt(false); } else sfx?.play('failed');
           const cp = CHECKPOINT[phase]; fails[cp] = (fails[cp] || 0) + 1;
-          // (the choices move only on fresh presses: a key still held from the fight, or repeating, moves nothing)
-          const t1 = performance.now();
-          const guard = (ev) => { if (ev.repeat || performance.now() - t1 < 450) { ev.stopImmediatePropagation(); ev.preventDefault(); } };
-          addEventListener('keydown', guard, true);
-          let choice;
-          try { choice = await ui.failed(e.reason, { skip: fails[cp] >= 3 }); } finally { removeEventListener('keydown', guard, true); }
-          W.combat?.clear?.(); S.crew = null; S.extra = null; S.awake = false;
+          // (the choices move only on fresh presses: ui.failed)
+          const choice = await ui.failed(e.reason, { skip: fails[cp] >= 3 });
+          W.combat?.clear?.(); S.crew = null; S.brute = null; S.extra = null; S.awake = false; S.bruteUp = false;
           if (W.combat?.player) W.combat.player.hp = W.combat.player.maxHp;
           if (choice === 'quit') { M.stop(); toGarage(W, { quick: true }); return; }
-          // (a retry sets the rally up again)
-          if (cp === 'rigs') S.R?.reset();
+          // (a retry of the rigs keeps the ones he smashed: it starts by the next one standing)
           // (a skip goes on past the part he failed, its scene after it still played: the rigs' skip still sees Fiona run)
           if (choice === 'skip') { i = ORDER.indexOf(PHASE_OF[cp]) + 1; fresh = true; continue; }
           i = ORDER.indexOf(PHASE_OF[cp]); fresh = true;

@@ -119,7 +119,7 @@ function createMission(W) {
     ], t);
     ui.caller(null);
   }
-  const stats = { t0: performance.now(), hits: 0, rekt: 0 };
+  const stats = { t0: now(), hits: 0, rekt: 0 };
   let lastHp = null;
   const fails = {};
   const frameHooks = new Set();
@@ -165,8 +165,13 @@ function createMission(W) {
     },
     // 2 · the drive: the GPS, Juno's call, Moon's tag running ahead on the radar
     async drive(fresh) {
-      // (from the pause menu or ?m1=drive: in the car at its mark)
-      if (fresh) { place(W, { car: [88, 394.4, -PI / 2], quant: [109, 390.8, -1.41] }); P.inVehicle = true; P.mesh.visible = false; P.speed = 0; app.selectMode('car'); }
+      // (from the pause menu or ?m1=drive: the car at its mark, Quant a step from its door, and in he gets, the door up
+      // and all (wagmi/game.js WAGMI.ride); without the ride, at the wheel at once)
+      if (fresh) {
+        place(W, { car: [88, 394.4, -PI / 2], quant: [86.6, 391.7, 0.35] });
+        if (W.ride?.getIn) { W.ride.getIn(); await wait(() => !W.ride.phase); }
+        if (!inCar()) { P.inVehicle = true; P.mesh.visible = false; P.speed = 0; app.selectMode('car'); }
+      }
       marker.at(DEST.x, 0, DEST.z);
       // the route follows the objective: out of the car on the way, to the car ('Get back in your car.'); within 250 m
       // of the park on foot, on to it on foot (the fight is on foot anyway); back in, to the park again (gps.drive)
@@ -479,7 +484,7 @@ function createMission(W) {
   async function passed() {
     tidy();
     holds([]);
-    const secs = Math.round((performance.now() - stats.t0) / 1000);
+    const secs = Math.round((now() - stats.t0) / 1000);
     sfx.play('passed');
     await ui.passed({ title: 'Dognapped', stats: [['TIME', `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`], ['DEGENS REKT', `${stats.rekt || 5}/5`], ['HITS TAKEN', String(stats.hits)]], reward: '+4,210', note: '#CoinKidFights is trending' }, 6);
     W.followers = (W.followers || 0) + 4210;
@@ -506,7 +511,7 @@ function createMission(W) {
           if (e instanceof Quit) return;
           if (!(e instanceof Fail)) { console.error('[m1]', phase, e); tidy(); return; }
           // REKT: the world grey, then the fail screen
-          tidy();
+          tidy(); cm.resetInput?.();
           if (e.rekt) { ui.rekt(true); sfx.play('failed'); await sleep(2600); ui.rekt(false); } else sfx.play('failed');
           const cp = CHECKPOINT[phase]; fails[cp] = (fails[cp] || 0) + 1;
           const choice = await ui.failed(e.reason, { skip: fails[cp] >= 3 });

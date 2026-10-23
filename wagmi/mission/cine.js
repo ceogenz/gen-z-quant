@@ -177,26 +177,30 @@ export function createDirector(W) {
         };
       });
     },
-    // keep the keyboard and the mouse from the game; Space / Enter held 0.6 s calls onSkip
+    // keep the keyboard and the mouse from the game; Space / Enter held 0.6 s calls onSkip. While it blocks, W.cineSkip()
+    // skips it as the held key would (the pause menu's restart, from inside a cutscene)
     block(on, { onSkip = null, skipAfter = 1 } = {}) {
       D.blocking = !!on;
       if (on) {
         cm.resetInput(); D.skipK = 0; D.skipHeld = false; D.onSkip = onSkip; D.blockT = performance.now() + skipAfter * 1000;
+        W.cineSkip = D._skip || (D._skip = () => { const f = D.blocking && D.onSkip; if (!f) return false; D.onSkip = null; D.skipK = 0; f(); return true; });
         if (!D._keys) {
           D._keys = (e) => {
             if (!D.blocking) return;
             if (e.code === 'Space' || e.code === 'Enter' || e.code === 'NumpadEnter') D.skipHeld = e.type === 'keydown';
             e.stopImmediatePropagation(); if (e.type === 'keydown' && !e.metaKey && !e.ctrlKey) e.preventDefault();
           };
-          // (a long press anywhere skips too: phones and tablets have no Space)
-          D._mouse = (e) => { if (!D.blocking) return; if (e.type !== 'wheel') D.skipHeld = e.type === 'pointerdown'; if (e.target === app.renderer.domElement) e.stopImmediatePropagation(); };
+          // (a long press anywhere skips too: phones and tablets have no Space; not a click on the pause menu)
+          D._mouse = (e) => { if (!D.blocking || W.paused) return; if (e.type !== 'wheel') D.skipHeld = e.type === 'pointerdown'; if (e.target === app.renderer.domElement) e.stopImmediatePropagation(); };
           for (const t of ['keydown', 'keyup']) addEventListener(t, D._keys, true);
           for (const t of ['pointerdown', 'pointerup', 'pointercancel', 'wheel']) addEventListener(t, D._mouse, true);
         }
-      } else { D.skipHeld = false; cm.resetInput(); }
+      } else { D.skipHeld = false; cm.resetInput(); if (W.cineSkip === D._skip) W.cineSkip = null; }
     },
-    // the skip ring: call every frame; returns true once it has filled
+    // the skip ring: call every frame; returns true once it has filled (paused, it waits: the menu has the keys, and a
+    // Space held into the pause is let go)
     skipStep(dt, ui) {
+      if (W.paused) { D.skipHeld = false; D.skipK = 0; ui?.skip(null); return false; }
       if (!D.blocking || !D.onSkip) return false;
       const can = performance.now() > D.blockT;
       D.skipK = D.skipHeld && can ? D.skipK + dt / 0.6 : Math.max(0, D.skipK - dt * 3);

@@ -24,13 +24,14 @@ const WAGMI = (window.WAGMI = { app, person, car });
   // a driver in its seat (rs.anchor) stays his own size, the seat's marks (rs.seat, in the anchor's frame) scaled to
   // match. body: its box in its own frame (x across it, z along it, top), for all that runs into it or round it;
   // axle: its axles' distance either side of its middle (the wheels' ground); chase: the chase camera's framing
-  // (js/cameras.js): fov, the pull back per m/s, the lens widening with speed and more on the boost
+  // (js/cameras.js): fov, the pull back per m/s, the lens widening with speed and more on the boost, the shake flat out
+  // (kept small: at a cruise the car fills as much of the frame as parked, on the boost a little less)
   const S = 1.1;
   rs.group.scale.setScalar(S); rs.anchor.scale.setScalar(1 / S); rs.scale = S;
   for (const k of Object.keys(rs.seat)) rs.seat[k] = rs.seat[k].map((v) => v * S);
   Object.assign(rs, { length: rs.length * S, width: rs.width * S, height: rs.height * S });
   Object.assign(car, { body: { hx: 1.08, z0: -2.33, z1: 2.47, top: 1.28 }, axle: 1.56, mass: 2.0,
-    chaseDistance: 6.7, chaseHeight: 2.0, chase: { fov: 58, pull: 0.012, kick: 2.5, boostKick: 7, vmax: 34 } });
+    chaseDistance: 6.7, chaseHeight: 2.0, chase: { fov: 58, pull: 0.002, kick: 1.1, boostKick: 3.0, vmax: 34, shake: 0.03, vtop: 56 } });
   Object.assign(car, { label: "Quant's car", topSpeed: 34, boostSpeed: 56, accel: 16, boostAccel: 32, roadster: rs });
   // (the speed panel's name for it, when the city started in the car before this ran)
   if (cm.activeMode === 'car') { const lab = document.getElementById('hud-active-mode'); if (lab) lab.textContent = car.label; }
@@ -40,7 +41,39 @@ const WAGMI = (window.WAGMI = { app, person, car });
     car.boosting = !!keys.boost && throttle > 0;
     rs.setThrust(keys.boost && throttle > 0 ? 1 : 0, keys.boost && throttle > 0 ? 0.85 : 0);
     rs.update(dt, car.speed, -steer * 0.9);
+    unpin(dt, throttle);
   };
+  // pinned (a tree ahead and one behind, a wreck against a wall): the throttle or reverse held PIN s with the car hardly
+  // moving, it wriggles free, slid over to the nearest spot round it where its box is clear of the buildings and the
+  // street's things (a beat, at 3 m/s; again after another PIN s if that wasn't enough)
+  const PIN = 1.6, pin = { t: 0, x: 0, z: 0, slide: 0, dx: 0, dz: 0 }, probe = { heading: 0, speed: 0, vx: 0, vz: 0, angularVel: 0, body: null };
+  const boxClear = (x, z) => {
+    const B = car.body, cs = Math.cos(car.heading), sn = Math.sin(car.heading), p = new THREE.Vector3(x, 0, z);
+    Object.assign(probe, { heading: car.heading, speed: 0, vx: 0, vz: 0, body: B });
+    cm.resolveHorizontalCollision(p, 1.35, 1.0, probe);
+    if (Math.hypot(p.x - x, p.z - z) > 0.01) return false;
+    for (const b of WAGMI.crash?.props?.around(x, z, 5) || []) {
+      if (b.taken) continue;
+      const r = (b.w ? Math.max(b.w, b.d) / 2 : b.r || 0.3) + 0.15, dx = b.x - x, dz = b.z - z, lx = dx * cs - dz * sn, lz = dx * sn + dz * cs;
+      if (Math.abs(lx) < B.hx + r && lz > B.z0 - r && lz < B.z1 + r) return false;
+    }
+    return true;
+  };
+  function unpin(dt, throttle) {
+    if (pin.slide > 0) { pin.slide -= dt; car.vx = pin.dx * 3; car.vz = pin.dz * 3; return; }
+    if (!throttle || car.halt || Math.hypot(car.position.x - pin.x, car.position.z - pin.z) > 0.8) { pin.t = 0; pin.x = car.position.x; pin.z = car.position.z; return; }
+    if ((pin.t += dt) < PIN) return;
+    pin.t = 0;
+    // (the nearest clear spot: to either side first, then the corners, then back and ahead; up to 3.5 m off)
+    const cs = Math.cos(car.heading), sn = Math.sin(car.heading);
+    for (const d of [1.3, 2.2, 3.5]) for (const [ax, az] of [[1, 0], [-1, 0], [0.7, -0.7], [-0.7, -0.7], [0.7, 0.7], [-0.7, 0.7], [0, -1], [0, 1]]) {
+      const wx = (ax * cs + az * sn) * d, wz = (-ax * sn + az * cs) * d;
+      if (!boxClear(car.position.x + wx, car.position.z + wz)) continue;
+      Object.assign(pin, { dx: wx / d, dz: wz / d, slide: d / 3 });
+      car.speed = 0;
+      return;
+    }
+  }
   // (parked, it still settles its thrust; rolling on with nobody in it, its wheels still turn)
   WAGMI.carIdle = (dt) => { if (cm.activeMode !== 'car') { rs.setThrust(0, 0); rs.update(dt, car.speed || 0, 0); } };
   // parked, it is solid to Quant on foot (the city's collision only knows the buildings): its body a box in its own frame
@@ -312,16 +345,28 @@ function route(from) {
   return path;
 }
 
-// in: walk round to the door, then climb in (or at once)
+// (something standing in his way at p: a building, or a post, a hydrant, a bench... the crash's props still up)
+function blocked(p) {
+  if (walled(p)) return true;
+  for (const b of WAGMI.crash?.props?.around(p.x, p.z, 2) || []) if (!b.taken && hdist(b, p) < (b.w ? Math.max(b.w, b.d) / 2 : b.r || 0.3) + 0.3) return true;
+  return false;
+}
+// in: walk round to the door, then climb in (or at once). All of it within IN_MAX s: a way round with anything in it
+// (a wall, a post) isn't walked, and a walk that takes longer ends with him in at once
+const IN_MAX = 1.5;
 function getIn(quick = false) {
   if (ride.phase) return;
   if (quick || walled(toWorld(drv.door[0], drv.door[1]))) return inQuick();
   jobs = [];
   const path = route(person.position);
   let L = 0; for (let i = 0; i < path.length; i++) L += hdist(i ? path[i - 1] : person.position, path[i]);
+  for (let i = 0; i < path.length; i++) {
+    const a = i ? path[i - 1] : person.position, b = path[i], n = Math.ceil(hdist(a, b) / 0.5);
+    for (let k = 1; k <= n; k++) if (blocked(_cl.set(a.x + (b.x - a.x) * k / n, 0, a.z + (b.z - a.z) * k / n))) return inQuick();
+  }
   // (coming down the side from ahead, the door swings into his way: it opens once he's there)
   const lastFrom = toLocal(path.length > 1 ? path[path.length - 2] : person.position);
-  Object.assign(ride, { phase: 'walk', mode: 'person', path, i: 0, t: 0, v: Math.min(5.2, Math.max(1.5, L * 0.8)), limit: L / 1.4 + 2.5, early: lastFrom.z < drv.door[1] + 0.6 });
+  Object.assign(ride, { phase: 'walk', mode: 'person', path, i: 0, t: 0, v: Math.min(6.4, Math.max(1.8, L * 1.1)), limit: IN_MAX - 0.35, early: lastFrom.z < drv.door[1] + 0.6 });
 }
 function walkStep(dt) {
   const P = person, path = ride.path;
@@ -344,10 +389,12 @@ function walkStep(dt) {
   P.position.y = ground(P.position); P.verticalVel = 0;
   P.mesh.position.copy(P.position); P.mesh.rotation.y = P.heading;
   // the door up as he comes to it, his near hand (the right) lifting it by its edge
-  if (!door.want && (ride.i >= path.length || (ride.early && rem < 0.7))) doorTo(1, 0.55);
+  if (!door.want && (ride.i >= path.length || rem < (ride.early ? 0.7 : 1.2))) doorTo(1, 0.45);
   const inner = rs.doors?.L?.pivot.children[0];
   if (door.want && door.p < 0.45 && inner) { inner.updateWorldMatrix(true, false); Q.reach('R', inner.localToWorld(_v.set(0.86, 0.86, -0.18)), 1); } else Q.reach('R', null, 0);
-  if ((ride.i >= path.length && door.p >= 0.5 && Math.abs(wrap(car.heading - P.heading)) < 0.2) || ride.t > ride.limit) startIn();
+  if (ride.i >= path.length && door.p >= 0.5 && Math.abs(wrap(car.heading - P.heading)) < 0.2) startIn();
+  // (out of time: at the door, in; still on his way, in at once)
+  else if (ride.t > ride.limit) { if (rem < 0.6) startIn(); else inQuick(); }
 }
 function startIn() {
   Q.reach('R', null, 0);
@@ -534,15 +581,31 @@ Object.assign(ride, { getIn, getOut, skip, door: () => door.p, driver: drv });
 
 const hint = document.createElement('div');
 Object.assign(hint.style, { position: 'fixed', left: '50%', bottom: '120px', transform: 'translateX(-50%)', padding: '10px 18px', borderRadius: '12px',
-  background: 'rgba(10,12,18,0.72)', color: '#fff', font: '600 15px system-ui, sans-serif', letterSpacing: '0.04em', zIndex: 20, display: 'none', pointerEvents: 'none' });
+  background: 'rgba(10,12,18,0.72)', color: '#fff', font: '600 15px system-ui, sans-serif', letterSpacing: '0.04em', zIndex: 20, display: 'none', pointerEvents: 'none',
+  transition: 'bottom 0.2s', whiteSpace: 'nowrap' });
 document.body.appendChild(hint);
+// (never on the mission's objective line or the subtitle under it: over them, 10 px clear, wherever they would meet)
+function placeHint() {
+  const hr = hint.getBoundingClientRect(), H = innerHeight, cx = innerWidth / 2;
+  const lines = [];
+  for (const el of document.querySelectorAll('#wg .wg-obj, #wg .wg-sub')) {
+    if (el.classList.contains('hide') || !el.textContent.trim()) continue;
+    const r = el.getBoundingClientRect();
+    if (r.height && r.right > cx - hr.width / 2 - 8 && r.left < cx + hr.width / 2 + 8) lines.push(r);
+  }
+  let bottom = 120;
+  for (const r of lines.sort((a, b) => b.bottom - a.bottom)) if (r.top < H - bottom + 10 && r.bottom > H - bottom - hr.height - 10) bottom = H - r.top + 10;
+  if (hint.style.bottom !== bottom + 'px') hint.style.bottom = bottom + 'px';
+}
 // the prompt, and the car's parked thrust settling
 let last = performance.now();
 (function tick() {
   const now = performance.now(), dt = Math.min(0.05, (now - last) / 1000); last = now;
   WAGMI.carIdle(dt);
   const show = ride.phase || WAGMI.paused || WAGMI.cutscene || WAGMI.directed ? '' : cm.activeMode === 'person' && near() ? 'F  ·  Get in' : cm.activeMode === 'car' && Math.abs(car.speed) < 4 ? 'F  ·  Get out' : '';
-  hint.textContent = show; hint.style.display = show ? 'block' : 'none';
+  if (hint.textContent !== show) hint.textContent = show;
+  hint.style.display = show ? 'block' : 'none';
+  if (show) placeHint();
   requestAnimationFrame(tick);
 })();
 WAGMI.ready = true;

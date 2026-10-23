@@ -1,8 +1,8 @@
 // WAGMI City: the pause menu, GTA's. Esc (or P) in play: the city stops where it is (its frame loop held: the traffic,
 // the crowd, the fight, the car; the missions' clocks with it), the sound dips, and the menu comes up: Resume, the brief
 // (the objective, the last lines said, the last help), the controls, restart from a checkpoint, the sound, back to the
-// title. Esc, P or Resume plays on. Not in a cutscene (Space skips those), at the start gate, on the fail screen, or
-// over the full map (its own Esc closes it).
+// title. Esc, P or Resume plays on. In a cutscene too (its clock stops with the city's; Space held still skips it); not
+// at the start gate, on the fail screen, or over the full map (its own Esc closes it).
 // (A pointer locked to the view for a fight lets go on the browser's own Esc, which the page never hears: that letting
 // go, when the game didn't ask for it, opens the menu too.)
 // B, any time in play: the brief (the tracker over the radar opened on the last lines: ui.brief).
@@ -147,7 +147,7 @@ export function createPause(ui) {
   const typing = (e) => /^(INPUT|TEXTAREA|SELECT)$/.test(e.target?.tagName || '') || e.target?.isContentEditable;
   function pausable() {
     const b = document.body.classList;
-    if (!app.ready || b.contains('wg-gating') || b.contains('wg-cine') || W.cutscene || W.directed) return false;
+    if (!app.ready || b.contains('wg-gating')) return false;
     if (app.mapSystem?.isFullMapOpen) return false;
     if (document.querySelector('#wg .wg-big.on .choices')) return false; // (the fail screen asks its own question)
     return true;
@@ -199,10 +199,16 @@ export function createPause(ui) {
   }
   const draw = () => { drawMenu(); drawPanel(); };
   const subCount = () => { const id = ITEMS[sel][0]; return id === 'restart' ? checkpoints().list.length : id === 'select' ? story().length : id === 'sound' ? (W.audio?.bus ? VOLS.length : 0) : id === 'title' ? 2 : 0; };
+  // (from inside a cutscene: it is skipped first, as a held Space would, and has let go of the camera before the restart)
+  async function leaveScene() {
+    if (!W.cutscene || !W.cineSkip?.()) return;
+    for (let i = 0; i < 60 && W.cutscene; i++) await new Promise((r) => setTimeout(r, 50));
+  }
   async function replay(i) {
     const m = story()[i]; if (!m || !m.passed || !W.replay) return;
     close();
     await ui.fade(1, 0.35);
+    await leaveScene();
     try { await W.replay(m.id); } catch (e) { console.warn('[pause] replay', e); }
     setTimeout(() => ui.fade(0, 0.6), 250);
   }
@@ -234,6 +240,7 @@ export function createPause(ui) {
     const { M, list } = checkpoints(), c = list[i]; if (!M || !c || c.lock) return;
     close();
     await ui.fade(1, 0.35);
+    await leaveScene();
     try { await M.restart(c.id); } catch (e) { console.warn('[pause] restart', e); }
     setTimeout(() => ui.fade(0, 0.6), 250);
   }

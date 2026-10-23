@@ -100,19 +100,20 @@ Mission 2 (wagmi/mission/m2*.js).
 | 13 | `m2-quant-they-know-where-i` | Quant | They know where I live. |  |  |
 | 14 | `m2-lev-whos-that-liquidate-him` | Lev | Who's that? Liquidate him! |  |  |
 | 15 | `m2-lev-wait-coin-kid-in` | Lev | Wait. Coin kid? In MY yard? Liquidate him! |  |  |
-| 16 | `m2-lev-you-cant-catch-leverage` | Lev | You can't catch leverage, kid! |  |  |
-| 17 | `m2-juno-ive-got-the-van` | Juno | I've got the van. HODL Moving Co. 'We never let go.' Cute. |  |  |
-| 18 | `m2-quant-they-took-my-dog` | Quant | They took my dog, Juno. None of this is cute. |  |  |
-| 19 | `m2-juno-its-registered-to-a` | Juno | It's registered to a Leverage Larry. Lev. He runs Midtown for the Degens. |  |  |
-| 20 | `m2-quant-leverage-larry-did-his` | Quant | Leverage Larry. Did his parents hate him? |  |  |
-| 21 | `m2-juno-he-picked-it-he` | Juno | He picked it. He has it tattooed. In Comic Sans. |  |  |
-| 22 | `m2-juno-hang-back-if-they` | Juno | Hang back. If they make you, they'll bolt. |  |  |
-| 23 | `m2-juno-thats-levs-car-hes` | Juno | That's Lev's car. He's heading for Herald Square. |  |  |
-| 24 | `m2-juno-ram-him-quant-gently` | Juno | Ram him, Quant. Gently. Ish. |  |  |
-| 25 | `m2-quant-theres-no-gentle-way` | Quant | There's no gentle way to ram a car. |  |  |
-| 26 | `m2-juno-i-saw-the-chat` | Juno | I saw the chat. They know where you live, so you're not sleeping there tonight. |  |  |
-| 27 | `m2-quant-where-am-i-sleeping` | Quant | Where am I sleeping? |  |  |
-| 28 | `m2-juno-gears-has-a-room` | Juno | Gears has a room over his garage. West Chelsea. He builds rockets for cars. He's nice. Mostly. |  |  |
+| 16 | `m2-lev-everybody-out-of-the` | Lev | Everybody out of the boxes! You're all on payroll! |  |  |
+| 17 | `m2-lev-you-cant-catch-leverage` | Lev | You can't catch leverage, kid! |  |  |
+| 18 | `m2-juno-ive-got-the-van` | Juno | I've got the van. HODL Moving Co. 'We never let go.' Cute. |  |  |
+| 19 | `m2-quant-they-took-my-dog` | Quant | They took my dog, Juno. None of this is cute. |  |  |
+| 20 | `m2-juno-its-registered-to-a` | Juno | It's registered to a Leverage Larry. Lev. He runs Midtown for the Degens. |  |  |
+| 21 | `m2-quant-leverage-larry-did-his` | Quant | Leverage Larry. Did his parents hate him? |  |  |
+| 22 | `m2-juno-he-picked-it-he` | Juno | He picked it. He has it tattooed. In Comic Sans. |  |  |
+| 23 | `m2-juno-hang-back-if-they` | Juno | Hang back. If they make you, they'll bolt. |  |  |
+| 24 | `m2-juno-thats-levs-car-hes` | Juno | That's Lev's car. He's heading for Herald Square. |  |  |
+| 25 | `m2-juno-ram-him-quant-gently` | Juno | Ram him, Quant. Gently. Ish. |  |  |
+| 26 | `m2-quant-theres-no-gentle-way` | Quant | There's no gentle way to ram a car. |  |  |
+| 27 | `m2-juno-i-saw-the-chat` | Juno | I saw the chat. They know where you live, so you're not sleeping there tonight. |  |  |
+| 28 | `m2-quant-where-am-i-sleeping` | Quant | Where am I sleeping? |  |  |
+| 29 | `m2-juno-gears-has-a-room` | Juno | Gears has a room over his garage. West Chelsea. He builds rockets for cars. He's nice. Mostly. |  |  |
 
 ## Mission 3
 

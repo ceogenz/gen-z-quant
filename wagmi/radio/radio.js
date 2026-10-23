@@ -23,7 +23,7 @@ export function createRadio(W, out) {
     s.epoch = performance.now() / 1000 - Math.random() * s.len;
   }
   const R = {
-    stations, on: true, idx: 0, first: true,
+    stations, on: true, idx: 0, first: true, paused: false,
     get station() { return stations[R.idx] || null; },
     // where a station is now: its segment and the time into it
     where(s, now = performance.now() / 1000) {
@@ -71,7 +71,12 @@ export function createRadio(W, out) {
     blob(seg.t.file).then((url) => {
       if (d.tok !== tok || !d.live) return;
       // (late by however long the fetch took: the station's clock ran on)
-      const go = () => { if (d.tok !== tok || !d.live) return; try { d.el.currentTime = seg.from + off + (performance.now() - asked) / 1000; } catch {} const p = d.el.play(); if (p && p.catch) p.catch(() => {}); ramp(d.gain.gain, trackGain(seg.t), secs); };
+      const go = () => {
+        if (d.tok !== tok || !d.live) return; try { d.el.currentTime = seg.from + off + (performance.now() - asked) / 1000; } catch {}
+        // (ready while the game is paused: it starts on Resume)
+        if (R.paused) d.el.wasOn = true; else { const p = d.el.play(); if (p && p.catch) p.catch(() => {}); }
+        ramp(d.gain.gain, trackGain(seg.t), secs);
+      };
       if (d.el.src !== url) { d.el.src = url; d.el.addEventListener('loadedmetadata', go, { once: true }); } else go();
     }).catch(() => { if (d.tok === tok) d.live = false; });
   }
@@ -145,7 +150,21 @@ body.wg-cine .wr-card { display: none; }`;
   // (nothing before the player's first key or click: no sound can play before it anyway, and the city's default mode
   // (the car) flickers past on load before the game puts him on foot)
   const active = () => (navigator.userActivation ? navigator.userActivation.hasBeenActive : true);
+  // the pause menu (W.paused): the decks and a passing car's stereo stop where they are, the stations' clocks with them
+  // (the mixer's context is held too, wagmi/audio), and all of it plays on from there on Resume
+  let heldAt = 0;
+  function hold(on) {
+    // (what was playing and still wanted: a deck still live, the stereo while its car is still about)
+    const els = [...(g ? g.decks.map((d) => [d.el, () => d.live]) : []), ...(boom.d ? [[boom.d, () => !!boom.v]] : [])];
+    if (on) { heldAt = performance.now(); for (const [el, want] of els) { el.wasOn = !el.paused && want(); el.pause(); } return; }
+    const gone = performance.now() - heldAt;
+    for (const s of stations) s.epoch += gone / 1000;
+    boom.until += gone; boom.next += gone;
+    for (const [el, want] of els) { if (el.wasOn && want()) el.play().catch(() => {}); el.wasOn = false; }
+  }
   function frame() {
+    if (!!W.paused !== R.paused) { R.paused = !!W.paused; hold(R.paused); }
+    if (R.paused) return;
     const inCar = cm.activeMode === 'car';
     if (!active()) { wasCar = inCar; return; }
     if (inCar && !cut()) been = true;
@@ -227,7 +246,7 @@ body.wg-cine .wr-card { display: none; }`;
     boom.v = v; boom.until = now + 22000; boom.tg = trackGain(seg.t);
     blob(seg.t.file).then((url) => {
       const el = boom.d; if (boom.v !== v) return;
-      const go = () => { try { el.currentTime = seg.from + Math.random() * Math.max(1, seg.to - seg.from - 30); } catch {} el.play().catch(() => {}); };
+      const go = () => { try { el.currentTime = seg.from + Math.random() * Math.max(1, seg.to - seg.from - 30); } catch {} if (R.paused) el.wasOn = true; else el.play().catch(() => {}); };
       if (el.src !== url) { el.src = url; el.addEventListener('loadedmetadata', go, { once: true }); } else go();
     }).catch(() => { boom.v = null; });
   }
@@ -246,7 +265,7 @@ body.wg-cine .wr-card { display: none; }`;
   R.next = () => { R.idx = (R.idx + 1) % stations.length; if (heard()) tune(0.2); show(); };
   R.toggle = () => { R.on = !R.on; if (!R.on) stopAll(0.3); else if (heard()) tune(0.3); show(); };
   R.tune = (id) => { const i = stations.findIndex((s) => s.id === id); if (i >= 0) { R.idx = i; R.on = true; if (heard()) tune(0.2); show(); } };
-  R.state = () => ({ via: out.via(), on: R.on, station: R.station?.id, playing, heard: heard(), deck: cur ? { file: cur.st.segs[cur.seg].t.file, t: +cur.el.currentTime.toFixed(2), paused: cur.el.paused, ready: cur.el.readyState } : null, level: g ? +g.level.gain.value.toFixed(3) : 0, duck: g ? +g.duck.gain.value.toFixed(3) : 1 });
+  R.state = () => ({ via: out.via(), on: R.on, paused: R.paused, station: R.station?.id, playing, heard: heard(), deck: cur ? { file: cur.st.segs[cur.seg].t.file, t: +cur.el.currentTime.toFixed(2), paused: cur.el.paused, ready: cur.el.readyState } : null, level: g ? +g.level.gain.value.toFixed(3) : 0, duck: g ? +g.duck.gain.value.toFixed(3) : 1 });
   R.dispose = () => { clearInterval(timer); stopAll(0.1); card.remove(); css.remove(); };
   return R;
 }

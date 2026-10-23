@@ -1,7 +1,7 @@
-// WAGMI City: Moon, Quant's dog. A small white long-coated dog (a Maltese / Havanese type: long wavy white coat, dark
-// round eyes, a pink-brown nose, floppy furry ears, a plumed tail over the back), built in code from soft volumes and
-// about 1,600 locks of hair: tapered ribbons combed over the body, each split into strands by its material, the roots
-// shaded, the tips swaying as Moon moves. A little rig of pivots does the rest: idle (breathing, a wag, a tilt of the
+// WAGMI City: Moon, Quant's dog. A small white fluffy dog (a Maltese / Havanese type: a full, soft white coat, dark
+// eyes, a black nose, floppy furry ears, a plumed tail over the back), built in code from soft volumes and about 4,000
+// clumps of fur: tapered cards combed over the body, each a clump of fibres with a ragged tip drawn by its material,
+// the roots shaded, the tips swaying as Moon moves. A little rig of pivots does the rest: idle (breathing, a wag, a tilt of the
 // head), trot (the legs in diagonal pairs, matched to the ground speed), struggle (grabbed: paddling, twisting) and
 // carried (legs dangling), tug (pulling at the lead: leaning into it, front feet reaching, back ones braced), plus a bark
 // and a look toward a point.
@@ -12,7 +12,7 @@
 //   moon.collar: where a leash clips on (an Object3D on the neck)
 // buildLeash(THREE): a blue leash, a rope of 14 points (verlet), from Quant's hand to Moon's collar, or loose.
 // Units are metres; Moon faces +z and stands on y = 0.
-import { attribute, positionLocal, uniform, vec3, float, sin, time, mix, smoothstep, uv, fract, abs, step } from 'three/tsl';
+import { attribute, positionLocal, uniform, vec3, float, sin, time, mix, smoothstep, uv, fract, abs, normalViewGeometry } from 'three/tsl';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 // a small seeded random, so Moon's coat is the same every time
@@ -60,23 +60,25 @@ export function buildMoon(THREE, o = {}) {
   blob(head, V(0, -0.022, 0.05), V(0.029, 0.025, 0.031));
   blob(jaw, V(0, -0.004, 0.026), V(0.02, 0.009, 0.028));
   for (const e of [earL, earR]) blob(e, V(Math.sign(e.position.x) * 0.008, -0.034, 0), V(0.012, 0.044, 0.026));
-  // the face: a pink-brown nose, dark glossy eyes (each with a catch light), a mouth and a tongue for panting
-  const noseMat = new THREE.MeshStandardMaterial({ color: '#3A2827', roughness: 0.3 });
-  const rimMat = new THREE.MeshStandardMaterial({ color: '#2A1C1A', roughness: 0.6 });
-  const eyeMat = new THREE.MeshStandardMaterial({ color: '#0B0706', roughness: 0.08, metalness: 0.0 });
-  const glintMat = new THREE.MeshBasicMaterial({ color: '#FFFFFF' });
+  // the face: a black nose (two nostrils), dark brown eyes set into the fur (wet: the sky's own catch light and one
+  // small glint), a mouth and a tongue for panting
+  const noseMat = new THREE.MeshStandardMaterial({ color: '#141111', roughness: 0.42 });
+  const nostrilMat = new THREE.MeshStandardMaterial({ color: '#050404', roughness: 0.9 });
+  const rimMat = new THREE.MeshStandardMaterial({ color: '#1C1412', roughness: 0.7 });
+  const eyeMat = new THREE.MeshStandardMaterial({ color: '#170D09', roughness: 0.12, metalness: 0.0 });
+  const glintMat = new THREE.MeshStandardMaterial({ color: '#000000', emissive: '#C9CED4', roughness: 1 });
   const mouthMat = new THREE.MeshStandardMaterial({ color: '#3A1F22', roughness: 0.6 });
   const tongueMat = new THREE.MeshStandardMaterial({ color: '#D9727A', roughness: 0.45 });
-  // (big, round, wet eyes in a dark rim of skin, two catch lights each: they read from across the street)
-  blob(head, V(0, -0.011, 0.0815), V(0.0128, 0.0094, 0.0098), noseMat);
+  // (almond eyes the size a small dog's are, set into the face under the brow rather than bulging out of it)
+  blob(head, V(0, -0.0105, 0.0802), V(0.0102, 0.0074, 0.0082), noseMat);
+  for (const s of [1, -1]) blob(head, V(s * 0.0037, -0.0116, 0.0876), V(0.0023, 0.0015, 0.0011), nostrilMat, [0, 0, s * 0.5]);
   const eyes = [1, -1].map((s) => {
-    blob(head, V(s * 0.0248, 0.009, 0.0472), V(0.0136, 0.0128, 0.0062), rimMat, [0, s * 0.35, 0]);
-    const e = blob(head, V(s * 0.0248, 0.009, 0.0484), V(0.0112, 0.0108, 0.0074), eyeMat, [0, s * 0.35, 0]);
-    const g = blob(head, V(s * 0.0236 + 0.0034, 0.0128, 0.0552), V(0.0028, 0.0028, 0.0012), glintMat);
-    const g2 = blob(head, V(s * 0.0262 - 0.0026, 0.0055, 0.0556), V(0.0012, 0.0012, 0.0008), glintMat);
-    g.castShadow = g2.castShadow = false; return e;
+    blob(head, V(s * 0.0236, 0.0085, 0.0466), V(0.0098, 0.0082, 0.0046), rimMat, [0, s * 0.38, s * -0.18]);
+    const e = blob(head, V(s * 0.0236, 0.0085, 0.0472), V(0.0082, 0.0074, 0.005), eyeMat, [0, s * 0.38, s * -0.18]);
+    const g = blob(head, V(s * 0.0226 + 0.0022, 0.0106, 0.0516), V(0.0013, 0.0013, 0.0006), glintMat);
+    g.castShadow = false; return e;
   });
-  blob(jaw, V(0, 0.002, 0.03), V(0.018, 0.006, 0.026), mouthMat);
+  const mouthLine = blob(jaw, V(0, 0.002, 0.03), V(0.018, 0.006, 0.026), mouthMat);
   const tongue = blob(jaw, V(0, 0.004, 0.044), V(0.011, 0.003, 0.02), tongueMat);
   tongue.visible = false;
   // legs and paws (mostly under the coat; the paws peek out)
@@ -96,22 +98,32 @@ export function buildMoon(THREE, o = {}) {
   collar.position.set(0, 0.03, -0.035);
 
   /* --------------------------------------------------------------- the coat -- */
-  // One material per body part (each sways on its own), the same graph: strands cut out of each ribbon across its width
-  // (two per lock, soft clumps rather than noodles, thinning to the tips), roots in their own shade, a little drift in the air.
+  // One material per body part (each sways on its own), the same graph: each lock a soft clump of fibres, full at the
+  // root and narrowing to a ragged tip (every fibre stops at its own length), the clump's middle catching more light
+  // than its edges, the roots in their own shade, a little drift in the air. Alpha to coverage: the fibres' edges come
+  // out soft under the scene's MSAA instead of cut out.
   function coatMaterial() {
     const sway = uniform(V());
-    const m = new THREE.MeshStandardNodeMaterial({ side: THREE.DoubleSide, roughness: 0.78 });
+    const m = new THREE.MeshStandardNodeMaterial({ side: THREE.DoubleSide, roughness: 0.86, alphaToCoverage: true });
     const t = attribute('hairT', 'float'), seed = attribute('seed', 'float');
     const drift = sin(time.mul(1.7).add(seed.mul(23.0))).mul(0.0025).mul(t);
     m.positionNode = positionLocal.add(sway.mul(t.mul(t))).add(vec3(drift, 0, drift.mul(0.6)));
-    const root = mix(vec3(0.74, 0.7, 0.65), vec3(0.97, 0.94, 0.89), smoothstep(0.0, 0.5, t));
-    const tint = mix(vec3(1.0, 0.985, 0.95), vec3(0.97, 0.975, 0.99), seed);
-    const strand = uv().x.mul(2.0).add(seed.mul(0.37));
-    const shade = mix(float(0.84), float(1.04), fract(sin(strand.floor().add(seed.mul(17.0)).mul(12.9898)).mul(43758.5453)));
-    m.colorNode = root.mul(tint).mul(shade).mul(mix(float(1.0), float(1.06), smoothstep(0.6, 1.0, t)));
-    const across = abs(fract(strand).sub(0.5)).mul(2.0);
-    // (full locks at the root, thinning only toward the tips: soft, not stringy)
-    m.opacityNode = step(across, float(0.995).sub(t.mul(t).mul(0.5)));
+    const across = abs(uv().x.mul(2.0).sub(1.0));
+    const strand = uv().x.mul(6.0).add(seed.mul(5.3));
+    const fibre = fract(sin(strand.floor().mul(12.9898).add(seed.mul(78.233))).mul(43758.5453));
+    const root = mix(vec3(0.62, 0.58, 0.53), vec3(0.93, 0.9, 0.85), smoothstep(0.0, 0.6, t));
+    const tint = mix(vec3(1.0, 0.98, 0.94), vec3(0.96, 0.965, 0.98), seed);
+    const shade = mix(float(0.84), float(1.0), float(1.0).sub(across.mul(across))).mul(mix(float(0.8), float(1.04), fibre));
+    m.colorNode = root.mul(tint).mul(shade);
+    // (the clump narrows toward its tip; the middle fibres run on to it, the outer ones stop short, and from halfway out
+    // the clump parts into its fibres)
+    const profile = float(1.0).sub(t.mul(t).mul(0.75));
+    const reach = float(1.02).sub(across.mul(0.3)).sub(fibre.mul(0.3));
+    const parted = smoothstep(0.0, 0.3, fract(strand)).mul(smoothstep(1.0, 0.7, fract(strand)));
+    const split = mix(float(1.0), parted, smoothstep(0.12, 0.6, t));
+    m.opacityNode = smoothstep(profile, profile.sub(0.4), across).mul(smoothstep(reach, reach.sub(0.1), t)).mul(split);
+    // (a lock's normal is the skin's under it on both faces: a lock seen from behind is lit like its neighbours)
+    m.normalNode = normalViewGeometry;
     m.alphaTest = 0.5;
     m.userData.sway = sway;
     return m;
@@ -135,6 +147,8 @@ export function buildMoon(THREE, o = {}) {
       const L = len(s, nr) * (0.8 + R() * 0.4);
       const d = dir(s, nr).normalize();
       const side = V().crossVectors(d, nr); if (side.lengthSq() < 1e-6) side.set(1, 0, 0); side.normalize();
+      // (each clump twisted about its own run, so as many are seen edge-on as flat: fur, not scales)
+      side.applyAxisAngle(d, (R() - 0.5) * 2.2);
       const w = width * (0.75 + R() * 0.5), ph = R() * Math.PI * 2, seed = R();
       const base = pos.length / 3;
       for (let j = 0; j <= K; j++) {
@@ -170,53 +184,54 @@ export function buildMoon(THREE, o = {}) {
     return mesh;
   }
   const comb = (...terms) => terms.reduce((acc, [v, w]) => acc.addScaledVector(v, w), V());
-  // the body: parted along the spine, standing out and falling in waves to both sides, a skirt that stops short of
-  // the ground (the legs show when Moon trots); an undercoat of shorter, bouncier locks under it for the volume
+  // the body: a full, fluffy coat (a Havanese in a puppy cut, not a show Maltese): clumps standing out from the skin and
+  // curving down and back, longest on the flanks, a skirt that stops well short of the ground (the legs show when Moon
+  // trots); an undercoat of short, bouncy clumps standing straight out under it for the volume
   addCoat(body, [
-    { c: V(0, 0.004, 0), r: V(0.074, 0.078, 0.155), n: 1050, width: 0.019, droop: 0.6, wave: 0.1,
-      len: (s) => 0.042 + 0.024 * Math.max(0, 0.6 - s.y),
-      dir: (s, n) => (s.y < -0.6 ? comb([down, 1], [flat(n), 0.25]) : comb([flat(n), 0.75], [down, 0.55], [back, 0.25])) },
-    { c: V(0, 0.01, 0.08), r: V(0.077, 0.082, 0.078), n: 300, width: 0.019, droop: 0.55, wave: 0.1, keep: (s) => s.z > -0.2,
-      len: (s) => 0.045 + 0.02 * Math.max(0, 0.5 - s.y), dir: (s, n) => comb([flat(n), 0.7], [down, 0.6], [fwd, 0.15]) },
-    { c: V(0, 0.002, 0), r: V(0.072, 0.076, 0.15), n: 500, width: 0.017, droop: 0.25, wave: 0.24, lift: 0.002,
-      len: () => 0.03, dir: (s, n) => comb([n, 1], [down, 0.3], [back, 0.2]) },
+    { c: V(0, 0.004, 0), r: V(0.074, 0.078, 0.155), n: 1250, width: 0.026, droop: 0.32, wave: 0.16, lift: 0.007,
+      len: (s) => 0.032 + 0.014 * Math.max(0, 0.5 - s.y),
+      dir: (s, n) => (s.y < -0.6 ? comb([down, 1], [flat(n), 0.45]) : comb([n, 0.45], [flat(n), 0.55], [down, 0.4], [back, 0.3])) },
+    { c: V(0, 0.01, 0.08), r: V(0.077, 0.082, 0.078), n: 340, width: 0.026, droop: 0.3, wave: 0.16, lift: 0.007, keep: (s) => s.z > -0.2,
+      len: (s) => 0.034 + 0.012 * Math.max(0, 0.5 - s.y), dir: (s, n) => comb([n, 0.4], [flat(n), 0.6], [down, 0.45], [fwd, 0.15]) },
+    { c: V(0, 0.002, 0), r: V(0.072, 0.076, 0.15), n: 620, width: 0.024, droop: 0.15, wave: 0.2, lift: 0.002,
+      len: () => 0.026, dir: (s, n) => comb([n, 1], [down, 0.25], [back, 0.2]) },
   ]);
   // the neck ruff
-  addCoat(neck, [{ c: V(0, 0.03, 0.01), r: V(0.048, 0.064, 0.048), n: 260, width: 0.017, droop: 0.55, wave: 0.18,
-    len: () => 0.05, dir: (s, n) => comb([flat(n), 0.7], [down, 0.6]) }]);
-  // the head: the crown parted down the middle and falling over the ears; short fur over the face, the eyes clear; a
-  // moustache and a beard on the muzzle, the nose clear
-  const eyeL = V(0.0245, 0.0085, 0.049), eyeR = V(-0.0245, 0.0085, 0.049), noseAt = V(0, -0.011, 0.08);
+  addCoat(neck, [{ c: V(0, 0.03, 0.01), r: V(0.048, 0.064, 0.048), n: 300, width: 0.024, droop: 0.32, wave: 0.16, lift: 0.006,
+    len: () => 0.036, dir: (s, n) => comb([n, 0.4], [flat(n), 0.6], [down, 0.5]) }]);
+  // the head: the crown parted down the middle and falling soft over the ears; short fur over the face, the eyes clear
+  // (a fringe over the brow, not over the eyes); a moustache and a beard on the muzzle, the nose clear
+  const eyeL = V(0.0236, 0.0085, 0.0472), eyeR = V(-0.0236, 0.0085, 0.0472), noseAt = V(0, -0.0105, 0.0805);
   const onHead = (s) => V(s.x * 0.058, s.y * 0.055 + 0.012, s.z * 0.059 - 0.003);
   const clearOfEyes = (p, r) => p.distanceTo(eyeL) > r && p.distanceTo(eyeR) > r;
   addCoat(head, [
-    { c: V(0, 0.012, -0.003), r: V(0.058, 0.055, 0.059), n: 300, width: 0.012, droop: 0.55, wave: 0.2,
-      keep: (s) => s.z < 0.3 && clearOfEyes(onHead(s), 0.022),
-      len: (s) => 0.045 + 0.025 * Math.max(0, -s.z), dir: (s, n) => comb([flat(n), 0.55], [down, 0.75], [back, 0.2]) },
+    { c: V(0, 0.012, -0.003), r: V(0.058, 0.055, 0.059), n: 360, width: 0.019, droop: 0.38, wave: 0.16, lift: 0.005,
+      keep: (s) => s.z < 0.3 && clearOfEyes(onHead(s), 0.02),
+      len: (s) => 0.032 + 0.016 * Math.max(0, -s.z), dir: (s, n) => comb([n, 0.35], [flat(n), 0.55], [down, 0.6], [back, 0.2]) },
     // (a tuft over the crown, so the parting never shows bare)
-    { c: V(0, 0.012, -0.003), r: V(0.058, 0.055, 0.059), n: 90, width: 0.018, droop: 0.55, wave: 0.1, keep: (s) => s.y > 0.72,
-      len: () => 0.022, dir: (s, n) => comb([n, 0.35], [back, 0.8], [flat(n), 0.3]) },
+    { c: V(0, 0.012, -0.003), r: V(0.058, 0.055, 0.059), n: 110, width: 0.022, droop: 0.4, wave: 0.1, keep: (s) => s.y > 0.68,
+      len: () => 0.024, dir: (s, n) => comb([n, 0.5], [back, 0.7], [flat(n), 0.3]) },
     // (the face in short, dense, soft fur, swept back from the eyes and the nose: the close-ups show a face, not a mop)
-    { c: V(0, 0.012, -0.003), r: V(0.059, 0.056, 0.06), n: 760, width: 0.012, droop: 0.18, wave: 0.06, lift: 0.003,
-      keep: (s) => s.z >= 0.2 && clearOfEyes(onHead(s), 0.0165),
-      len: (s) => (s.y > 0.4 ? 0.022 : 0.015), dir: (s, n) => comb([n, 0.5], [down, 0.45], [back, 0.35]) },
-    { c: V(0, -0.023, 0.05), r: V(0.031, 0.027, 0.033), n: 300, width: 0.011, droop: 0.3, wave: 0.07, lift: 0.002,
-      keep: (s) => { const p = V(s.x * 0.031, s.y * 0.027 - 0.023, s.z * 0.033 + 0.05); return p.distanceTo(noseAt) > 0.016 && clearOfEyes(p, 0.018); },
-      len: (s) => (s.y < -0.2 ? 0.03 : 0.018), dir: (s, n) => comb([down, 0.7], [flat(n), 0.5], [fwd, 0.1]) },
+    { c: V(0, 0.012, -0.003), r: V(0.059, 0.056, 0.06), n: 820, width: 0.014, droop: 0.15, wave: 0.06, lift: 0.003,
+      keep: (s) => s.z >= 0.2 && clearOfEyes(onHead(s), 0.0108),
+      len: (s) => (s.y > 0.4 ? 0.02 : 0.014), dir: (s, n) => comb([n, 0.55], [down, 0.4], [back, 0.35]) },
+    { c: V(0, -0.023, 0.05), r: V(0.031, 0.027, 0.033), n: 320, width: 0.014, droop: 0.25, wave: 0.07, lift: 0.002,
+      keep: (s) => { const p = V(s.x * 0.031, s.y * 0.027 - 0.023, s.z * 0.033 + 0.05); return p.distanceTo(noseAt) > 0.0128 && clearOfEyes(p, 0.0125); },
+      len: (s) => (s.y < -0.2 ? 0.026 : 0.016), dir: (s, n) => comb([down, 0.6], [flat(n), 0.55], [fwd, 0.1]) },
   ]);
-  // the ears: long locks hanging from the flaps, framing the face
+  // the ears: soft locks hanging from the flaps, framing the face
   for (const e of [earL, earR]) {
     const sx = Math.sign(e.position.x);
-    addCoat(e, [{ c: V(sx * 0.008, -0.03, 0), r: V(0.016, 0.046, 0.03), n: 130, width: 0.012, droop: 0.4, wave: 0.26,
-      keep: (s) => s.x * sx > -0.3, len: (s) => 0.065 + 0.035 * Math.max(0, -s.y), dir: () => comb([down, 1], [V(sx, 0, 0), 0.22]) }]);
+    addCoat(e, [{ c: V(sx * 0.008, -0.03, 0), r: V(0.016, 0.046, 0.03), n: 150, width: 0.018, droop: 0.3, wave: 0.2, lift: 0.004,
+      keep: (s) => s.x * sx > -0.3, len: (s) => 0.046 + 0.02 * Math.max(0, -s.y), dir: () => comb([down, 1], [V(sx, 0, 0), 0.3]) }]);
   }
   // the tail: a plume curled over the back, its locks falling to either side
-  addCoat(tail, [{ c: V(0, 0.045, 0.004), r: V(0.022, 0.04, 0.034), n: 170, width: 0.013, droop: 0.8, wave: 0.2,
-    len: () => 0.07, dir: (s, n) => comb([flat(n), 0.7], [down, 0.4], [back, 0.15]) }]);
-  // the legs: feathering, the paws left to peek out
+  addCoat(tail, [{ c: V(0, 0.045, 0.004), r: V(0.022, 0.04, 0.034), n: 190, width: 0.02, droop: 0.55, wave: 0.18, lift: 0.004,
+    len: () => 0.055, dir: (s, n) => comb([n, 0.3], [flat(n), 0.7], [down, 0.35], [back, 0.15]) }]);
+  // the legs: fluffy feathering, the paws left to peek out
   for (const L of legs) {
-    addCoat(L.up, [{ c: V(0, -0.04, 0), r: V(0.022, 0.05, 0.023), n: 60, width: 0.011, droop: 0.4, len: () => 0.04, dir: (s, n) => comb([down, 1], [flat(n), 0.55]) }]);
-    addCoat(L.lo, [{ c: V(0, -0.04, 0), r: V(0.018, 0.045, 0.019), n: 50, width: 0.01, droop: 0.3, len: () => 0.03, dir: (s, n) => comb([down, 1], [flat(n), 0.6]) }]);
+    addCoat(L.up, [{ c: V(0, -0.04, 0), r: V(0.022, 0.05, 0.023), n: 70, width: 0.017, droop: 0.3, lift: 0.004, len: () => 0.032, dir: (s, n) => comb([down, 0.8], [flat(n), 0.7]) }]);
+    addCoat(L.lo, [{ c: V(0, -0.04, 0), r: V(0.018, 0.045, 0.019), n: 56, width: 0.015, droop: 0.25, lift: 0.003, len: () => 0.024, dir: (s, n) => comb([down, 0.8], [flat(n), 0.7]) }]);
   }
   group.traverse((m) => { if (m.isMesh) m.frustumCulled = false; });
 
@@ -250,6 +265,8 @@ export function buildMoon(THREE, o = {}) {
     mouth = ease(mouth, s.mouth || 0, 8, dt);
     jaw.rotation.x = 0.55 * barkLevel + 0.18 * pant * (0.6 + 0.4 * Math.sin(t * 14)) + mouth * (0.32 + 0.06 * Math.sin(t * 11));
     tongue.visible = pant > 0.4 || barkLevel > 0.1 || mouth > 0.2;
+    // (shut, the mouth is under the beard: no line drawn on the muzzle)
+    mouthLine.visible = jaw.rotation.x > 0.06;
     // looking at a point (world): the head turns to it, within a dog's neck
     let yaw = 0, pitch = 0;
     if (s.look) {

@@ -27,8 +27,11 @@ function outputs(W) {
     bus.music.gain.value = 0.55; bus.voice.gain.value = 1.0;
     for (const b of Object.values(bus)) b.connect(lim);
     own = { ctx, bus };
-    const resume = () => { if (ctx.state !== 'running') ctx.resume().catch(() => {}); };
+    const resume = () => { if (ctx.state !== 'running' && !W.paused) ctx.resume().catch(() => {}); };
     for (const ev of ['keydown', 'pointerdown']) addEventListener(ev, resume, { passive: true });
+    // (the pause menu holds our context where it is, as the mixer's is held: a line half said goes on from there)
+    let held = false;
+    setInterval(() => { if (!!W.paused === held) return; held = !!W.paused; if (held) ctx.suspend().catch(() => {}); else ctx.resume().catch(() => {}); }, 50);
     return own;
   }
   // (our context only once there has been a gesture: made before one, the browser holds it and complains)
@@ -42,7 +45,7 @@ function outputs(W) {
     const m = mine(); return m ? (side = m) : null;
   };
   return {
-    ctx() { const s = pick(); if (s && s === own && s.ctx.state !== 'running') s.ctx.resume().catch(() => {}); return s?.ctx || null; },
+    ctx() { const s = pick(); if (s && s === own && s.ctx.state !== 'running' && !W.paused) s.ctx.resume().catch(() => {}); return s?.ctx || null; },
     bus(name) { const s = pick(); return s ? s.bus[name] || s.bus.sfx || s.bus.music : null; },
     // ('mixer': WAGMI.audio's buses (its duck() dips the music under speech); 'own': ours)
     via: () => (!side ? null : side === own ? 'own' : 'mixer'),
