@@ -862,6 +862,101 @@ class ThirdPersonControllerManager {
     return out;
   }
 
+  // (Gen Z Quant) The low things in his way on foot: the parks' iron fences, railings and lawn hoops (city-grid.js
+  // solidFence: a wall to the car already; the gates are the gaps in the runs), the benches and the plazas' granite and
+  // planters (window.NYC.breakables; a bench the car has knocked flying is gone till it is put back). Solid to the player
+  // below their tops, nothing to him above them; hurdled (wagmi/vault.js). Each a turned box { cx, cz, cs, sn, hx, hz,
+  // top } as the colliders' obb (lx = dx * cs - dz * sn across, lz = dx * sn + dz * cs along), bucketed once in 16 m
+  // cells. The people on the sidewalks don't know them (they walk their own ways, as before); the fight's men do (solid
+  // to them too, and hopped: wagmi/combat/enemy.js moveXZ)
+  lowObstacles(x, z, r) {
+    const CELL = 16;
+    const key = (ix, iz) => (ix + 8192) * 16384 + (iz + 8192);
+    if (!this._lowCells) {
+      const N = window.NYC, all = [];
+      for (const c of this.colliders) if (c.fence && c.obb) all.push({ ...c.obb, top: c.maxY, fence: true });
+      const HEIGHT = { bench: 0.92, granite: 0.46, planter: 0.85 };
+      for (const b of N.breakables || []) {
+        if (!(b.kind in HEIGHT) || !b.w) continue;
+        const yaw = b.yaw || 0;
+        all.push({ cx: b.x, cz: b.z, cs: Math.cos(yaw), sn: Math.sin(yaw), hx: b.w * 0.5, hz: b.d * 0.5, top: (b.y || 0.24) + HEIGHT[b.kind], b, kind: b.kind });
+      }
+      this._lowCells = new Map();
+      for (const o of all) {
+        const ex = Math.abs(o.cs) * o.hx + Math.abs(o.sn) * o.hz, ez = Math.abs(o.sn) * o.hx + Math.abs(o.cs) * o.hz;
+        for (let ix = Math.floor((o.cx - ex) / CELL); ix <= Math.floor((o.cx + ex) / CELL); ix++) {
+          for (let iz = Math.floor((o.cz - ez) / CELL); iz <= Math.floor((o.cz + ez) / CELL); iz++) {
+            const k = key(ix, iz);
+            let list = this._lowCells.get(k);
+            if (!list) this._lowCells.set(k, (list = []));
+            list.push(o);
+          }
+        }
+      }
+      this._lowList = [];
+      this._lowSeen = new Set();
+    }
+    const out = this._lowList, seen = this._lowSeen;
+    out.length = 0;
+    seen.clear();
+    for (let ix = Math.floor((x - r) / CELL); ix <= Math.floor((x + r) / CELL); ix++) {
+      for (let iz = Math.floor((z - r) / CELL); iz <= Math.floor((z + r) / CELL); iz++) {
+        const list = this._lowCells.get(key(ix, iz));
+        if (!list) continue;
+        for (const o of list) if (!seen.has(o) && !(o.b && o.b.taken)) { seen.add(o); out.push(o); }
+      }
+    }
+    return out;
+  }
+
+  // (Gen Z Quant) Kept out of the low things whose tops are above his feet (pos.y), a body r m round: out the nearest side
+  // of the box grown by r. this.vaultPass: the ones he is going over now (an array, wagmi/vault.js), let through. True
+  // when moved
+  resolveLowCollision(pos, r) {
+    let hit = false;
+    for (const o of this.lowObstacles(pos.x, pos.z, r + 1)) {
+      if (pos.y >= o.top - 0.04 || (this.vaultPass && this.vaultPass.includes(o))) continue;
+      const dx = pos.x - o.cx, dz = pos.z - o.cz;
+      const lx = dx * o.cs - dz * o.sn, lz = dx * o.sn + dz * o.cs;
+      const ex = o.hx + r, ez = o.hz + r;
+      if (Math.abs(lx) >= ex || Math.abs(lz) >= ez) continue;
+      let qx = lx, qz = lz;
+      if (ex - Math.abs(lx) < ez - Math.abs(lz)) qx = Math.sign(lx || 1) * ex; else qz = Math.sign(lz || 1) * ez;
+      pos.x = o.cx + qx * o.cs + qz * o.sn;
+      pos.z = o.cz - qx * o.sn + qz * o.cs;
+      hit = true;
+    }
+    return hit;
+  }
+
+  // (Gen Z Quant) The nearest low thing a body r m round, at (x, z) and going along (ux, uz) (a unit vector), meets
+  // within `reach` m: { o, enter (m he goes before touching it), exit (m before he is clear of it), mid (m to where his
+  // way crosses its middle), depth (m of it along his way) }, or null. y: his feet (the things below them don't count);
+  // skip: ones not to count (an array)
+  lowAhead(x, z, y, ux, uz, r, reach, skip = null) {
+    let best = null;
+    const slab = (p, v, h) => {
+      if (Math.abs(v) < 1e-9) return Math.abs(p) < h ? [-Infinity, Infinity] : null;
+      const a = (-h - p) / v, b = (h - p) / v;
+      return a < b ? [a, b] : [b, a];
+    };
+    for (const o of this.lowObstacles(x + ux * reach * 0.5, z + uz * reach * 0.5, reach * 0.5 + r + 1)) {
+      if (y >= o.top - 0.04 || (skip && skip.includes(o))) continue;
+      const dx = x - o.cx, dz = z - o.cz;
+      const lx = dx * o.cs - dz * o.sn, lz = dx * o.sn + dz * o.cs;
+      const vx = ux * o.cs - uz * o.sn, vz = ux * o.sn + uz * o.cs;
+      // (the slabs of the box grown by r, and of the box itself)
+      const sx = slab(lx, vx, o.hx + r), sz = slab(lz, vz, o.hz + r);
+      if (!sx || !sz) continue;
+      const enter = Math.max(sx[0], sz[0]), exit = Math.min(sx[1], sz[1]);
+      if (exit <= enter || exit <= 0 || enter > reach) continue;
+      const ix = slab(lx, vx, o.hx), iz = slab(lz, vz, o.hz);
+      const depth = ix && iz ? Math.max(0, Math.min(ix[1], iz[1]) - Math.max(ix[0], iz[0])) : 0;
+      if (!best || enter < best.enter) best = { o, enter, exit, mid: (enter + exit) * 0.5, depth };
+    }
+    return best;
+  }
+
   resolveHorizontalCollision(pos, radius, yHeight = 1.0, carEntity = null) {
     // The detailed island (the helicopter may roam out over the harbour & the boroughs)
     const heli = this.activeMode === 'helicopter';
@@ -1010,6 +1105,9 @@ class ThirdPersonControllerManager {
     }
     pos.x -= sinH * CZ;
     pos.z -= cosH * CZ;
+    // (Gen Z Quant: the player on foot, by whatever moves him (his walk, the fight's footwork and moves, a dive out of
+    // the car), is kept out of the low things too: fences, benches, the plazas' granite)
+    if (!carEntity && pos === this.entities?.person?.position) this.resolveLowCollision(pos, radius);
   }
 
   // Pose the skinned characters once every entity has moved: the pedestrian's rig walks (or runs, turns, jumps) it to
@@ -1121,7 +1219,9 @@ class ThirdPersonControllerManager {
     }
 
     const groundY = this.getGroundHeight(p.position.x, p.position.z, 'person');
-    if (this.keys.up && p.position.y <= groundY + 0.02) {
+    // (Gen Z Quant: a hurdle taken on Space (wagmi/vault.js) sets jumpHeld: no jump on landing till Space is let go)
+    if (!this.keys.up) p.jumpHeld = false;
+    if (this.keys.up && !p.jumpHeld && p.position.y <= groundY + 0.02) {
       p.verticalVel = 5.2;
     }
     p.verticalVel -= 14.5 * dt;

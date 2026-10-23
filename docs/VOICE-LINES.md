@@ -4,7 +4,7 @@ Every spoken line in the game, for a voice service or actors. Generated from the
 `node wagmi/radio/build/voices.mjs` (do not edit by hand: change the words in the game, then rebuild).
 
 **The other voices in the build today are placeholders** made with the macOS speech voices (Apple's licence allows those for
-personal, non-commercial use only). They must be replaced before quantgenz.com goes public. Synthesised instead: Quant (`quant-A`), Juno (`juno-C`), Bagsy (`bagsy-A`), Lev (`lev-B`), Fiona (`fiona-A`), Wick (`wick-A`), Fomo (`fomo-A`), Gears (`gears-D`); see below.
+personal, non-commercial use only). They are meant to be replaced by recordings or synthesised voices. Synthesised instead: Quant (`quant-A`), Juno (`juno-C`), Bagsy (`bagsy-A`), Lev (`lev-B`), Fiona (`fiona-A`), Wick (`wick-A`), Fomo (`fomo-A`), Gears (`gears-D`); see below.
 
 ## How to deliver
 

@@ -36,10 +36,12 @@ installDriveMode(WAGMI);
   Object.assign(car, { body: { hx: 1.08, z0: -2.33, z1: 2.47, top: 1.28 }, axle: 1.56, mass: 2.0,
     chaseDistance: 6.7, chaseHeight: 2.0, chase: { fov: 58, pull: 0.002, kick: 1.1, boostKick: 3.0, vmax: 34, shake: 0.03, vtop: 56 } });
   Object.assign(car, { label: "Quant's car", topSpeed: 34, boostSpeed: 56, accel: 16, boostAccel: 32, roadster: rs });
-  // its steering, for a keyboard (js/controllers.js steerHandled): to full lock in 0.13 s at walking pace, 0.24 s from
-  // 34 m/s up, back to the middle in 0.09 s; full lock a 4.6 m circle at walking pace, at most 80 degrees a second, and
-  // never more than 30 m/s² sideways (flat out at 76 mph about 51 degrees a second; on the boost less still)
-  car.handling = { rMin: 4.6, yawMax: 1.4, grip: 30, rampIn: [0.13, 0.24], rampOut: 0.09, vRef: 34 };
+  // its steering, for a keyboard (js/controllers.js steerHandled): to full lock in 0.11 s at walking pace, 0.17 s from
+  // 34 m/s up, back to the middle in 0.08 s; full lock a 4.6 m circle at walking pace, at most 106 degrees a second, and
+  // never more than 48 m/s² sideways: a Manhattan corner taken at 45-55 mph on the key alone (a 11-13 m circle), flat
+  // out at 76 mph about 81 degrees a second (a 24 m circle, a lane over in well under a second), on the boost wide
+  // (a 65 m circle at 125 mph)
+  car.handling = { rMin: 4.6, yawMax: 1.85, grip: 48, rampIn: [0.11, 0.17], rampOut: 0.08, vRef: 34 };
   // (the speed panel's name for it, when the city started in the car before this ran)
   if (cm.activeMode === 'car') { const lab = document.getElementById('hud-active-mode'); if (lab) lab.textContent = car.label; }
   car.onUpdate = (dt, keys, throttle, steer) => {
@@ -197,8 +199,9 @@ installDriveMode(WAGMI);
   function place(x, z, h) {
     const driving = cm.activeMode === 'car';
     // (the camera snapped to its usual place behind it, not glided from where it was: wedged by a wall or a bus, that
-    // was low and tight against the car)
-    if (driving) { const cs = app.cameraSystem; Object.assign(cs, { orbitYawOffset: 0, orbitPitchOffset: 0.09, userOrbitTimer: 0, initialized: false }); }
+    // was low and tight against the car. Its clear-view state goes too, _view: swung round to the side of a car backed
+    // into a wall, it would carry the swing over and look across the car for a second while it eased back behind)
+    if (driving) { const cs = app.cameraSystem; Object.assign(cs, { orbitYawOffset: 0, orbitPitchOffset: 0.09, userOrbitTimer: 0, initialized: false, _view: null }); }
     car.position.set(x, cm.getGroundHeight(x, z, 'car'), z);
     Object.assign(car, { heading: h, speed: 0, vx: 0, vz: 0, angularVel: 0, steerAngle: 0, steerK: 0, halt: 0, fallVel: 0, pitchVel: 0, rollVel: 0, heaveVel: 0, heaveY: 0 });
     car.chassisPivot.rotation.x = car.chassisPivot.rotation.z = 0; car.chassisPivot.position.y = 0;

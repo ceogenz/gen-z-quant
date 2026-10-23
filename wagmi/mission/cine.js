@@ -159,35 +159,46 @@ export function createDirector(W) {
     },
     // hand the camera back: over secs it eases from the last shot into the city's own (the chase camera behind the
     // player, as fresh as after a teleport), then the city's update runs alone again. It hands back a clear view: on
-    // foot with straight behind him blocked (the van he just searched, a wall, the rally's screen), he turns to the
-    // nearest way round that is clear over the first part of the blend (cs.clearTurn), so the view comes down behind him
-    // at its usual height and length, him and the way on in it; in the car the view stays behind it, in front of
-    // whatever is there (js/cameras.js keepInView, with the street's things: cs.blockers)
+    // foot with straight behind him blocked (the van he just searched, a wall, the rally's screen), he is turned at once
+    // to the nearest way round that is clear (cs.clearTurn) and the view cuts there on the first frame, behind him at
+    // its usual height and length, him and the way on in it (a glide from the last shot would have come down through,
+    // or pressed against, what was behind him); in the car the view stays behind it, in front of whatever is there
+    // (js/cameras.js keepInView, with the street's things: cs.blockers). It glides (in at most 0.6 s) only when nothing
+    // stood behind him, the last shot has him in it from a few metres off, and the straight line from it to the view
+    // behind him is clear all the way; else it cuts
     release(secs = 1.2) {
       return new Promise((res) => {
         if (!D.active) return res();
         const from = { p: cam.position.clone(), q: cam.quaternion.clone(), fov: cam.fov }, prev = D.prev;
         cs.resetForTeleport(); app.selectCamera?.('chase', true);
         const ent = cm.getActiveEntity(), turn = cs.clearTurn ? cs.clearTurn(ent) : 0;
-        let turned = 0;
-        const turnTo = (k) => { if (!turn) return; const d = turn * k - turned; turned += d; ent.heading += d; if (ent.mesh && cm.activeMode === 'person') ent.mesh.rotation.y = ent.heading; };
-        W.handback = { turn, at: performance.now() }; // (for looking at it)
+        if (turn) { ent.heading += turn; if (ent.mesh && cm.activeMode === 'person') ent.mesh.rotation.y = ent.heading; }
+        // (the last shot sees him, from a few metres off: a glide from a close-up (his hands in the van, his face) would
+        // spend its first half inside him, him out of the frame)
+        const pv0 = _p.copy(ent.position); pv0.y += cm.activeMode === 'car' ? 1.15 : 1.45;
+        const seen = from.p.distanceTo(pv0) > 2.5 && (cam.updateMatrixWorld(), pv0.project(cam), pv0.z < 1 && Math.abs(pv0.x) < 0.9 && Math.abs(pv0.y) < 0.9);
+        W.handback = { turn, seen, at: performance.now() }; // (for looking at it)
         cs.update = prev;
-        if (secs <= 0) { turnTo(1); D.active = false; return res(); }
-        let k = 0;
+        if (secs <= 0) { D.active = false; return res(); }
+        // (a glide is short: at most 0.6 s)
+        secs = Math.min(secs, 0.6);
+        let k = 0, first = true;
         cs.update = (dt, el) => {
-          turnTo(ease.inOut(Math.min(1, (k + dt / secs) * 1.6)));
           prev.call(cs, dt, el);
+          const pv = _pv.copy(ent.position); pv.y += cm.activeMode === 'car' ? 1.15 : 1.45;
+          if (first) {
+            first = false;
+            const clear = !turn && seen && cs.segClear && cs.segClear(pv, from.p, ent) > 0.97 && cs.segClear(from.p, cam.position, ent) > 0.99;
+            // (a cut: once more at no time step, so the view behind him is already held clear of what is there, as on
+            // every frame after: the first one after a teleport isn't)
+            if (!clear) { k = 1; prev.call(cs, 0, el); }
+          }
           k = Math.min(1, k + dt / secs); const e = ease.inOut(k);
           const toP = cam.position.clone(), toQ = cam.quaternion.clone(), toF = cs.getActivePreset().fov;
           cam.position.lerpVectors(from.p, toP, e); cam.quaternion.slerpQuaternions(from.q, toQ, e);
-          // (the glide's straight line from the last shot to behind him can cross what stands between: the van he just
-          // searched, a wall. The moment the line from him to the lens is cut, it cuts to the view behind him instead of
-          // gliding through it)
-          if (k < 1 && cs.segClear) {
-            const pv = _pv.copy(ent.position); pv.y += cm.activeMode === 'car' ? 1.15 : 1.45;
-            if (cs.segClear(pv, cam.position, ent) < 0.97) { k = 1; cam.position.copy(toP); cam.quaternion.copy(toQ); turnTo(1); }
-          }
+          // (and should the line from him to the lens be cut on the way all the same, it cuts to the view behind him
+          // there instead of gliding through)
+          if (k < 1 && cs.segClear && cs.segClear(pv, cam.position, ent) < 0.97) { k = 1; cam.position.copy(toP); cam.quaternion.copy(toQ); }
           const f = k >= 1 ? toF : lerp(from.fov, toF, e); if (Math.abs(cam.fov - f) > 1e-3) { cam.fov = f; cam.updateProjectionMatrix(); }
           if (k >= 1) { cs.update = prev; D.active = false; res(); }
         };

@@ -33,6 +33,9 @@ export const CREDITS = [
   { heading: 'Engine sounds', lines: [
     { what: '"Maserati GranTurismo S Exhaust"', who: 'lmartins', note: 'Quant\'s car: loops cut at five engine speeds', licence: 'CC BY 4.0', licenceUrl: 'https://creativecommons.org/licenses/by/4.0/', src: 'https://commons.wikimedia.org/wiki/File:Maserati_GranTurismo_S_Exhaust.ogg' },
   ] },
+  { heading: 'Crowd sounds', lines: [
+    { what: '"GameSoundCon2024 Walla XY-AKG214-96k"', who: 'ShangusBurger (Shane Vincent)', note: 'the street crowd\'s walla: five takes (Freesound 763895, 763896, 763898, 763848, 763851), reverb reduced, equalised to sound outdoors, levelled and looped', licence: 'CC0 1.0', licenceUrl: LICENCES['CC0 1.0'], src: 'https://freesound.org/people/ShangusBurger/packs/42098/' },
+  ] },
   { heading: 'The city', lines: [
     { what: 'Slop New York', who: 'Mr.doob', note: 'the city this game is built on; some city code is ported from its newer commits', licence: 'MIT', licenceUrl: 'https://opensource.org/license/mit', src: null },
   ] },

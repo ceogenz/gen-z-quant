@@ -1,9 +1,9 @@
 // Gen Z Quant: New York's own sound, always on (the amb bus), shaped by where the camera is (where: traffic 0..1, the
 // cars about; crowd 0..1, the people about; park 0..1; avenue 0..1, near an avenue and its subway line):
 //   a bed      the low roar of traffic blocks away, steady; the block's engines (a few cars and trucks down the street,
-//              idling at the light, pulling away up through a gear, gone, the next one along); the city's hum (the
-//              mains, rooftop fans, window units); a thin grain of tyres; a crowd's murmur (babble made once, from a
-//              dozen voices that never quite say a word)
+//              idling at the light, pulling away up through a gear, gone, the next one along); the city's air (rooftop
+//              fans and window units, a soft rumble of noise, no tones); a thin grain of tyres; the crowd's walla (real
+//              people talking, recorded: louder and brighter the more people are about, never over the street)
 //   events     distant honks (constant on avenues, rare in a park), a siren a long way off now and then, the subway
 //              rumbling under the avenue, someone calling out down the block, pigeons cooing and taking off, sparrows in
 //              the parks, a building site's clangs, jackhammer and backing truck, a doorman whistling for a cab, a
@@ -14,66 +14,26 @@
 import { SOUNDS } from './sounds.js';
 import { motorLoad } from './motors.js';
 
-// a crowd's murmur: twelve voices, syllables of random vowels on a wandering pitch with pauses for breath, rendered once
-export async function makeBabble(sr = 44100, secs = 8) {
-  const len = Math.floor(sr * secs), xf = Math.floor(sr * 0.6);
-  const oc = new OfflineAudioContext(2, len + xf, sr);
-  const F = [[730, 1090, 2440], [530, 1840, 2480], [270, 2290, 3010], [570, 840, 2410], [440, 1020, 2240], [660, 1720, 2410], [490, 1350, 1690]];
-  const R = Math.random, sum = oc.createGain(); sum.gain.value = 0.5;
-  const lp = oc.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 3400; const hp = oc.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 140;
-  sum.connect(hp); hp.connect(lp); lp.connect(oc.destination);
-  for (let k = 0; k < 12; k++) {
-    const fem = R() < 0.5, f0 = (fem ? 190 : 105) * (0.85 + R() * 0.3), dist = 0.35 + R() * 0.65;
-    const src = oc.createOscillator(); src.type = 'sawtooth'; src.frequency.value = f0;
-    const pan = oc.createStereoPanner(); pan.pan.value = R() * 1.6 - 0.8;
-    const amp = oc.createGain(); amp.gain.value = 0;
-    const bands = F[0].map((f, i) => { const b = oc.createBiquadFilter(); b.type = 'bandpass'; b.frequency.value = f; b.Q.value = [6, 8, 9][i]; const g = oc.createGain(); g.gain.value = [1, 0.5, 0.25][i]; src.connect(b); b.connect(g); g.connect(amp); return b; });
-    amp.connect(pan); pan.connect(sum);
-    let t = R() * 0.8;
-    while (t < secs + 0.6) {
-      // a phrase: a few syllables, the pitch drifting down, then a pause
-      const n = 3 + Math.floor(R() * 9), p0 = f0 * (1 + R() * 0.2);
-      for (let s = 0; s < n && t < secs + 0.6; s++) {
-        const d = 0.09 + R() * 0.2, v = F[Math.floor(R() * F.length)], peak = (0.5 + R() * 0.5) * dist * 0.4;
-        src.frequency.setTargetAtTime(p0 * (1 - s * 0.025) * (0.94 + R() * 0.12), t, 0.04);
-        bands.forEach((b, i) => b.frequency.setTargetAtTime(v[i] * (fem ? 1.12 : 1), t, 0.025));
-        amp.gain.setTargetAtTime(peak, t, 0.02); amp.gain.setTargetAtTime(peak * 0.15, t + d * 0.8, 0.03);
-        t += d;
-      }
-      amp.gain.setTargetAtTime(0, t, 0.05);
-      t += 0.2 + R() * 1.1;
-    }
-    src.start(0); src.stop(secs + 0.6);
-  }
-  const buf = await oc.startRendering();
-  // seamless: the tail faded over the head
-  const out = new AudioBuffer({ numberOfChannels: 2, length: len, sampleRate: sr });
-  for (let c = 0; c < 2; c++) {
-    const a = buf.getChannelData(c), b = out.getChannelData(c);
-    for (let i = 0; i < len; i++) b[i] = a[i];
-    for (let i = 0; i < xf; i++) { const k = i / xf; b[i] = a[i] * k + a[len + i] * (1 - k); }
-    let peak = 0; for (let i = 0; i < len; i++) peak = Math.max(peak, Math.abs(b[i]));
-    if (peak > 0) for (let i = 0; i < len; i++) b[i] *= 0.7 / peak;
-  }
-  return out;
+// the crowd's walla: real people talking (CC0 recordings, see NOTICE: Crowd sounds), cut into a seamless loop of a street's
+// crowd (assets/sfx/city/crowd-walla.m4a): fetched and decoded once, when the city's sound starts
+const WALLA_URL = new URL('../../assets/sfx/city/crowd-walla.m4a', import.meta.url);
+let walla = null;
+export function loadWalla(ctx) {
+  return (walla ||= fetch(WALLA_URL).then((r) => { if (!r.ok) throw new Error(r.status + ' crowd-walla'); return r.arrayBuffer(); }).then((b) => ctx.decodeAudioData(b)).catch((e) => { walla = null; throw e; }));
 }
 
 export function createCity(M, E) {
   const out = M.bus.amb, R = M.R;
-  const layer = (buf, type, f, q, rate = 1) => { const s = M.src(buf, { rate }), fl = M.filt(type, f, q), g = M.gain(0, out); s.connect(fl); fl.connect(g); s.start(0, R() * 2); return { s, fl, g }; };
+  const layer = (buf, type, f, q, rate = 1, at = 2) => { const s = M.src(buf, { rate }), fl = M.filt(type, f, q), g = M.gain(0, out); s.connect(fl); fl.connect(g); s.start(0, R() * at); return { s, fl, g }; };
   // the far traffic: a low roar, nothing in it above a few hundred hertz (nor much of the deepest, felt more than heard),
   // and steady
   const roar = layer(M.brown, 'bandpass', 120, 0.55, 0.8);
   // the road: a thin band of tyre grain, well under the engines; a breath of air over the top
   const road = layer(M.pink, 'bandpass', 1050, 0.9);
   const hiss = layer(M.white, 'highpass', 3600, 0.5);
-  // the city's hum: the mains (60 Hz: its 120 and 180 off the transformers), a rooftop fan's blades, the window units'
-  // air (a fan's noise, narrow)
-  const humG = M.gain(0, out), hum = [];
-  for (const [f, v] of [[120, 0.55], [180, 0.18], [240, 0.22]]) { const o = M.osc('sine', f); o.connect(M.gain(v, humG)); hum.push(o); }
-  const fan = M.osc('triangle', 58.5), fanLp = M.filt('lowpass', 320, 1.5); fan.connect(fanLp); fanLp.connect(M.gain(0.5, humG)); hum.push(fan);
-  const acn = M.src(M.pink), acf = M.filt('bandpass', 430, 2.2); acn.connect(acf); acf.connect(M.gain(0.5, humG)); acn.start(0, R() * 2);
-  for (const o of hum) o.start();
+  // the city's air: rooftop fans and window units, a soft wide rumble of noise just under everything (no tones: steady
+  // sines at the mains' 120 and 180 and a fan's blade rate read as a drone, a hum in the head, not a street)
+  const air = layer(M.pink, 'bandpass', 340, 0.7), AIR = 0.012;
 
   // the block's engines: three cars or trucks somewhere down the street, each on its own little story: idling at the
   // light, then pulling away up through a gear (or not), fading off, and a while later another one, somewhere else.
@@ -114,10 +74,13 @@ export function createCity(M, E) {
       e.st = 'gap'; e.t = 0.4 + R() * 4 / (0.3 + traffic);
     }
   }
+  // the crowd's walla (M.babble, the crowd bed: loops.js's crowd() plays it too), through a low-pass that opens as the
+  // crowd comes close (a few people far off are a dull murmur; a packed sidewalk is voices)
   let murmur = null;
-  const startMurmur = (buf) => { M.babble = buf; murmur = layer(buf, 'bandpass', 1000, 0.45); };
+  const WALLA = 0.2;   // (on a packed sidewalk: about 2 dB under the rest of the street's bed together)
+  const startMurmur = (buf) => { if (murmur) return; M.babble = buf; murmur = layer(buf, 'lowpass', 3000, 0.5, 1, buf.duration - 0.5); };
   if (M.babble) startMurmur(M.babble);
-  else if (M.live) makeBabble(M.sr).then(startMurmur).catch(() => {});
+  else if (M.live) loadWalla(M.ctx).then(startMurmur).catch((e) => console.warn('[audio] no crowd walla:', e));
 
   // an event somewhere about: pan -1..1, d metres away
   const at = (name, o) => E.play(name, { bus: 'amb', ...o, pan: o.pan ?? R() * 1.8 - 0.9, d: o.d ?? 60 });
@@ -137,7 +100,7 @@ export function createCity(M, E) {
     set(roar.g.gain, city * (0.05 + 0.05 * avenue + 0.06 * tb));
     set(road.g.gain, city * (0.01 + 0.022 * avenue + 0.016 * tb));
     set(hiss.g.gain, city * (0.003 + 0.005 * tb));
-    set(humG.gain, 0.05 * (1 - park) * (1 - 0.4 * tb));
+    set(air.g.gain, AIR * (1 - park) * (1 - 0.4 * tb));
     set(engOut.gain, ENG * city * city * (0.58 + 0.5 * tb));
     for (const e of engines) {
       if ((e.t -= dt) <= 0) engine(e, tb, city, avenue);
@@ -146,7 +109,9 @@ export function createCity(M, E) {
       e.speed = Math.min(e.vmax, e.speed + e.acc * dt);
       if ((e.next -= dt) <= 0) { e.next = 0.066; const acc = e.speed < e.vmax ? e.acc * (e.st === 'away' ? 0.5 : 1) : 0; e.mv.update({ speed: e.speed, load: motorLoad(e.speed, acc, e.kind), seed: e.seed }); }
     }
-    if (murmur) set(murmur.g.gain, 0.04 + 0.42 * crowd);
+    // (the walla: a breath of it with anyone about, its full level only on a packed sidewalk, and even then under the
+    // traffic; the low-pass from a far murmur's 1.6 kHz to a near crowd's 9)
+    if (murmur) { set(murmur.g.gain, WALLA * (0.1 + 0.9 * crowd * crowd)); set(murmur.fl.frequency, 1600 + 7400 * crowd); }
 
     // events, each on its own clock (faster where it belongs)
     for (const key in T) T[key] -= dt;

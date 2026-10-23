@@ -7,7 +7,7 @@
 //   busHum   the same, a bus's diesel
 //   hum      the old synthesised car hum (a saw at the firing rate and the tyres' hiss), kept for anyone who wants one
 //   rumble, wind, hiss, roar, squeal, crowd   plain beds (a deep traffic roar, rushing air, a jet of gas, a rocket,
-//            tyres screaming, a crowd's murmur) for anyone who needs one
+//            tyres screaming, a crowd's walla: the city's recorded one once it is loaded) for anyone who needs one
 const ramp = (M, p, v, k = 0.05) => p.setTargetAtTime(v, M.now(), k);
 function finish(M, out, sources) {
   return (secs = 0.3) => {
@@ -85,7 +85,7 @@ export const LOOPS = {
   hiss(M, dest) { return bed(M, dest, M.white, 'highpass', 3000, 0.7); },
   roar(M, dest) { return bed(M, dest, M.brown, 'lowpass', 700, 0.9, 2.5); },
   squeal(M, dest) { return bed(M, dest, M.white, 'bandpass', 2400, 12); },
-  crowd(M, dest) { return bed(M, dest, M.babble || M.pink, 'bandpass', 900, 0.5); },
+  crowd(M, dest) { return M.babble ? bed(M, dest, M.babble, 'lowpass', 9000, 0.5) : bed(M, dest, M.pink, 'bandpass', 900, 0.5); },
 };
 LOOPS.engine = LOOPS.carHum; LOOPS.traffic = LOOPS.rumble;
 

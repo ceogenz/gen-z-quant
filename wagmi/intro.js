@@ -23,6 +23,7 @@ import { createUI } from './mission/ui.js';
 import { createAudio } from './mission/audio.js';
 import { createZK } from './mission/zk.js';
 import { createDirector, keys, angleKeys, spline, travel, rig, masked, handheld, clamp, smooth, lerp, ease } from './mission/cine.js';
+import { createFace } from './face.js';
 
 const Q = new URLSearchParams(location.search);
 const PI = Math.PI;
@@ -38,6 +39,9 @@ export const MARK = {
 const WHITE = '#FFFFFF', ACID = '#B6FF3B', BLUE = '#6CB8FF', YELLOW = '#FFC93C';
 
 export async function install(W) {
+  // Quant's face (wagmi/face.js, 23 Oct round 3): his mouth with his own lines, blinks, his eyes on whom he talks to
+  // (W.quant.face), from the first frame of the opening through every mission
+  if (W.quant && !W.quant.face) W.quant.face = createFace(W, { speaker: 'Quant', inner: W.quant.body, bones: W.quant.bones, hair: true, open: 0.42 });
   // (the sandbox's mode keys 1-4 are for the developers: F gets in and out of the car)
   // (not while the stall help is up: its options are on the number keys, and it keeps the city's from them itself)
   addEventListener('keydown', (e) => { if (/^Digit[1-4]$/.test(e.code) && !Q.has('sandbox') && !document.body.classList.contains('wg-offering')) e.stopImmediatePropagation(); }, true);
@@ -710,10 +714,8 @@ function buildScript(ctx) {
         at += ph.length / cps;
       }
     }
-    for (let x = 25.9, i = 0; x < 33.3; x += 0.32 + ((i * 0.618) % 1) * 0.38, i++) {
-      const k = (i * 0.37) % 1;
-      out.push([x, () => sfx.play('mumble', { f0: 92 + k * 40, dur: 0.22 + k * 0.3, gain: 0.07, p: (k - 0.5) * 0.8, lp: 1100 })]);
-    }
+    // (the Degens' walla: the city's recorded crowd, loops.js crowd(), from 25.9 s to ~33 s)
+    out.push([25.9, () => { const c = W.audio?.loop?.('crowd', { vol: 0.12 }); setTimeout(() => c?.stop(1.2), 6200); }]);
     return out;
   }
 

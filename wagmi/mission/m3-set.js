@@ -14,12 +14,14 @@
 //           model, fiona.glb: platinum ponytail, white shades, a megaphone), each posed by its clips (rig) plus an arm to a point
 //   const R = buildRally(W); R.show(true); R.screen.mode('pump' | 'dump'); R.rigs[i].hit(dmg, from); R.update(dt, cam)
 //   const G = buildGarage(W); G.show(true); G.inside(true)     const suv = buildSUV(W)
-//   const F = await buildFiona(W); const g = await buildGears(W)   (each { root, inner, bones, mixer, rig, clips, arm(...) })
+//   const F = await buildFiona(W); const g = await buildGears(W)   (each { root, inner, bones, mixer, rig, clips, arm(...),
+//           face, jaw(k) }: a talking face, wagmi/face.js: the mouth with their own lines, blinks, eyes on whom they talk to)
 import * as THREE from 'three/webgpu';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { clone as skClone } from 'three/addons/utils/SkeletonUtils.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { rig, clamp } from './cine.js';
+import { faceOn } from '../face.js';
 
 const PI = Math.PI;
 const V = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
@@ -745,6 +747,8 @@ export async function buildFiona(W) {
   if (!clipMap.run && clipMap.jog) clipMap.run = clipMap.jog;
   root.visible = false; W.app.scene.add(root);
   const P = { root, inner, bones, mixer, rig: rig(mixer, clipMap), clips: Object.keys(clipMap), top, arm: (side, target, pole, w) => armTo(bones, side, target, pole, w, MH_ARM), relax: () => {} };
+  // her face (wagmi/face.js, 23 Oct round 3): her mouth with her lines (on the megaphone too), blinks behind her shades
+  faceOn(W, P, 'Fiona', { open: 0.42 });
   const B = bones;
   // her eyes in the bind pose (the vertices the eyes' own primitive draws, through the skin's bind matrix: the GLB's
   // primitives share one vertex list, so not its bounding box; and its bones were saved mid-clip, so the model as it
@@ -814,6 +818,9 @@ export async function buildGears(W) {
   if (clipMap.idle) clipMap.thugIdle = clipMap.idle;
   root.visible = false; W.app.scene.add(root);
   const P = { root, inner, bones, mixer, rig: rig(mixer, clipMap), clips: Object.keys(clipMap), top, arm: (side, target, pole, w) => armTo(bones, side, target, pole, w, MH_ARM), relax: () => {} };
+  // his face (wagmi/face.js, 23 Oct round 3, the owner: his "lips aren't moving when he talks"): his mouth with his
+  // lines, blinks, his eyes on whom he talks to
+  faceOn(W, P, 'Gears', { open: 0.45 });
   // his tee: an old heather tee, not a lit white one (the clothes' texture's pale, unsaturated texels, the tee's, toned
   // down and warmed a little, with a fine heather fleck; once a load, the texture shared by every Gears)
   inner.traverse((o) => {

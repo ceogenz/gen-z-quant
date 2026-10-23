@@ -66,6 +66,19 @@ lmartins ([Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Maserati_G
 [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Trimmed, pitch-flattened, looped, levelled and re-encoded.
 The gearbox, shifts and pops (`wagmi/audio/supercar.js`) are original.
 
+## Crowd sounds
+
+The street crowd's walla (`assets/sfx/city/crowd-walla.m4a`) is cut and mixed from five takes of
+**"GameSoundCon2024 Walla XY-AKG214-96k"** by ShangusBurger (Shane Vincent),
+[Freesound pack 42098](https://freesound.org/people/ShangusBurger/packs/42098/), under
+[CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/): Conference Room Walla American English
+[01](https://freesound.org/s/763895/) and [02](https://freesound.org/s/763896/),
+[Soft Conference Room Walla American English Library](https://freesound.org/s/763898/),
+[Sparse Chatter and Laughter](https://freesound.org/s/763848/) and
+[Coughs, Chatter and Laughs](https://freesound.org/s/763851/). CC0 needs no credit; we give it anyway. We reduced the
+room's reverb, equalised the takes to sound outdoors and a little distant, levelled them, narrowed the stereo, joined
+three into a seamless 37.5 s loop (with the two sparse takes mixed under it) and re-encoded it to AAC.
+
 ## The city
 
 The city is built on Slop New York by Mr.doob, under the MIT License (see [`LICENSE`](../LICENSE)). Some city code is

@@ -129,7 +129,7 @@ export function createMixer(ctx) {
       for (let j = 0; j < len; j++) d[at + j] += a * rnd() * Math.exp(-j / (len * 0.25));
     }
   });
-  // (crowd babble, made once the context runs: M.babble, see city.js)
+  // (the crowd's walla, the recorded crowd bed: M.babble once it is fetched and decoded, see city.js)
   M.babble = null;
 
   /* ------------------------------------------------------------- the parts -- */

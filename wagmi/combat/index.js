@@ -41,6 +41,7 @@ import { createHud } from './hud.js';
 import { createFightCamera } from './camera.js';
 import { createSfx } from './sfx.js';
 import { createItems } from './items.js';
+import { installVault } from '../vault.js';
 import { clamp, smooth, angWrap, yawTo, hdist, rnd, fwd } from './util.js';
 
 const _v = new THREE.Vector3(), _v2 = new THREE.Vector3(), _v3 = new THREE.Vector3();
@@ -178,6 +179,8 @@ export async function install(W) {
   Q.pre = (dt) => { Q.timeScale = dt > 0 ? realDt(dt) * c.ts / dt : 0; c.me.pre(realDt(dt) * c.ts); };
   const ctl = c.me.control;
   P.control = (dt, keys) => { const t0 = performance.now(); const r = ctl(realDt(dt), keys); c.cost += performance.now() - t0; return r; };
+  // (over it: the hurdle over the low things on foot, fences, benches, granite, over the fight's hook, ../vault.js)
+  installVault(W, c);
 
   // ------------------------------------------------------------------ hit-stop and slow motion (real time)
   const timeReq = [];

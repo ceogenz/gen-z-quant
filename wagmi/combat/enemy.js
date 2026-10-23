@@ -162,14 +162,49 @@ export class Enemy {
   }
   // ------------------------------------------------------------------ moving
   ground() { return this.c.world.ground(this.pos.x, this.pos.z); }
-  // horizontal move with the city's collision (no walking through facades); true when a wall stopped it
-  moveXZ(dx, dz) {
+  // horizontal move with the city's collision (no walking through facades); true when a wall stopped it. The low things
+  // (the parks' fences and lawn hoops, benches, granite: js/controllers.js lowObstacles) are solid to him below their tops
+  // as to Quant; walking at one (hop: from stepTo), he hops it (tryHop)
+  moveXZ(dx, dz, hop = false) {
     if (Math.abs(dx) + Math.abs(dz) < 1e-7) return false;
+    // (half a metre off the walls at least: the city's collision boxes sit inside some facades by about that)
+    const r = Math.max(0.5, this.T.radius * this.T.scale), cm = this.c.cm;
+    if (hop && !this.hop && cm.lowAhead) { const L = Math.hypot(dx, dz); if (this.tryHop(dx / L, dz / L, r)) return false; }
     const x = this.pos.x + dx, z = this.pos.z + dz;
     this.pos.x = x; this.pos.z = z;
-    // (half a metre off the walls at least: the city's collision boxes sit inside some facades by about that)
-    this.c.world.collide(this.pos, Math.max(0.5, this.T.radius * this.T.scale));
+    this.c.world.collide(this.pos, r);
+    if (!this.hop) cm.resolveLowCollision?.(this.pos, r);
     return Math.abs(this.pos.x - x) + Math.abs(this.pos.z - z) > 1e-4;
+  }
+  // a hop over the low thing just ahead (along ux, uz): up to 1.35 m over his feet and 2.6 m deep, onto clear level
+  // ground (no drop, no wall, nothing else low there, not the park's water); a short arc peaking over its middle, on the
+  // way he was going. True when he goes
+  tryHop(ux, uz, r) {
+    const cm = this.c.cm, p = this.pos;
+    const hit = cm.lowAhead(p.x, p.z, p.y, ux, uz, r, 0.45);
+    if (!hit || hit.depth > 2.6 || hit.o.top - p.y > 1.35) return false;
+    const d = hit.enter + hit.exit + 0.1, lx = p.x + ux * d, lz = p.z + uz * d, gL = this.c.world.ground(lx, lz);
+    if (Math.abs(gL - p.y) > 0.35 || cm.inParkWater?.(lx, lz)) return false;
+    _hp.set(lx, gL, lz); cm.resolveHorizontalCollision(_hp, r, gL + 1.0);
+    if (Math.hypot(_hp.x - lx, _hp.z - lz) > 0.05) return false;
+    if (cm.lowAhead(lx - ux * 0.3, lz - uz * 0.3, gL, ux, uz, r, 0.3, [hit.o])) return false;
+    this.hop = { t: 0, T: clamp(d / 4.5, 0.42, 0.7), sx: p.x, sz: p.z, ux, uz, d, y0: p.y, y1: gL, H: hit.o.top - p.y + 0.18 };
+    this.yaw = Math.atan2(ux, uz); this.twist = 0;
+    this.c.W.audio?.play?.('whoosh', { pos: [p.x, p.y + 1, p.z], vol: 0.25, rate: 1.2 });
+    return true;
+  }
+  // the hop under way (from update: it moves him, the fight's choices wait); false when there is none (or a blow ended it)
+  hopStep(dt) {
+    const h = this.hop;
+    if (!h) return false;
+    if (!['hold', 'approach', 'fetch'].includes(this.state)) { this.hop = null; return false; }
+    h.t = Math.min(h.T, h.t + dt);
+    const k = h.t / h.T;
+    this.pos.x = h.sx + h.ux * h.d * k; this.pos.z = h.sz + h.uz * h.d * k;
+    this.c.world.collide(this.pos, Math.max(0.5, this.T.radius * this.T.scale));
+    this.pos.y = h.y0 + (h.y1 - h.y0) * k + h.H * 4 * k * (1 - k);
+    if (k >= 1) { this.hop = null; this.pos.y = this.ground(); }
+    return true;
   }
   rootMotion() { const d = this.rootDelta(this.rd); if (Math.abs(d.x) + Math.abs(d.z) > 1e-6) this.moveXZ(d.x, d.z); }
   // walk toward p at speed sp while facing faceYaw: forward, backwards, or sideways with the body turned half toward the
@@ -183,7 +218,7 @@ export class Enemy {
     if (L < 0.05 || this.spd < 0.05) { this.yaw = dampAngle(this.yaw, faceYaw, 7, dt); this.twist = damp(this.twist, 0, 6, dt); this.locomote(0); return 0; }
     to.divideScalar(L);
     const step = Math.min(L, this.spd * dt);
-    this.moveXZ(to.x * step, to.z * step);
+    this.moveXZ(to.x * step, to.z * step, this.spd > 0.9);
     const my = Math.atan2(to.x, to.z), rel = angWrap(my - faceYaw);
     let body = faceYaw, back = false;
     if (this.spd > 2.4) body = my; // running: faces where he runs
@@ -309,6 +344,7 @@ export class Enemy {
     this.flinch = Math.max(0, this.flinch - dt * 5); this.flash = Math.max(0, this.flash - dt * 12);
     const dist = hdist(this.pos, P), faceP = yawTo(this.pos, P);
     if (this.state === 'knock' && this.st > 3.5) { this.pos.y = this.ground(); this.landDown(); }
+    if (this.hopStep(dt)) { this.root.rotation.y = this.yaw; this.mixer.update(dt); return; }
     if (this.faceYaw != null && this.turnRate) { this.yaw = dampAngle(this.yaw, this.faceYaw, this.turnRate, dt); if (Math.abs(angWrap(this.faceYaw - this.yaw)) < 0.02) this.turnRate = 0; }
     if (['stagger', 'knock', 'down', 'getup'].includes(this.state)) this.rootMotion();
     if (this.shove.lengthSq() > 1e-4) { if (['stagger', 'dazed', 'hold'].includes(this.state)) this.moveXZ(this.shove.x * dt, this.shove.z * dt); this.shove.multiplyScalar(Math.exp(-9 * dt)); }
@@ -527,4 +563,4 @@ export class Enemy {
     if (this.weapon) this.c.items.drop(this, true);
   }
 }
-const _rmp = { x: 0, z: 0 }, _wp = new THREE.Vector3();
+const _rmp = { x: 0, z: 0 }, _wp = new THREE.Vector3(), _hp = new THREE.Vector3();

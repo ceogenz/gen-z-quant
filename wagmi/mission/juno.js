@@ -17,6 +17,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { clone as skClone } from 'three/addons/utils/SkeletonUtils.js';
 import { positionLocal, normalLocal, positionView, normalViewGeometry, mx_worley_noise_float, float, vec3, mix, smoothstep, dFdx, dFdy, cross, dot, sign, abs, normalize } from 'three/tsl';
 import { rig, clamp } from './cine.js';
+import { createFace, voiceOf, mouthFollower, chatter, subLine } from '../face.js';
 
 const V = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 const PI = Math.PI;
@@ -55,92 +56,13 @@ function curlyPuff() {
   return (puffMat = m);
 }
 
-// her face's morphs (23 Oct, round 2, the owner: "her lips don't move and eyes when talk to match voice"), made here
-// from the GLB's body before its first draw, in place of the GLB's own jaw. Its primitives (skin, eyes, brows,
-// lashes, ...) share one buffer of vertices, so each morph is one set of offsets over all of it, given to the
-// primitives it moves:
-//   jaw             her chin and lower lip turned down about the jaw's hinge, split from the upper lip at the parting
-//   blink, blink2   the upper lids, and the lashes on them, turned down over the eyes about each eyeball's middle (the
-//                   lower lids up a little to meet them): blink to half way, blink2 the rest, so the lid follows the
-//                   eyeball's curve and never cuts into it half way (a morph moves in a straight line)
-//   brow            the brows and the forehead over them up 6 mm
-//   lookX, lookY    the eyeballs turned about their own middles, LOOK rad toward her left / up at 1 (-1 the other way)
-//   lip             her upper lip up 2 mm in the middle (with the jaw: an open mouth, not only a dropped lower lip)
-const LOOK = 0.3, LID_UP = 0.74, LID_LO = 0.12;
+// her face's morphs (23 Oct, round 2, the owner: "her lips don't move and eyes when talk to match voice"): made from
+// the GLB's body before its first draw, in place of the GLB's own jaw (wagmi/face.js, round 3: the same for all of the
+// cast now). Her numbers are the ones found by hand in round 2 (face.js's finder agrees on her to a tenth of a mm): her
+// lips part 62.9 mm under her eyes' middle (the GLB's own jaw morph opened them from 5 mm lower, so her lower lip
+// stretched down and never came away from the upper), her chin 105.5 mm under them; her lids turn down 0.74 rad
+const JUNO_FACE = { parting: 0.0629, chin: 0.1055, lidUp: 0.74, lidMid: -0.00055 };
 const sstep = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
-const MORPHS = { skin: ['jaw', 'lip', 'blink', 'blink2', 'brow'], lashes: ['blink', 'blink2'], brows: ['brow'], eyes: ['lookX', 'lookY'] };
-function faceMorphs(meshes) {
-  const by = {}; for (const m of meshes) by[m.material.name] = m;
-  if (!by.skin || !by.eyes) return null;
-  const g0 = by.skin.geometry; if (g0.userData.face) return g0.userData.face;
-  const P = g0.attributes.position, n = P.count;
-  const verts = (m) => (m ? new Set(m.geometry.index.array) : new Set());
-  const eyeV = verts(by.eyes), p = V(), d = V();
-  // each eyeball: a sphere fitted to its vertices (least squares: x²+y²+z² = 2a·x + 2b·y + 2c·z + e), its middle the pivot
-  const eyes = [1, -1].map((side) => {
-    const A = Array.from({ length: 4 }, () => new Float64Array(5));
-    for (const v of eyeV) { p.fromBufferAttribute(P, v); if (p.x * side <= 0) continue; const r = [2 * p.x, 2 * p.y, 2 * p.z, 1], s = p.lengthSq();
-      for (let i = 0; i < 4; i++) { for (let j = 0; j < 4; j++) A[i][j] += r[i] * r[j]; A[i][4] += r[i] * s; } }
-    for (let c = 0; c < 4; c++) { let m = c; for (let r = c + 1; r < 4; r++) if (Math.abs(A[r][c]) > Math.abs(A[m][c])) m = r; [A[c], A[m]] = [A[m], A[c]];
-      for (let r = 0; r < 4; r++) if (r !== c) { const f = A[r][c] / A[c][c]; for (let k = c; k < 5; k++) A[r][k] -= f * A[c][k]; } }
-    const c = V(A[0][4] / A[0][0], A[1][4] / A[1][1], A[2][4] / A[2][2]);
-    return { side, c, r: Math.sqrt(Math.max(1e-8, c.lengthSq() + A[3][4] / A[3][3])) };
-  });
-  const eyeOf = (x) => (x >= 0 ? eyes[0] : eyes[1]);
-  const off = () => new Float32Array(n * 3), out = { jaw: off(), lip: off(), blink: off(), blink2: off(), brow: off(), lookX: off(), lookY: off() };
-  // (her lips part 63 mm under her eyes' middle: the GLB's own jaw morph opened them from 5 mm lower, so her lower lip
-  // stretched down and never came away from the upper; here the jaw is made again from the real parting. The chin is
-  // 105 mm under her eyes, the jaw's hinge 35 mm under them and 85 mm behind their fronts)
-  const ey = eyes[0].c.y, fm = ey - 0.0629, chin = ey - 0.1055, front = eyes[0].c.z + eyes[0].r, hinge = [ey - 0.035, front - 0.085];
-  // (a vertex turned about the eye's middle by a about x: down over the front for a > 0; its offset into o, at stage s
-  // of two: the first half of the turn, then the rest)
-  const lid = (v, e, a) => {
-    d.fromBufferAttribute(P, v).sub(e.c); const rho = Math.hypot(d.y, d.z), phi = Math.atan2(d.y, d.z);
-    const at = (k) => [rho * Math.sin(phi - a * k), rho * Math.cos(phi - a * k)], h = at(0.5), f = at(1);
-    out.blink[v * 3 + 1] = h[0] - d.y; out.blink[v * 3 + 2] = h[1] - d.z; out.blink2[v * 3 + 1] = f[0] - h[0]; out.blink2[v * 3 + 2] = f[1] - h[1];
-  };
-  let lids = 0, brows = 0;
-  for (const v of verts(by.skin)) {
-    p.fromBufferAttribute(P, v); const e = eyeOf(p.x); d.copy(p).sub(e.c); const r = d.length();
-    // the lids: the upper turned down, all of it near the eye's opening, less out to the crease; the lower up a little
-    if (d.z > 0 && r < 0.022) {
-      const up = sstep(0.022, 0.0135, r) * sstep(-0.003, 0.001, d.y), lo = sstep(0.019, 0.012, r) * sstep(0.0, -0.003, d.y);
-      if (up > 0.002) { lid(v, e, LID_UP * up); lids++; } else if (lo > 0.002) { lid(v, e, -LID_LO * lo); lids++; }
-    }
-    // the forehead over the brows, up with them (fading out by the hairline, and toward the temples)
-    const fw = sstep(e.c.y + 0.002, e.c.y + 0.012, p.y) * (1 - sstep(e.c.y + 0.035, e.c.y + 0.058, p.y)) * (1 - sstep(0.056, 0.072, Math.abs(p.x))) * sstep(e.c.z - 0.03, e.c.z - 0.01, p.z);
-    if (fw > 0.002) { out.brow[v * 3 + 1] = 0.006 * fw; brows++; }
-    // the jaw: turned down 0.2 rad about the hinge below the ears, all of her below the parting in the middle of her
-    // mouth (a clean split, so her lips come apart), the split softer toward its corners; fading out to the jaw's
-    // corners, behind, and under the chin
-    { const ax = Math.abs(p.x), dz = front - p.z, soft = 0.0006 + 0.008 * sstep(0.011, 0.026, ax);
-      let w = sstep(fm + soft, fm - soft, p.y) * (1 - sstep(0.035, 0.06, ax) * sstep(0.02, 0.07, dz)) * (1 - sstep(0.06, 0.1, dz));
-      if (p.y < chin) w *= 1 - sstep(0.0, 0.025, chin - p.y);
-      if (w > 0.002 && dz < 0.13) { const a = 0.2 * w, y = p.y - hinge[0], z = p.z - hinge[1], c = Math.cos(a), s = Math.sin(a);
-        out.jaw[v * 3 + 1] = y * c - z * s - y; out.jaw[v * 3 + 2] = y * s + z * c - z; } }
-    // the upper lip, over the parting, its middle most (its corners stay)
-    const lw = sstep(0.027, 0.008, Math.abs(p.x)) * sstep(fm + 0.017, fm + 0.005, p.y) * sstep(fm - 0.0001, fm + 0.0012, p.y) * sstep(e.c.z + 0.01, e.c.z + 0.03, p.z);
-    if (lw > 0.002) { out.lip[v * 3 + 1] = 0.0021 * lw; out.lip[v * 3 + 2] = 0.0006 * lw; }
-  }
-  for (const v of verts(by.lashes)) { const e = eyeOf(P.getX(v)); if (P.getY(v) > e.c.y - 0.002) lid(v, e, LID_UP); }
-  for (const v of verts(by.brows)) out.brow[v * 3 + 1] = 0.0062;
-  // the eyeballs: turned about their middles (to her left: about y; up: about x, the other way)
-  const qx = new THREE.Quaternion(), qy = new THREE.Quaternion();
-  for (const v of eyeV) {
-    const e = eyeOf(P.getX(v)); d.fromBufferAttribute(P, v).sub(e.c);
-    p.copy(d).applyQuaternion(qx.setFromAxisAngle(V(0, 1, 0), LOOK)).sub(d); out.lookX.set([p.x, p.y, p.z], v * 3);
-    p.copy(d).applyQuaternion(qy.setFromAxisAngle(V(1, 0, 0), -LOOK)).sub(d); out.lookY.set([p.x, p.y, p.z], v * 3);
-  }
-  const attr = {};
-  for (const [k, a] of Object.entries(out)) { attr[k] = new THREE.BufferAttribute(a, 3); attr[k].name = k; }
-  // each primitive given the morphs that move it (the shoes and the hair none)
-  for (const m of meshes) {
-    const list = (MORPHS[m.material.name] || []).filter((k) => attr[k]);
-    m.geometry.morphAttributes = list.length ? { position: list.map((k) => attr[k]) } : {};
-    m.geometry.morphTargetsRelative = true;
-  }
-  return (g0.userData.face = { eyes: eyes.map((e) => ({ c: e.c.clone(), r: e.r })), lids, brows });
-}
 
 // her hoodie on a call and across a table (23 Oct, round 2): the cloth over her chest had come out of the export in
 // facets (the shell is welded coarse there), and its shading read as a figure under it. On the torso (not the sleeves,
@@ -167,38 +89,16 @@ function hoodieNormals(mesh) {
   N.needsUpdate = true;
 }
 
-// her voice now, while one of her lines is playing (the voices' log says which line started last and when, their
-// analyser how loud it is): { level 0..1, t (s into it), dur, text }; null when none of hers is
-let lineIx = null;
-export function junoVoice(W = typeof window !== 'undefined' ? window.WAGMI : null) {
-  const VO = W?.voice; if (!VO || !VO.log || !VO.log.length || !VO.lines) return null;
-  if (!lineIx || lineIx.n !== VO.lines.length) lineIx = { n: VO.lines.length, m: new Map(VO.lines.map((l) => [l.id, l])) };
-  const e = VO.log[VO.log.length - 1], l = lineIx.m.get(e.id); if (!l || !/^juno$/i.test(l.speaker)) return null;
-  const t = performance.now() / 1000 - (e.at + (e.wait || 0)), dur = (l.dur || 0) - (e.late || 0);
-  if (t < -0.05 || t > dur + 0.08) return null;
-  return { level: VO.level ? VO.level() : 0, t, dur, text: l.text };
-}
-// a mouth from a voice level: an envelope that opens fast and closes a little slower, its own gain riding the line's
-// loudness (a quiet line opens her mouth as far as a loud one), shut under the floor. -> (raw, dt) => 0 shut .. 1 wide
-export function mouthFollower() {
-  let env = 0, peak = 0.3;
-  return (raw, dt) => {
-    const x = raw < 0.035 ? 0 : raw;
-    env += (x - env) * (1 - Math.exp(-dt / (x > env ? 0.025 : 0.06)));
-    peak = Math.max(env, peak * Math.exp(-dt / 3), 0.22);
-    // (the dips between syllables close it most of the way: the voice's level rides high through a line)
-    return Math.pow(clamp((env / peak - 0.22) / 0.72, 0, 1), 1.25);
-  };
-}
-// a mouth's level talking when there is no voice to follow (her line has no recording, or the sound is off): syllables
-// at about four a second, a pause now and then
-const chatter = (t) => Math.max(0, Math.sin(t * 25.1) * 0.5 + 0.5) * (0.35 + 0.65 * Math.max(0, Math.sin(t * 5.3 + 1.1))) * (Math.sin(t * 1.3) > -0.75 ? 1 : 0);
+// her voice now, while one of her lines is playing: { level 0..1, t (s into it), dur, text }; null when none of hers is
+// (face.js voiceOf); mouthFollower: a mouth from a voice level (face.js)
+export function junoVoice(W = typeof window !== 'undefined' ? window.WAGMI : null) { return voiceOf(W, 'Juno'); }
+export { mouthFollower };
 
-export async function buildJuno(W, { scene = W.app.scene } = {}) {
+export async function buildJuno(W, { scene = W.app.scene, auto = true } = {}) {
   const gltf = await junoGLB();
   const root = new THREE.Group(); root.name = 'Juno';
   const inner = skClone(gltf.scene); root.add(inner);
-  const body = []; let teeth = null;
+  let teeth = null;
   inner.traverse((o) => {
     if (!o.isMesh) return;
     o.castShadow = true; o.receiveShadow = true; o.frustumCulled = false;
@@ -207,22 +107,13 @@ export async function buildJuno(W, { scene = W.app.scene } = {}) {
     if (o.material && o.material.name === 'hair' && !o.material.userData.toned) { o.material.roughness = 0.88; o.material.color.multiplyScalar(0.8); o.material.userData.toned = true; }
     if (o.isSkinnedMesh && o.name === 'hoodie') hoodieNormals(o);
     if (!o.isSkinnedMesh && o.material?.color?.getHexString() === 'e8e2d8') teeth = o;
-    if (o.isSkinnedMesh && o.morphTargetDictionary) body.push(o);
   });
-  // her face's morphs (faceMorphs), each primitive's own list of them
-  const fm = faceMorphs(body), morphed = [];
-  for (const m of body) {
-    const list = (m.geometry.morphAttributes.position || []).map((a, i) => a.name || (i ? String(i) : 'jaw'));
-    if (list.length) { m.morphTargetDictionary = Object.fromEntries(list.map((k, i) => [k, i])); m.morphTargetInfluences = list.map(() => 0); morphed.push(m); }
-    else { m.morphTargetDictionary = undefined; m.morphTargetInfluences = undefined; }
-  }
   // (her top teeth: the export set them under the lips' parting as it had it, 5 mm low, a white bar across her open
   // mouth; up under her upper lip and a little further in (out of sight with her mouth shut), and darker: inside her mouth)
   if (teeth && !teeth.userData.set) {
     inner.updateMatrixWorld(true); const w = teeth.getWorldPosition(V()).add(V(0, 0.0012, -0.0035));
     teeth.position.copy(teeth.parent.worldToLocal(w)); teeth.material = teeth.material.clone(); teeth.material.color.multiplyScalar(0.55); teeth.userData.set = true;
   }
-  const setM = (k, x) => { for (const m of morphed) { const i = m.morphTargetDictionary[k]; if (i != null) m.morphTargetInfluences[i] = x; } };
   const bones = {}; inner.traverse((o) => { if (o.isBone) bones[o.name] = o; });
   inner.updateMatrixWorld(true);
   const top = new THREE.Box3().setFromObject(inner).max.y;
@@ -231,87 +122,16 @@ export async function buildJuno(W, { scene = W.app.scene } = {}) {
   if (clipMap.idle) clipMap.thugIdle = clipMap.idle;
   root.visible = false; scene?.add(root);
 
-  /* her face: the morphs set straight (the call's bake), her head turned toward a point after the rig has posed it,
-     and live(dt, o) each frame of a scene, after her pose: her mouth from her voice, blinks every 2-6 s, her eyes
-     glancing between what she looks at (o.look) and what she glances at (o.alt), her head following them a little and
-     nodding with her words, her brows up on a question */
-  const skinM = body.find((m) => m.material.name === 'skin'), headIx = skinM ? skinM.skeleton.bones.indexOf(bones.head) : -1;
-  const Mh = new THREE.Matrix4(), Mi = new THREE.Matrix4(), tb = V(), mid = fm ? fm.eyes[0].c.clone().add(fm.eyes[1].c).multiplyScalar(0.5) : V(0, 1.64, 0.12);
-  // her head's rest frame (the body's bind space) to the world, as the head bone has it now
-  const headM = () => { bones.head.updateWorldMatrix(true, false); return Mh.multiplyMatrices(bones.head.matrixWorld, skinM.skeleton.boneInverses[headIx]).multiply(skinM.bindMatrix); };
-  // a point's direction from between her eyes, in that frame: [yaw toward her left, pitch up]
-  const toward = (at) => { tb.copy(at).applyMatrix4(Mi.copy(headM()).invert()).sub(mid); return [Math.atan2(tb.x, tb.z), Math.atan2(tb.y, Math.hypot(tb.x, tb.z))]; };
-  // (her head's pose as the rig left it, put back first if the rig didn't set it again this frame; and as we left it)
-  let hq0 = null, hq1 = null;
-  const headBase = () => { const h = bones.head.quaternion; if (hq1 && h.equals(hq1)) h.copy(hq0); hq0 = h.clone(); };
-  const _a = V(), _qa = new THREE.Quaternion(), _qb = new THREE.Quaternion();
-  const turnHead = (yaw, pitch, roll = 0) => {
-    headM(); const ax = (x, y, z) => _a.set(x, y, z).transformDirection(Mh);
-    _qa.setFromAxisAngle(ax(0, 1, 0), yaw); _qb.setFromAxisAngle(ax(1, 0, 0), -pitch); _qa.multiply(_qb); _qb.setFromAxisAngle(ax(0, 0, 1), roll); _qa.multiply(_qb);
-    turnWorld(bones.head, _qa.clone()); hq1 = bones.head.quaternion.clone();
-  };
-  const fs = { blink: 0, brow: 0, lookX: 0, lookY: 0 };
-  const L = { t: 0, mouth: mouthFollower(), slow: 0, blinkAt: 1 + Math.random() * 3, blinkT: -1, gaze: 0, gazeAt: 0, mx: 0, my: 0, microAt: 0, ex: 0, ey: 0, hy: 0, hp: 0, brow: 0, browT: -9 };
-  const face = {
-    // { blink 0..1, brow 0..1, lookX -1..1 (her left), lookY -1..1 (up) }
-    set(o) {
-      Object.assign(fs, o); const b = clamp(fs.blink, 0, 1);
-      setM('blink', Math.min(1, b * 2)); setM('blink2', Math.max(0, b * 2 - 1)); setM('brow', clamp(fs.brow, 0, 1)); setM('lookX', clamp(fs.lookX, -1, 1)); setM('lookY', clamp(fs.lookY, -1, 1));
-    },
-    // her head turned toward a world point by k of the way (plus yaw / pitch / roll of its own), her eyes on `eyes` (the
-    // same point by default) for the rest
-    aim(at, { k = 0.8, yaw = 0, pitch = 0, roll = 0, eyes = at } = {}) {
-      if (!skinM) return; headBase(); const [y, p] = toward(at); turnHead(y * k + yaw, p * k + pitch, roll);
-      const [ey, ep] = toward(eyes); face.set({ lookX: ey / LOOK, lookY: ep / LOOK });
-    },
-    // o: { talking (her line is up), text (its words), look (a world point: who she talks to), alt (where she glances:
-    // her laptop) }
-    live(dt, o = {}) {
-      if (!skinM) return; L.t += dt; const t = L.t;
-      // the mouth: her voice when one of her lines is playing; with no voice to follow (none recorded, or no sound)
-      // syllables while her line is up; else shut
-      const v = junoVoice(W), au = W.audio?.ctx?.state === 'running', rec = o.text ? !!W.voice?.has?.('Juno', o.text) : !!W.voice;
-      const raw = v ? v.level : o.talking && (!au || !rec) ? chatter(t) : 0;
-      const mouth = L.mouth(raw, dt); L.slow += (mouth - L.slow) * (1 - Math.exp(-dt / 0.18));
-      P.jaw(mouth * 0.5);
-      // blinks: every 2-6 s, now and then two together; 60 ms down, held 30 ms, 90 ms up
-      let b = 0;
-      if (L.blinkT < 0 && t >= L.blinkAt) L.blinkT = 0;
-      if (L.blinkT >= 0) { L.blinkT += dt; const u = L.blinkT; b = u < 0.06 ? u / 0.06 : u < 0.09 ? 1 : Math.max(0, 1 - (u - 0.09) / 0.09);
-        if (u >= 0.18) { L.blinkT = -1; L.blinkAt = t + (Math.random() < 0.12 ? 0.08 : 2 + Math.random() * 4); } }
-      // where she looks: who she talks to, glancing off at o.alt (more while she listens), a small flick now and then
-      const talking = o.talking || mouth > 0;
-      if (t >= L.gazeAt) { L.gaze = o.alt && Math.random() < (talking ? 0.28 : 0.6) ? 1 : 0; L.gazeAt = t + (L.gaze ? 0.5 + Math.random() * 1.3 : 0.9 + Math.random() * 2.3); }
-      if (t >= L.microAt) { L.mx = (Math.random() - 0.5) * 0.07; L.my = (Math.random() - 0.5) * 0.04; L.microAt = t + 0.3 + Math.random() * 0.7; }
-      headBase();
-      const at = L.gaze && o.alt ? o.alt : o.look; let gy = L.mx, gp = L.my;
-      if (at) { const [y, p] = toward(at); gy += y; gp += p; }
-      // (her head takes a part of the turn, slowly; it nods a little with her words and sways while she listens)
-      const k1 = 1 - Math.exp(-dt / 0.35);
-      L.hy += (clamp(gy, -0.7, 0.7) * 0.35 - L.hy) * k1; L.hp += (clamp(gp, -0.5, 0.45) * 0.3 - L.hp) * k1;
-      turnHead(L.hy + 0.018 * Math.sin(t * 0.55), L.hp - 0.05 * L.slow + 0.012 * Math.sin(t * 0.8 + 1), 0.015 * Math.sin(t * 0.43 + 2));
-      // (her eyes the rest, fast: a saccade is over in a few tens of ms)
-      const k2 = 1 - Math.exp(-dt / 0.03);
-      L.ex += (clamp(gy - L.hy, -0.45, 0.45) - L.ex) * k2; L.ey += (clamp(gp - L.hp, -0.4, 0.35) - L.ey) * k2;
-      // her brows: up through the end of a question, and with a word she leans on now and then
-      if (mouth > 0.85 && Math.random() < dt * 0.5) L.browT = t;
-      const q = talking && /\?/.test(o.text || v?.text || '') && (!v || v.t > v.dur * 0.5);
-      L.brow += ((q ? 0.75 : 0) + (t - L.browT < 0.5 ? 0.45 : 0) - L.brow) * (1 - Math.exp(-dt / 0.12));
-      // (looking down, her lids come down with her eyes)
-      face.set({ blink: Math.max(b, clamp(-L.ey / LOOK, 0, 1) * 0.3), brow: L.brow, lookX: L.ex / LOOK, lookY: L.ey / LOOK });
-      return { mouth, blink: b, gaze: L.gaze, brow: L.brow };
-    },
-    // a blink now (on a cut, a beat)
-    blink() { L.blinkT = 0; },
-    get state() { return { ...fs }; },
-    // between her eyes, in the world, as her head is now
-    eyes() { return skinM ? mid.clone().applyMatrix4(headM()) : bones.head.getWorldPosition(V()); },
-    rig: fm,
-  };
+  /* her face (wagmi/face.js): the morphs set straight (the call's bake), her head turned toward a point after the rig
+     has posed it, and live(dt, o) each frame of a scene, after her pose: her mouth from her voice, blinks every 2-6 s,
+     her eyes glancing between what she looks at (o.look) and what she glances at (o.alt), her head following them a
+     little and nodding with her words, her brows up on a question. Between scenes it runs itself (her eyes on whoever
+     is nearest); auto: false for the bake, which sets it by hand */
+  const face = createFace(W, { speaker: 'Juno', inner, bones, head: true, open: 0.5, fix: JUNO_FACE, auto });
   const P = {
     root, inner, bones, mixer, rig: rig(mixer, clipMap), clips: Object.keys(clipMap), top, face,
     // her mouth, 0 (shut) .. 1 (wide); about 0.35 is talking
-    jaw(k) { setM('jaw', clamp(k, 0, 1)); setM('lip', clamp(k * 1.2, 0, 1)); },
+    jaw: (k) => face.jaw(k),
     // talking: the mouth's opening at time t (s) while she speaks, from a voice level when there is one (face.live does
     // more: her voice itself, her eyes)
     talk(t, on, level = null) { P.jaw(!on ? 0 : level != null ? 0.08 + level * 0.5 : 0.12 + 0.28 * Math.max(0, Math.sin(t * 17) * Math.sin(t * 5.3 + 1.1))); },
@@ -393,7 +213,7 @@ export function buildLaptop() {
 export function createJunoRoom(W, J) {
   const app = W.app, renderer = app.renderer;
   const scene = new THREE.Scene(); scene.name = 'wagmi-juno-room'; scene.background = new THREE.Color('#060A14');
-  scene.add(J.root); J.root.position.set(0, 0, 0); J.root.rotation.set(0, 0, 0); J.root.visible = true;
+  scene.add(J.root); J.root.position.set(0, 0, 0); J.root.rotation.set(0, 0, 0); J.root.visible = true; J.face.hold = true;
   const box = (w, h, d, m, x, y, z) => { const b = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m); b.position.set(x, y, z); scene.add(b); return b; };
   box(8, 5, 0.1, new THREE.MeshStandardMaterial({ color: '#16233F', roughness: 0.95 }), 0, 2.2, -1.6);
   box(8, 0.1, 6, new THREE.MeshStandardMaterial({ color: '#15110F', roughness: 0.8 }), 0, -0.05, 0);
@@ -457,8 +277,6 @@ const sheetReady = () => { if (!sheetImg) { sheetImg = new Image(); sheetImg.src
 if (typeof window !== 'undefined') sheetReady();
 // (her eyes sit this far down a frame: the tile's crop is centred on them)
 const EYES = 0.45;
-// the subtitle on screen: { who, text }
-const subLine = () => { const s = document.querySelector('#wg .wg-sub'); if (!s || s.classList.contains('hide')) return null; const b = s.querySelector('b'), who = b ? b.textContent.trim() : ''; return { who, text: s.textContent.trim().slice(who.length).trim() }; };
 export function junoPortrait(el, { crop = 'phone', speaking = null } = {}) {
   const S = SHEET, zoom = crop === 'face' ? 1.06 : 1;
   const box = document.createElement('div'); box.className = 'juno-feed';

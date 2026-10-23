@@ -15,6 +15,8 @@ const CSS = `
 #wg .m2-tail.on { opacity: 1; }
 /* (a call during the tail: the caller's card, Juno's tile in it, stands above the meter, not over it) */
 #wg:has(.m2-tail.on) .wg-caller { bottom: 360px; }
+/* (and during the chase, above LEV'S CAR's damage bar) */
+#wg:has(.m2-target.on) .wg-caller { bottom: 296px; }
 #wg .m2-tail .row { display: flex; justify-content: space-between; align-items: baseline; font: 700 14px/1 'Barlow Condensed'; letter-spacing: 3px; color: rgba(255,255,255,.75); }
 #wg .m2-tail .row b { font: 800 24px/1 'Barlow Condensed'; letter-spacing: 0; color: #fff; }
 #wg .m2-tail .bar { position: relative; height: 10px; margin-top: 8px; border-radius: 5px; overflow: hidden;

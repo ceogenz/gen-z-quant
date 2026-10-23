@@ -135,6 +135,23 @@ Engine sounds
     crash synthesis ported from Slop New York by Mr.doob (MIT), commits 0e5bbfb and 7772c09.
 
 
+Crowd sounds
+------------
+  - assets/sfx/city/crowd-walla.m4a (the street crowd's walla, wagmi/audio/city.js): cut and mixed from five
+    takes of "GameSoundCon2024 Walla XY-AKG214-96k" (Freesound pack 42098) by ShangusBurger (Shane Vincent)
+      https://freesound.org/people/ShangusBurger/packs/42098/
+      Conference Room Walla American English 01            https://freesound.org/s/763895/
+      Conference Room Walla American English 02            https://freesound.org/s/763896/
+      Soft Conference Room Walla American English Library  https://freesound.org/s/763898/
+      Sparse Chatter and Laughter                          https://freesound.org/s/763848/
+      Coughs, Chatter and Laughs                           https://freesound.org/s/763851/
+    dedicated to the public domain under CC0 1.0 (https://creativecommons.org/publicdomain/zero/1.0/). CC0 needs
+    no credit; we give it anyway. Changed: resampled to 44.1 kHz; the room's reverb tail reduced; equalised to
+    sound outdoors (high-passed at 150 Hz, the room's low boom and the voices' presence lowered, the top softened
+    for distance); levelled; the stereo narrowed; three takes joined into a seamless 37.5 s loop with
+    equal-power crossfades and the two sparse takes mixed under it; re-encoded to AAC.
+
+
 Voices (assets/voice)
 ---------------------
   - Quant, Juno, Bagsy, Lev, Gears, Fiona, Wick and Fomo: synthesised with Qwen3-TTS by the Qwen team,

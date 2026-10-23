@@ -224,7 +224,10 @@ async function initApp() {
   };
   let hintPad = false;
   // Boosted top speeds in mph (controllers.js caps them at 8.2, 36, 19 & 52 m/s): full scale of the speed meter
-  const topSpeedMph = { person: 18, car: 81, cyclist: 43, helicopter: 116 };
+  // (Gen Z Quant: Quant's car reads double on its dial, speedDial: its 76 mph cruise shows 152, the boost 250; the
+  // meter's scale doubled with it, so it fills as before, the cruise most of it and the boost all of it)
+  const topSpeedMph = { person: 18, car: 162, cyclist: 43, helicopter: 116 };
+  const speedDial = { car: 2 };
 
   function renderControlHints(mode) {
     if (!elControlsHint) return;
@@ -724,7 +727,7 @@ async function initApp() {
 
       const activeEnt = controllerManager.getActiveEntity();
       const mode = controllerManager.activeMode;
-      const mph = Math.round(Math.abs(activeEnt.speed) * 2.237);
+      const mph = Math.round(Math.abs(activeEnt.speed) * 2.237 * (speedDial[mode] || 1));
       const altFt = Math.max(0, Math.round(activeEnt.position.y * 3.281));
 
       if (elFps) {

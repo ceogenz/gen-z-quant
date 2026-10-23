@@ -155,6 +155,8 @@ export function createQuant(c) {
     _a.copy(from).setY(from.y + 0.9); _b.copy(_a).addScaledVector(d, dist + r);
     let free = c.cam.firstBlock(_a, _b) - r;
     _b.setY(from.y); const h = c.carHit(from, _b, r); if (h >= 0) free = Math.min(free, h * (dist + r) - 0.05);
+    // (a park's fence, a lawn hoop, a bench: solid to him on foot, js/controllers.js lowObstacles)
+    const lo = cm.lowAhead?.(from.x, from.z, from.y, d.x, d.z, r, dist); if (lo) free = Math.min(free, lo.enter - 0.05);
     for (let s = 0.3; s < Math.min(free, dist) + r; s += 0.3) { // (a wall at his shoulder as he goes: the body's width)
       const x = from.x + d.x * s, z = from.z + d.z * s;
       if (c.solid(x - d.z * r, from.y + 1.0, z + d.x * r) || c.solid(x + d.z * r, from.y + 1.0, z - d.x * r)) { free = Math.min(free, s - r); break; }

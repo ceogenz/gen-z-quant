@@ -2,11 +2,15 @@
 // and the engine's voice is real recordings cut into constant-pitch loops at a few engine speeds (assets/sfx/engine),
 // played together and crossfaded by rpm, each pitched by rpm / its own rpm:
 //   v8-*    a Maserati GranTurismo S (the Ferrari-built 4.7 V8), standing, idling and revving (lmartins, CC BY 4.0)
-// The gearbox: six gears, an automatic that shifts late under full throttle and early at a cruise, a kick-down when the
-// throttle goes in at speed, a launch that slips the clutch, a short ignition cut on each upshift (the note drops and the
-// exhaust pops), a rev-matching blip on each downshift under braking, overrun crackle when the throttle lifts at high revs,
-// the rev limiter's bounce (wheelspin against a wall, flat out in reverse), and an idle burble at rest.
-// Load is heard as level and brightness: on the throttle the loops play open and driven, off it they drop back, darker.
+// The gearbox: six gears and a tall overdrive, an automatic that shifts late under full throttle and early at a cruise,
+// settles into the overdrive once the speed holds steady (flat out at 34 m/s about 3000 rpm, the boost's 56 about 5000),
+// a kick-down when the throttle goes in at speed (or the boost lights), a launch that slips the clutch, a short ignition
+// cut on each upshift (the note drops and the exhaust pops), a rev-matching blip on each downshift under braking,
+// overrun crackle when the throttle lifts, the rev limiter's bounce (wheelspin against a wall, flat out in reverse), and
+// an idle burble at rest.
+// Load is what the engine is giving, read off what the car is doing (its acceleration), not the pedal alone: pulling away
+// and gathering speed the loops play open and driven; held at a steady speed, the throttle still down, it only ticks over
+// (lower, darker, quieter); off the throttle they drop back, darker.
 // Until the loops arrive (or if they can't), a plain synthesized note follows the same gearbox.
 // createSupercar(M, out, { voice }) -> { update(dt, s) -> state, ready, stop(), rev(delay), state }
 //   s.mute: no pops or crackle (it is fading out, the car going ALL ELECTRIC); rev(delay): the engine catching, a blip
@@ -23,8 +27,10 @@ export const LOOPS_V8 = [
 ];
 const VOICES = { v8: LOOPS_V8 };
 
-// the gearbox: road speed (m/s) per 1000 rpm in each gear; the car tops out at 34 m/s (56 boosting)
-const GEARS = [1.69, 2.75, 3.81, 4.88, 6.0, 7.25];
+// the gearbox: road speed (m/s) per 1000 rpm in each gear; the car tops out at 34 m/s (56 boosting). The seventh is the
+// overdrive (OD): only a steady speed or the boost's top end takes it there
+const GEARS = [1.69, 2.75, 3.81, 4.88, 6.0, 7.25, 11.3];
+const OD = GEARS.length;
 const REV = 1.6;                 // reverse
 const IDLE = 850, REDLINE = 8000, LAUNCH = 3600;
 const BASE = new URL('../../assets/sfx/engine/', import.meta.url);
@@ -68,7 +74,7 @@ export function createSupercar(M, out, opt = {}) {
   }).catch((e) => { console.warn('[audio] engine loops:', e); return false; });
 
   // the gearbox and the engine's state
-  const S = { gear: 1, rpm: IDLE, target: IDLE, load: 0, cut: 0, shiftT: 0, hold: 0, blip: 0, lim: 0, limT: 0, overrun: 0, popT: 0, acc: 0, lastV: null, stuck: 0, rev: false, kick: false, mute: false, revT: 0, catchT: 0 };
+  const S = { gear: 1, rpm: IDLE, target: IDLE, load: 0, cut: 0, shiftT: 0, hold: 0, blip: 0, lim: 0, limT: 0, overrun: 0, popT: 0, acc: 0, lastV: null, stuck: 0, rev: false, kick: false, mute: false, revT: 0, catchT: 0, steady: 0, tip: 0, prevGas: 0 };
   const gearRpm = (v, g) => (v / (g === 'R' ? REV : GEARS[g - 1])) * 1000;
 
   function pop(k = 1, big = false, delay = 0) {
@@ -96,7 +102,11 @@ export function createSupercar(M, out, opt = {}) {
     if (S.revT > 0 && (S.revT -= dt) <= 0) S.catchT = 0.55;
     S.catchT = Math.max(0, S.catchT - dt);
     S.acc += (((v - S.lastV) / Math.max(1e-3, dt)) - S.acc) * Math.min(1, dt * 8); S.lastV = v;
-    const hard = gas > 0.5 && S.acc > 3, cruising = gas > 0 && !hard;
+    const hard = gas > 0.5 && S.acc > 3;
+    // the throttle going in (its first moments bark whatever the car does next); held on with the car no longer
+    // gathering speed (at its top speed): steady
+    S.tip = gas > 0.5 && S.prevGas <= 0.3 ? 0.35 : Math.max(0, S.tip - dt);
+    S.steady = gas > 0.3 && Math.abs(S.acc) < 1.5 && v > 19 ? S.steady + dt : 0;
     S.shiftT -= dt; S.cut = Math.max(0, S.cut - dt); S.blip = Math.max(0, S.blip - dt);
     S.rev = vs < -0.3 || (th < 0 && v < 0.3);
 
@@ -110,13 +120,17 @@ export function createSupercar(M, out, opt = {}) {
         S.gear++; S.shiftT = 0.28;
         // flat out, the shift cuts the ignition for a moment: the note drops, a pop or two as the next gear takes it
         if (hard || (gas > 0.5 && r > 6500)) { S.cut = 0.075; pop(0.6 + 0.4 * gas, r > 6500 && Math.random() < 0.6); if (Math.random() < 0.5) pop(0.5, false, 0.045); }
+      } else if (S.gear === OD - 1 && S.steady > 0.6) {
+        // a steady speed: up into the overdrive, quietly (no cut, no pops), the revs settling to a cruise's
+        S.gear = OD; S.shiftT = 0.35;
       } else if (S.gear > 1) {
         // down, straight to the gear it wants (a twin-clutch skips gears): coasting or braking under 2600, to the
         // tallest gear that keeps it over 2900, with a blip to match the revs; the throttle in hard under 3600 (a
-        // kick-down) to the lowest gear that keeps it under 5600
+        // kick-down: as it goes in, or the car gathering speed again, the boost lit) to the lowest gear that keeps it
+        // under 5600. (Held flat at its top speed in the overdrive it stays there: nothing more to pull for)
         let g = S.gear;
-        if (gas < 0.3 && r < 2600) { g = 1; for (let k = S.gear - 1; k >= 1; k--) if (gearRpm(v, k) >= 2900) { g = Math.min(6, k); break; } if (gearRpm(v, g) > 6000) g = Math.min(S.gear, g + 1); }
-        else if (gas > 0.5 && r < 3600 && S.acc > -1) { for (let k = 1; k < S.gear; k++) if (gearRpm(v, k) <= 5600) { g = k; break; } }
+        if (gas < 0.3 && r < 2600) { g = 1; for (let k = S.gear - 1; k >= 1; k--) if (gearRpm(v, k) >= 2900) { g = Math.min(OD - 1, k); break; } if (gearRpm(v, g) > 6000) g = Math.min(S.gear, g + 1); }
+        else if (gas > 0.5 && r < 3600 && (S.tip > 0 || S.acc > 1.5)) { for (let k = 1; k < S.gear; k++) if (gearRpm(v, k) <= 5600) { g = k; break; } }
         if (g < S.gear) {
           S.gear = g; S.shiftT = 0.18;
           if (gas < 0.3) { S.blip = 0.16; if (braking && gearRpm(v, g) > 3200 && Math.random() < 0.55) pop(0.5); }
@@ -151,12 +165,15 @@ export function createSupercar(M, out, opt = {}) {
     } else S.limT = 0;
     S.rpm = Math.max(IDLE * 0.9, Math.min(REDLINE + 50, S.rpm));
 
-    // the load: on the throttle (and the blip's stab of it), off in the cut and the limiter's bounces
-    const want = S.cut > 0 || S.lim ? 0 : Math.max(gas, S.blip > 0 ? 0.6 : 0, S.catchT > 0.2 ? 0.85 : 0, S.stuck > 0.5 ? 1 : 0);
-    S.load += (want - S.load) * Math.min(1, dt / (want > S.load ? 0.04 : 0.09));
+    // the load: on the throttle as hard as the car is pulling (full from about 7 m/s² up, a fifth of it held at a
+    // steady speed; full for the throttle's first moments), the blip's stab of it; off in the cut and the limiter's
+    // bounces. Settling at a steady speed it eases off over a beat; lifting, at once
+    const pull = S.tip > 0 ? 1 : Math.min(1, Math.max(0.2, 0.2 + S.acc / 9));
+    const want = S.cut > 0 || S.lim ? 0 : Math.max(gas * pull, S.blip > 0 ? 0.6 : 0, S.catchT > 0.2 ? 0.85 : 0, S.stuck > 0.5 ? 1 : 0);
+    S.load += (want - S.load) * Math.min(1, dt / (want > S.load ? 0.04 : gas > 0.3 && !S.cut && !S.lim ? 0.4 : 0.09));
 
-    // overrun: lifting at high revs crackles for a second or so
-    if (gas < 0.1 && S.rpm > 3600 && S.prevGas > 0.5) S.overrun = Math.min(1.6, 0.7 + (S.rpm - 3600) / 3000);
+    // overrun: lifting crackles for a second or so (more the higher the revs; from the overdrive's cruise too)
+    if (gas < 0.1 && S.rpm > 2800 && S.prevGas > 0.5) S.overrun = Math.min(1.6, Math.max(0.6, 0.7 + (S.rpm - 3200) / 3000));
     S.prevGas = gas;
     S.overrun = Math.max(0, S.overrun - dt);
     if (S.overrun > 0 && gas < 0.1 && S.rpm > 1500) {
