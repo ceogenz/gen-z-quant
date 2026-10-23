@@ -3,7 +3,8 @@
 //  - Quant's health: a GTA bar under the minimap (above it when there is no room), a white chunk trailing what he lost
 //  - over each Degen in the fight: his health, and his cue as he winds up (yellow: counter it; red: dodge it); dazed, the
 //    grab prompt
-//  - edge arrows toward a man winding up off screen
+//  - edge arrows toward a man winding up off screen; and a white one (his distance under it) toward every man of the fight
+//    still in it but out of the view, the last one standing's pulsing
 //  - the combo: a floating hit count and the takedown meter
 //  - the controls: the city's key bar (walk, turn, jump) swapped for the fight's keys while he fights, and the first time
 //    a fight starts a fuller card top left; banners (COUNTER, TAKEDOWN), short messages; a red edge when hurt
@@ -49,6 +50,13 @@ const CSS = `
 #wf .wf-tag .wf-daze kbd{font:800 11px/1 'Barlow Condensed',system-ui,sans-serif;border:1.5px solid ${Y};border-radius:4px;padding:2px 4px;margin-right:4px}
 #wf .wf-arrow{position:fixed;left:0;top:0;width:0;height:0;will-change:transform}
 #wf .wf-arrow:before{content:'';position:absolute;left:-14px;top:-11px;border-left:28px solid currentColor;border-top:11px solid transparent;border-bottom:11px solid transparent;filter:drop-shadow(0 0 6px currentColor)}
+#wf .wf-foe{position:fixed;left:0;top:0;width:0;height:0;will-change:transform;transition:opacity .25s}
+#wf .wf-foe i{position:absolute;left:0;top:0;width:0;height:0}
+#wf .wf-foe i:before{content:'';position:absolute;left:-11px;top:-9px;border-left:22px solid #fff;border-top:9px solid transparent;border-bottom:9px solid transparent;filter:drop-shadow(0 0 2px rgba(0,0,0,.9)) drop-shadow(0 0 7px ${R})}
+#wf .wf-foe span{position:absolute;left:-30px;top:13px;width:60px;text-align:center;font:700 13px/1 'Barlow Condensed',system-ui,sans-serif;letter-spacing:.08em;color:#fff}
+#wf .wf-foe span:before{content:'';display:inline-block;width:7px;height:7px;border-radius:50%;background:${R};margin:0 4px 1px 0;box-shadow:0 0 6px ${R}}
+#wf .wf-foe.wf-last i:before{animation:wfFoe .8s ease-in-out infinite alternate}
+@keyframes wfFoe{to{transform:translateX(5px)}}
 #wf .wf-vig{position:fixed;inset:0;background:radial-gradient(ellipse at center,rgba(0,0,0,0) 55%,rgba(200,20,20,.5) 100%);opacity:0}
 #wf .wf-slow{position:fixed;inset:0;background:radial-gradient(ellipse at center,rgba(0,0,0,0) 52%,rgba(255,201,60,.16) 100%);opacity:0;transition:opacity .15s}
 #wf .wf-banner{position:fixed;left:50%;top:24vh;transform:translateX(-50%) scale(.92);font:italic 800 38px/1 'Barlow Condensed',system-ui,sans-serif;letter-spacing:.12em;color:${Y};opacity:0;transition:opacity .15s,transform .15s;white-space:nowrap;text-shadow:0 2px 14px rgba(0,0,0,.6)}
@@ -97,7 +105,7 @@ export function createHud(c) {
   root.innerHTML = `<div class="wf-vig"></div><div class="wf-slow"></div>
     <div class="wf-hp"><i class="wf-trail"></i><i class="wf-fill"></i></div>
     <div class="wf-combo"><div class="wf-n">0</div><div class="wf-t">HITS</div><div class="wf-m"><i></i></div><div class="wf-td">TAKEDOWN READY &middot; RMB / K</div></div>
-    <div class="wf-tags"></div><div class="wf-arrows"></div>
+    <div class="wf-tags"></div><div class="wf-foes"></div><div class="wf-arrows"></div>
     <div class="wf-banner"></div><div class="wf-msg"></div>
     <div class="wf-offer"><div><kbd>E</kbd><span>PICK UP <b></b></span></div></div>
     <div class="wf-held"><b></b><span class="wf-pips"></span><small></small></div>
@@ -107,8 +115,8 @@ export function createHud(c) {
   const $ = (s) => root.querySelector(s);
   const hp = $('.wf-hp'), fill = $('.wf-hp .wf-fill'), trail = $('.wf-hp .wf-trail');
   const combo = $('.wf-combo'), comboN = $('.wf-combo .wf-n'), meter = $('.wf-combo .wf-m i');
-  const vig = $('.wf-vig'), slow = $('.wf-slow'), banner = $('.wf-banner'), msg = $('.wf-msg'), hint = $('.wf-hint'), tags = $('.wf-tags'), arrows = $('.wf-arrows');
-  const tagEls = new Map(), arrowEls = [];
+  const vig = $('.wf-vig'), slow = $('.wf-slow'), banner = $('.wf-banner'), msg = $('.wf-msg'), hint = $('.wf-hint'), tags = $('.wf-tags'), arrows = $('.wf-arrows'), foes = $('.wf-foes');
+  const tagEls = new Map(), arrowEls = [], foeEls = new Map();
   const offer = $('.wf-offer'), offerName = $('.wf-offer b'), held = $('.wf-held'), heldName = $('.wf-held b'), pips = $('.wf-held .wf-pips'), heldKeys = $('.wf-held small');
   let heldKey = '';
   let trailV = 1, hold = 0, lastHp = 100, vigV = 0, bannerT = 0, msgT = 0, hintT = 0, hinted = false, lastN = 0, fightKeys = false;
@@ -190,6 +198,40 @@ export function createHud(c) {
         el.style.display = 'block'; el.style.color = t.kind === 'dodge' ? R : Y; el.style.opacity = (0.4 + 0.6 * lvl).toFixed(2);
         el.style.transform = `translate(${((Math.cos(a) / rr * 0.5 + 0.5) * W).toFixed(1)}px,${((1 - (Math.sin(a) / rr * 0.5 + 0.5)) * H).toFixed(1)}px) rotate(${-a}rad) scale(${0.8 + 0.5 * lvl})`;
       });
+      // the men of the fight still in it but out of the view: a white arrow at the edge of the screen toward each (his
+      // distance under it), pulsing for the last one standing; one winding up gets the cue arrow above instead
+      {
+        // (the men within 40 m; down to the last one or two on their feet, them from as far off as they are: the last
+        // man coming from up the street is still the fight, and the view may be anywhere)
+        const q = c.W.person.position, cued = new Set(S.threats.map((t) => t.e)), live = [];
+        let up = 0; for (const e of c.enemies) if (e.alive && e.state !== 'idle' && (e.standing || e.state === 'getup')) up++;
+        for (const e of c.enemies) if (e.alive && e.state !== 'idle' && (S.fighting || e.engagedOnce) && Math.hypot(e.pos.x - q.x, e.pos.z - q.z) < (up <= 2 ? 160 : 40)) live.push(e);
+        const standing = live.filter((e) => e.standing).length;
+        const seen = new Set();
+        for (const e of live) {
+          if (!onFoot || S.cutscene || cued.has(e)) continue;
+          const p = e.chest(_v).project(cam), behind = p.z > 1;
+          let x = p.x, y = p.y; if (behind) { x = -x; y = -y; if (Math.abs(x) < 1e-3 && Math.abs(y) < 1e-3) y = -1; }
+          if (!behind && Math.abs(x) < 0.94 && Math.abs(y) < 0.9) continue;
+          seen.add(e);
+          let el = foeEls.get(e);
+          if (!el) { el = document.createElement('div'); el.className = 'wf-foe'; el.innerHTML = '<i></i><span></span>'; foes.appendChild(el); foeEls.set(e, el); el._i = el.firstChild; el._d = el.lastChild; }
+          // (pinned inside the edge, the side he is on; behind the lens, the way round to him)
+          if (behind) y = Math.min(y, -0.2);
+          const a = Math.atan2(y, x), rr = Math.max(Math.abs(Math.cos(a)) / 0.86, Math.abs(Math.sin(a)) / 0.74);
+          el.style.display = 'block';
+          el.style.opacity = e.standing ? '1' : '0.5';
+          el.classList.toggle('wf-last', standing === 1 && e.standing);
+          el.style.transform = `translate(${((Math.cos(a) / rr * 0.5 + 0.5) * W).toFixed(1)}px,${((1 - (Math.sin(a) / rr * 0.5 + 0.5)) * H).toFixed(1)}px)`;
+          el._i.style.transform = `rotate(${-a}rad)`;
+          const d = Math.round(Math.hypot(e.pos.x - q.x, e.pos.z - q.z)) + ' m';
+          if (el._d.textContent !== d) el._d.textContent = d;
+        }
+        for (const [e, el] of foeEls) {
+          if (!c.enemies.includes(e)) { el.remove(); foeEls.delete(e); }
+          else if (!seen.has(e)) el.style.display = 'none';
+        }
+      }
       // the item by him, and the one in his hands
       const it = onFoot && !S.cutscene ? me.offer : null;
       if (it && it.obj) {

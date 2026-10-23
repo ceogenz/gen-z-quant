@@ -221,7 +221,7 @@ class ThirdPersonControllerManager {
       ent.crowd.add(ent.rig, 0);
       ent.crowd.end();
     } else if (this.activeMode === 'car') {
-      ent.vx = ent.vz = ent.angularVel = ent.steerAngle = 0;
+      ent.vx = ent.vz = ent.angularVel = ent.steerAngle = ent.steerK = 0;
       ent.pitchVel = ent.rollVel = ent.heaveY = ent.heaveVel = 0;
       ent.chassisPivot.rotation.x = ent.chassisPivot.rotation.z = 0;
       ent.chassisPivot.position.y = 0;
@@ -1105,6 +1105,33 @@ class ThirdPersonControllerManager {
     }
   }
 
+  // (WAGMI City) Keyboard steering for a car with c.handling { rMin, yawMax, grip, rampIn: [slow, fast], rampOut, vRef }:
+  //  - the key moves a steer (c.steerK, -1..1) at a steady slew: to full lock in rampIn s (the first at walking pace,
+  //    the second from vRef m/s up), so a tap turns it a little and a hold all the way; let go (or the other key) it
+  //    comes back to the middle in rampOut s, quicker than it went;
+  //  - full lock turns it, by speed: a tight circle of rMin m at walking pace (turning out of a corner), no faster than
+  //    yawMax rad/s, and no harder than grip m/s² sideways (less lock the faster it goes: no twitch flat out);
+  //  - its front wheels at the angle that turn takes (c.steerAngle). Returns full lock's yaw rate now (rad/s).
+  steerHandled(c, input, dt) {
+    const H = c.handling;
+    const v = Math.abs(c.speed);
+    let s = c.steerK || 0;
+    if (input * s < 0 || Math.abs(input) < Math.abs(s)) {
+      s += Math.max(-dt / H.rampOut, Math.min(dt / H.rampOut, input - s));
+    } else {
+      const k = Math.min(1, v / H.vRef);
+      const T = H.rampIn[0] + (H.rampIn[1] - H.rampIn[0]) * k;
+      s += Math.max(-dt / T, Math.min(dt / T, input - s));
+    }
+    c.steerK = s;
+    const full = (u) => Math.min(u / H.rMin, H.yawMax, H.grip / Math.max(u, 0.1));
+    const yawFull = full(v);
+    if (v > 0.2) c.heading += s * yawFull * (c.speed >= 0 ? 1 : -1) * dt;
+    const u = Math.max(v, 1.5);
+    c.steerAngle = s * Math.atan(((c.axle || 1.45) * 2 * full(u)) / u);
+    return yawFull;
+  }
+
   updateCar(dt) {
     const c = this.entities.car;
     // (WAGMI City: a car may bring its own pace: topSpeed, boostSpeed, accel, boostAccel)
@@ -1127,12 +1154,18 @@ class ThirdPersonControllerManager {
     if (this.keys.left) steerInput = this.keys.left;
     if (this.keys.right) steerInput = -this.keys.right;
 
-    c.steerAngle += (steerInput * 0.52 - c.steerAngle) * Math.min(1, dt * 10);
-
-    if (Math.abs(c.speed) > 0.2) {
-      const dirSign = c.speed >= 0 ? 1 : -1;
-      const speedFactor = Math.min(1.0, Math.abs(c.speed) / 8.0);
-      c.heading += c.steerAngle * 2.4 * speedFactor * dirSign * dt;
+    // (WAGMI City: a car with its own handling, c.handling, steers for a keyboard: see steerHandled)
+    let yawFull = 0;
+    if (c.handling) {
+      yawFull = this.steerHandled(c, steerInput, dt);
+      steerInput = c.steerK;
+    } else {
+      c.steerAngle += (steerInput * 0.52 - c.steerAngle) * Math.min(1, dt * 10);
+      if (Math.abs(c.speed) > 0.2) {
+        const dirSign = c.speed >= 0 ? 1 : -1;
+        const speedFactor = Math.min(1.0, Math.abs(c.speed) / 8.0);
+        c.heading += c.steerAngle * 2.4 * speedFactor * dirSign * dt;
+      }
     }
 
     // Integrate collision yaw spin & lateral tire slip velocity with asphalt grip damping
@@ -1171,7 +1204,8 @@ class ThirdPersonControllerManager {
 
     // 3-DOF Spring-Damper Chassis Suspension (Pitch, Roll & Vertical Heave)
     const targetPitch = -throttle * 0.026;
-    const targetRoll = -c.steerAngle * (c.speed / maxSpeed) * 0.092;
+    // (a handled car rolls with its turn's sideways pull: 0.048 rad at 30 m/s², as the old way at its top speed)
+    const targetRoll = c.handling ? -c.steerK * yawFull * c.speed * 0.0016 : -c.steerAngle * (c.speed / maxSpeed) * 0.092;
     const springK = 68.0;
     const dampC = 11.2;
     c.pitchVel += ((targetPitch - c.chassisPivot.rotation.x) * springK - c.pitchVel * dampC) * dt;

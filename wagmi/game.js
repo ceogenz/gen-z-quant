@@ -33,6 +33,10 @@ const WAGMI = (window.WAGMI = { app, person, car });
   Object.assign(car, { body: { hx: 1.08, z0: -2.33, z1: 2.47, top: 1.28 }, axle: 1.56, mass: 2.0,
     chaseDistance: 6.7, chaseHeight: 2.0, chase: { fov: 58, pull: 0.002, kick: 1.1, boostKick: 3.0, vmax: 34, shake: 0.03, vtop: 56 } });
   Object.assign(car, { label: "Quant's car", topSpeed: 34, boostSpeed: 56, accel: 16, boostAccel: 32, roadster: rs });
+  // its steering, for a keyboard (js/controllers.js steerHandled): to full lock in 0.13 s at walking pace, 0.24 s from
+  // 34 m/s up, back to the middle in 0.09 s; full lock a 4.6 m circle at walking pace, at most 80 degrees a second, and
+  // never more than 30 m/s² sideways (flat out at 76 mph about 51 degrees a second; on the boost less still)
+  car.handling = { rMin: 4.6, yawMax: 1.4, grip: 30, rampIn: [0.13, 0.24], rampOut: 0.09, vRef: 34 };
   // (the speed panel's name for it, when the city started in the car before this ran)
   if (cm.activeMode === 'car') { const lab = document.getElementById('hud-active-mode'); if (lab) lab.textContent = car.label; }
   car.onUpdate = (dt, keys, throttle, steer) => {
@@ -41,15 +45,18 @@ const WAGMI = (window.WAGMI = { app, person, car });
     car.boosting = !!keys.boost && throttle > 0;
     rs.setThrust(keys.boost && throttle > 0 ? 1 : 0, keys.boost && throttle > 0 ? 0.85 : 0);
     rs.update(dt, car.speed, -steer * 0.9);
+    alongWall(dt, throttle);
     unpin(dt, throttle);
+    stuckClock(dt, throttle);
   };
   // pinned (a tree ahead and one behind, a wreck against a wall): the throttle or reverse held PIN s with the car hardly
   // moving, it wriggles free, slid over to the nearest spot round it where its box is clear of the buildings and the
   // street's things (a beat, at 3 m/s; again after another PIN s if that wasn't enough)
-  const PIN = 1.6, pin = { t: 0, x: 0, z: 0, slide: 0, dx: 0, dz: 0 }, probe = { heading: 0, speed: 0, vx: 0, vz: 0, angularVel: 0, body: null };
-  const boxClear = (x, z) => {
-    const B = car.body, cs = Math.cos(car.heading), sn = Math.sin(car.heading), p = new THREE.Vector3(x, 0, z);
-    Object.assign(probe, { heading: car.heading, speed: 0, vx: 0, vz: 0, body: B });
+  const PIN = 1.1, pin = { t: 0, x: 0, z: 0, slide: 0, dx: 0, dz: 0 }, probe = { heading: 0, speed: 0, vx: 0, vz: 0, angularVel: 0, body: null };
+  // (its box at (x, z) turned h clear of the buildings and the street's things)
+  const boxClear = (x, z, h = car.heading) => {
+    const B = car.body, cs = Math.cos(h), sn = Math.sin(h), p = new THREE.Vector3(x, 0, z);
+    Object.assign(probe, { heading: h, speed: 0, vx: 0, vz: 0, body: B });
     cm.resolveHorizontalCollision(p, 1.35, 1.0, probe);
     if (Math.hypot(p.x - x, p.z - z) > 0.01) return false;
     for (const b of WAGMI.crash?.props?.around(x, z, 5) || []) {
@@ -59,6 +66,43 @@ const WAGMI = (window.WAGMI = { app, person, car });
     }
     return true;
   };
+  // against a wall, nosing along it: the throttle (or reverse) held into a building at a slant, at a crawl, turns the
+  // car along the wall (the way it was already more facing, up to ~1.6 rad/s) and eases it off it, so it drives on
+  // along the wall instead of grinding into it; head on (within ~25 degrees) it is left to reverse
+  const _wp = new THREE.Vector3();
+  function alongWall(dt, throttle) {
+    if (!throttle || car.halt || Math.abs(car.speed) > 6 || cm.activeMode !== 'car') return;
+    const dir = throttle > 0 ? 1 : -1, fx = Math.sin(car.heading) * dir, fz = Math.cos(car.heading) * dir;
+    // (its box a little further the way it is pushed: where the buildings put it back from, the wall's normal)
+    _wp.set(car.position.x + fx * 0.3, 0, car.position.z + fz * 0.3);
+    Object.assign(probe, { heading: car.heading, speed: 0, vx: 0, vz: 0, body: car.body });
+    const x0 = _wp.x, z0 = _wp.z;
+    cm.resolveHorizontalCollision(_wp, 1.35, 1.0, probe);
+    let nx = _wp.x - x0, nz = _wp.z - z0;
+    const n = Math.hypot(nx, nz);
+    if (n < 0.05) return;
+    nx /= n; nz /= n;
+    const into = -(fx * nx + fz * nz);
+    if (into < 0.15 || into > 0.9) return;
+    // (the wall's way nearer the way it faces)
+    let tx = -nz, tz = nx; if (tx * fx + tz * fz < 0) { tx = -tx; tz = -tz; }
+    const want = Math.atan2(tx * dir, tz * dir), d = Math.atan2(Math.sin(want - car.heading), Math.cos(want - car.heading));
+    car.heading += Math.sign(d) * Math.min(Math.abs(d), 1.6 * dt);
+    car.vx += nx * 0.6 * dt * 10; car.vz += nz * 0.6 * dt * 10;
+  }
+  // how long the car has been held going nowhere: the throttle or reverse on all along, and under 2.5 m from where it
+  // was 1.5 s ago (a wriggle free that slides it a metre or two and back into the wall counts as nowhere); over 1.2 s,
+  // the prompt offers the reset (see the prompt, below)
+  const stuck = { t: 0, held: 0, clock: 0, hist: [] };
+  function stuckClock(dt, throttle) {
+    stuck.clock += dt;
+    stuck.held = throttle && !car.halt ? stuck.held + dt : 0;
+    stuck.hist.push([stuck.clock, car.position.x, car.position.z]);
+    while (stuck.hist.length > 2 && stuck.clock - stuck.hist[1][0] > 1.5) stuck.hist.shift();
+    const [, x0, z0] = stuck.hist[0];
+    stuck.t = stuck.held > 1.2 && Math.hypot(car.position.x - x0, car.position.z - z0) < 2.5 ? stuck.held : 0;
+  }
+  WAGMI.carStuck = () => stuck.t;
   function unpin(dt, throttle) {
     if (pin.slide > 0) { pin.slide -= dt; car.vx = pin.dx * 3; car.vz = pin.dz * 3; return; }
     if (!throttle || car.halt || Math.hypot(car.position.x - pin.x, car.position.z - pin.z) > 0.8) { pin.t = 0; pin.x = car.position.x; pin.z = car.position.z; return; }
@@ -74,6 +118,93 @@ const WAGMI = (window.WAGMI = { app, person, car });
       return;
     }
   }
+  // WAGMI.recoverCar(): the car put back on the road: on the nearest lane (the city's road graph, js/road-network.js, or
+  // a shore highway's), facing the lane's way (of two near ones, the one nearer the way it faces), upright, stopped,
+  // where its box is clear of the buildings, the street's things and every other car (slid along the lane to find room);
+  // true if it moved it. Also on WAGMI.recoverCar.key (X), any time in the car. On foot it puts the parked car back.
+  const TS = app.trafficSystem, HW = app.highwayTraffic;
+  const wrapA = (a) => Math.atan2(Math.sin(a), Math.cos(a));
+  function lanesNear(x, z, R) {
+    const out = [];
+    for (const e of TS?.network?.edges || []) {
+      if (Math.abs(e.mx - x) > R + e.len / 2 || Math.abs(e.mz - z) > R + e.len / 2) continue;
+      for (const l of e.lanes) {
+        const ax = e.sx + e.rx * l, az = e.sz + e.rz * l;
+        const t = Math.max(3, Math.min(e.len - 3, (x - ax) * e.dx + (z - az) * e.dz));
+        if (e.len < 6) continue;
+        const px = ax + e.dx * t, pz = az + e.dz * t, d = Math.hypot(px - x, pz - z);
+        if (d < R) out.push({ x: px, z: pz, h: Math.atan2(e.dx, e.dz), d, ux: e.dx, uz: e.dz, lo: 3 - t, hi: e.len - 3 - t });
+      }
+    }
+    for (const lane of HW?.lanes || []) {
+      const [x0, x1, z0, z1] = lane.box;
+      if (x < x0 - R || x > x1 + R || z < z0 - R || z > z1 + R) continue;
+      const P = lane.pts;
+      for (let i = 0; i + 1 < P.length; i++) {
+        const a = P[i], b = P[i + 1];
+        if (a.y < -0.5 || b.y < -0.5) continue;
+        const sx = b.x - a.x, sz = b.z - a.z, L = Math.hypot(sx, sz); if (L < 0.5) continue;
+        const ux = sx / L, uz = sz / L, t = Math.max(0, Math.min(L, (x - a.x) * ux + (z - a.z) * uz));
+        const px = a.x + ux * t, pz = a.z + uz * t, d = Math.hypot(px - x, pz - z);
+        if (d < R) out.push({ x: px, z: pz, h: Math.atan2(ux, uz), d, ux, uz, lo: -12, hi: 12 });
+      }
+    }
+    return out;
+  }
+  // (no other car within a metre of its box there: the city's, the highways', the mission's, the chase's)
+  const _o = { nx: 0, nz: 0, pen: 0, x: 0, z: 0 };
+  function carsClear(x, z, h) {
+    const B = car.body, hl = (B.z1 - B.z0) / 2 + 1, cz = (B.z1 + B.z0) / 2, cx = x + Math.sin(h) * cz, cz2 = z + Math.cos(h) * cz;
+    const list = (WAGMI.crash?.bodies?.(cx, cz2, 14) || []).slice();
+    for (const P of WAGMI.pursuit?.chase?.cars || []) if (!P.gone) list.push([P.x, P.z, P.h, P.hw, P.hl]);
+    for (const [ox, oz, oy, ow, ol] of list) {
+      const c1 = Math.cos(h), s1 = Math.sin(h), c2 = Math.cos(oy), s2 = Math.sin(oy), dx = cx - ox, dz = cz2 - oz;
+      let apart = false;
+      for (const [nx, nz] of [[c1, -s1], [s1, c1], [c2, -s2], [s2, c2]]) {
+        const ra = (B.hx + 1) * Math.abs(nx * c1 - nz * s1) + hl * Math.abs(nx * s1 + nz * c1);
+        const rb = ow * Math.abs(nx * c2 - nz * s2) + ol * Math.abs(nx * s2 + nz * c2);
+        if (Math.abs(dx * nx + dz * nz) >= ra + rb) { apart = true; break; }
+      }
+      if (!apart) return false;
+    }
+    return true;
+  }
+  function recoverCar() {
+    if (WAGMI.cutscene || WAGMI.directed || WAGMI.ride?.phase) return false;
+    const x = car.position.x, z = car.position.z;
+    for (const R of [45, 120, 300]) {
+      const cands = lanesNear(x, z, R);
+      // (nearest first; a lane facing well away from the way it faces counts as further)
+      for (const c of cands) c.score = c.d + 9 * (wrapA(c.h - car.heading) / Math.PI) ** 2;
+      cands.sort((a, b) => a.score - b.score);
+      for (const c of cands.slice(0, 24)) {
+        for (const k of [0, 5, -5, 10, -10, 16, -16, 24, -24]) {
+          if (k < c.lo || k > c.hi) continue;
+          const px = c.x + c.ux * k, pz = c.z + c.uz * k;
+          if (cm.getGroundHeight(px, pz, 'car') > 0.3 || !boxClear(px, pz, c.h) || !carsClear(px, pz, c.h)) continue;
+          place(px, pz, c.h);
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+  function place(x, z, h) {
+    const driving = cm.activeMode === 'car';
+    // (the camera snapped to its usual place behind it, not glided from where it was: wedged by a wall or a bus, that
+    // was low and tight against the car)
+    if (driving) { const cs = app.cameraSystem; Object.assign(cs, { orbitYawOffset: 0, orbitPitchOffset: 0.09, userOrbitTimer: 0, initialized: false }); }
+    car.position.set(x, cm.getGroundHeight(x, z, 'car'), z);
+    Object.assign(car, { heading: h, speed: 0, vx: 0, vz: 0, angularVel: 0, steerAngle: 0, steerK: 0, halt: 0, fallVel: 0, pitchVel: 0, rollVel: 0, heaveVel: 0, heaveY: 0 });
+    car.chassisPivot.rotation.x = car.chassisPivot.rotation.z = 0; car.chassisPivot.position.y = 0;
+    car.mesh.position.copy(car.position); car.mesh.rotation.y = h;
+    Object.assign(pin, { t: 0, slide: 0, x, z }); Object.assign(stuck, { t: 0, held: 0, hist: [] });
+    if (driving) { person.position.copy(car.position); person.heading = h; }
+    WAGMI.audio?.play?.('whoosh', { pos: [x, 0.8, z], vol: 0.6, rate: 0.8 });
+    // (the stall help's 'Stuck?' offer, if it is up, has been answered)
+    WAGMI.ui?.offer?.(null);
+  }
+  WAGMI.recoverCar = Object.assign(recoverCar, { key: 'KeyX' });
   // (parked, it still settles its thrust; rolling on with nobody in it, its wheels still turn)
   WAGMI.carIdle = (dt) => { if (cm.activeMode !== 'car') { rs.setThrust(0, 0); rs.update(dt, car.speed || 0, 0); } };
   // parked, it is solid to Quant on foot (the city's collision only knows the buildings): its body a box in its own frame
@@ -578,6 +709,25 @@ addEventListener('keydown', (e) => {
   skip();
 });
 Object.assign(ride, { getIn, getOut, skip, door: () => door.p, driver: drv });
+// X in the car: the reset (WAGMI.recoverCar), not while a scene, the pause or the map has the keys
+addEventListener('keydown', (e) => {
+  if (e.code !== WAGMI.recoverCar.key || e.repeat || e.ctrlKey || e.metaKey || e.altKey || /^(INPUT|TEXTAREA|SELECT)$/.test(e.target?.tagName || '')) return;
+  if (cm.activeMode !== 'car' || WAGMI.paused || app.mapSystem?.isFullMapOpen) return;
+  WAGMI.recoverCar();
+});
+// ...and in the car's controls bar (js/main.js draws it per mode): X, Reset car
+{
+  const bar = document.getElementById('hud-controls-hint');
+  const addReset = () => {
+    if (!bar || cm.activeMode !== 'car' || bar.querySelector('.wg-reset')) return;
+    const item = document.createElement('span'); item.className = 'hint wg-reset';
+    const k = document.createElement('kbd'); k.textContent = 'X';
+    const l = document.createElement('span'); l.className = 'hint-label'; l.textContent = 'Reset car';
+    item.append(k, l); bar.appendChild(item);
+  };
+  if (bar) new MutationObserver(addReset).observe(bar, { childList: true });
+  addReset();
+}
 
 const hint = document.createElement('div');
 Object.assign(hint.style, { position: 'fixed', left: '50%', bottom: '120px', transform: 'translateX(-50%)', padding: '10px 18px', borderRadius: '12px',
@@ -602,7 +752,10 @@ let last = performance.now();
 (function tick() {
   const now = performance.now(), dt = Math.min(0.05, (now - last) / 1000); last = now;
   WAGMI.carIdle(dt);
-  const show = ride.phase || WAGMI.paused || WAGMI.cutscene || WAGMI.directed ? '' : cm.activeMode === 'person' && near() ? 'F  ·  Get in' : cm.activeMode === 'car' && Math.abs(car.speed) < 4 ? 'F  ·  Get out' : '';
+  // (held going nowhere a beat in the car: the reset offered first)
+  const pinned = cm.activeMode === 'car' && (WAGMI.carStuck?.() || 0) > 1.2;
+  const show = ride.phase || WAGMI.paused || WAGMI.cutscene || WAGMI.directed ? '' : cm.activeMode === 'person' && near() ? 'F  ·  Get in'
+    : pinned ? 'X  ·  Reset car to road' : cm.activeMode === 'car' && Math.abs(car.speed) < 4 ? 'F  ·  Get out' : '';
   if (hint.textContent !== show) hint.textContent = show;
   hint.style.display = show ? 'block' : 'none';
   if (show) placeHint();

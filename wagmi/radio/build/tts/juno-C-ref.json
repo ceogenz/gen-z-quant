@@ -1,0 +1,7 @@
+{
+ "design": "Female, 17 years old, American, slightly husky low voice, fast and focused, dry sarcastic humour, warm underneath, casual teen speech, close-mic, clean dry studio audio, natural and conversational, not an announcer.",
+ "seed": 1603,
+ "refText": "Okay, so I pulled the wallet history, and it is honestly kind of a mess. Three transfers, same address, all after midnight. I will send you the screenshots, just do not do anything weird with them.",
+ "model": "Qwen3-TTS-12Hz-1.7B-VoiceDesign-bf16",
+ "take": 0
+}

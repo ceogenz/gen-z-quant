@@ -2,15 +2,19 @@
 // twin pinging in Times Square) in the phone frame, Lev's phone (the Degens' group chat), the tail meter (how far
 // behind the van, how suspicious they are), the lookouts' alert marks over their heads, and Lev's car's damage.
 //   const U = createM2UI(W.ui);
-//   U.call.show() / .talk(level) / .share(on) / .hide()     Juno's video call (the phone frame on the right)
+//   U.call.show() / .talk(level) / .share(on) / .hide()     Juno's video call (the phone frame on the right): Juno herself,
+//                                                           frames of her model in her room (juno.js junoPortrait)
 //   U.chat(lines, { every }) -> Promise                     Lev's phone: the chat, a message at a time
 //   U.tail.set({ d, sus, note }) / .hide()                  the tail meter (bottom right)
 //   U.mark(id, { x, y, k, on })  / .unmark(id)              a lookout's '?' filling to '!' at screen x, y
 //   U.target(label, k) / U.target(null)                     a target's damage bar (Lev's car)
 //   U.prompt(text) / U.prompt(null)                         a small key prompt over the middle ('E · Take him down')
+import { junoPortrait } from './juno.js';
 const CSS = `
 #wg .m2-tail { position: absolute; right: 24px; bottom: 228px; width: 250px; padding: 10px 14px 12px; background: rgba(8,10,14,0.62); border-radius: 10px; opacity: 0; transition: opacity .3s; z-index: 4; }
 #wg .m2-tail.on { opacity: 1; }
+/* (a call during the tail: the caller's card, Juno's tile in it, stands above the meter, not over it) */
+#wg:has(.m2-tail.on) .wg-caller { bottom: 360px; }
 #wg .m2-tail .row { display: flex; justify-content: space-between; align-items: baseline; font: 700 14px/1 'Barlow Condensed'; letter-spacing: 3px; color: rgba(255,255,255,.75); }
 #wg .m2-tail .row b { font: 800 24px/1 'Barlow Condensed'; letter-spacing: 0; color: #fff; }
 #wg .m2-tail .bar { position: relative; height: 10px; margin-top: 8px; border-radius: 5px; overflow: hidden;
@@ -34,10 +38,11 @@ const CSS = `
 #wg .m2-prompt.on { opacity: 1; }
 /* Juno's video call and her screen share, in the phone frame */
 .m2-call { position: absolute; inset: 0; background: #070B14; overflow: hidden; }
-.m2-call svg.juno, .m2-call svg.map { position: absolute; inset: 0; width: 100%; height: 100%; transition: opacity .35s; }
+.m2-call .feed, .m2-call svg.map { position: absolute; inset: 0; width: 100%; height: 100%; transition: opacity .35s; }
 .m2-call svg.map { opacity: 0; }
 .m2-call.share svg.map { opacity: 1; }
-.m2-call.share svg.juno { opacity: 0; }
+.m2-call.share .feed { opacity: 0; }
+.m2-call .feed:after { content: ''; position: absolute; inset: 0; background: linear-gradient(rgba(0,0,0,.45), transparent 22%, transparent 70%, rgba(0,0,0,.5)); }
 .m2-call .label { position: absolute; top: 8.5%; left: 0; right: 0; text-align: center; font: 800 18px/1 'Barlow Condensed'; letter-spacing: 3px; text-shadow: 0 1px 4px rgba(0,0,0,.8); }
 .m2-call .label small { display: block; font: 600 12px/1 'Barlow Condensed'; color: rgba(255,255,255,.6); letter-spacing: 1px; margin-top: 5px; }
 .m2-call .wave { position: absolute; left: 14%; right: 14%; bottom: 17%; height: 30px; display: flex; gap: 3px; align-items: center; justify-content: center; }
@@ -69,48 +74,7 @@ const CSS = `
 const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-// Juno on her end of the call: a friendly hacker in her room at night (an original drawing): a big curly puff with a
-// blue scrunchie, round glasses with the screens in them, headphones round her neck, a light-blue hoodie, a monitor and
-// string lights behind her. Two mouths: shut (a smirk) and open, swapped while she talks.
-const JUNO_SVG = `<svg class="juno" viewBox="0 0 90 192" preserveAspectRatio="xMidYMid slice">
-  <defs>
-    <radialGradient id="m2room" cx="50%" cy="38%" r="75%"><stop offset="0" stop-color="#18284A"/><stop offset=".6" stop-color="#0A1222"/><stop offset="1" stop-color="#04070E"/></radialGradient>
-    <linearGradient id="m2hood" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#7EC3FF"/><stop offset="1" stop-color="#3F7FC4"/></linearGradient>
-    <radialGradient id="m2skin" cx="45%" cy="40%" r="70%"><stop offset="0" stop-color="#A86F4C"/><stop offset="1" stop-color="#7A4A2E"/></radialGradient>
-    <linearGradient id="m2lens" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#9FD3FF" stop-opacity=".55"/><stop offset=".5" stop-color="#6CB8FF" stop-opacity=".18"/><stop offset="1" stop-color="#C9E6FF" stop-opacity=".45"/></linearGradient>
-  </defs>
-  <rect width="90" height="192" fill="url(#m2room)"/>
-  <rect x="52" y="34" width="34" height="24" rx="2" fill="#0E2140" stroke="#2F5C94" stroke-width=".8"/>
-  <g fill="#6CB8FF" opacity=".7"><rect x="55" y="38" width="16" height="1.4"/><rect x="55" y="41.5" width="24" height="1.4"/><rect x="58" y="45" width="12" height="1.4"/><rect x="55" y="48.5" width="20" height="1.4"/><rect x="58" y="52" width="9" height="1.4"/></g>
-  <rect x="4" y="44" width="16" height="22" rx="1" fill="#1B1430" stroke="#FFC93C" stroke-opacity=".5" stroke-width=".6"/>
-  <text x="12" y="57" font-family="Barlow Condensed" font-weight="800" font-size="6" fill="#FFC93C" text-anchor="middle" opacity=".8">GM</text>
-  <path d="M0 26 Q22 34 45 28 T90 30" fill="none" stroke="#3A3020" stroke-width=".5"/>
-  <g fill="#FFD27A">${[4, 12, 20, 28, 36, 44, 52, 60, 68, 76, 84].map((x, i) => `<circle cx="${x}" cy="${29 + Math.sin(i * 1.3) * 2.2}" r="1.1" opacity="${0.55 + (i % 3) * 0.15}"/>`).join('')}</g>
-  <path d="M6 192 L9 160 Q12 136 32 130 L40 127 L50 127 L58 130 Q78 136 81 160 L84 192 Z" fill="url(#m2hood)"/>
-  <path d="M34 131 Q45 146 56 131" fill="none" stroke="#2E6AAE" stroke-width="2.2"/>
-  <path d="M40 136 L39 152 M50 136 L51 152" stroke="#F4F7FB" stroke-width="1.1" stroke-linecap="round"/>
-  <circle cx="64" cy="152" r="3.2" fill="#FFC93C"/><path d="M62.6 151.3 h.1 M65.4 151.3 h.1" stroke="#3A2A08" stroke-width=".9" stroke-linecap="round"/><path d="M62.4 153.2 Q64 154.8 65.6 153.2" fill="none" stroke="#3A2A08" stroke-width=".6"/>
-  <path d="M38 112 L37 128 L53 128 L52 112 Z" fill="#7A4A2E"/>
-  <path d="M29 124 Q45 140 61 124" fill="none" stroke="#14161C" stroke-width="3.2"/>
-  <ellipse cx="29" cy="124" rx="4.2" ry="5.2" fill="#14161C"/><ellipse cx="61" cy="124" rx="4.2" ry="5.2" fill="#14161C"/>
-  <ellipse cx="29" cy="124" rx="2.4" ry="3.2" fill="#6CB8FF"/><ellipse cx="61" cy="124" rx="2.4" ry="3.2" fill="#6CB8FF"/>
-  <ellipse cx="45" cy="97" rx="17" ry="21" fill="url(#m2skin)"/>
-  <g fill="#17100C">
-    <circle cx="45" cy="64" r="15"/><circle cx="33" cy="68" r="10"/><circle cx="57" cy="68" r="10"/><circle cx="38" cy="56" r="9"/><circle cx="52" cy="56" r="9"/><circle cx="45" cy="51" r="8"/>
-    <circle cx="28" cy="80" r="6"/><circle cx="62" cy="80" r="6"/><circle cx="27" cy="89" r="4.5"/><circle cx="63" cy="89" r="4.5"/>
-  </g>
-  <path d="M30 82 Q36 72 45 74 Q54 72 60 82 Q55 77 45 78 Q35 77 30 82 Z" fill="#17100C"/>
-  <rect x="35" y="73" width="20" height="3.6" rx="1.8" fill="#6CB8FF"/>
-  <g stroke="#2A1B12" stroke-width="1.3" stroke-linecap="round"><path d="M33 89 L41 88.2"/><path d="M49 88.2 L57 89"/></g>
-  <ellipse cx="37.5" cy="95.5" rx="1.7" ry="2" fill="#120C08"/><ellipse cx="52.5" cy="95.5" rx="1.7" ry="2" fill="#120C08"/>
-  <circle cx="37.5" cy="95.5" r="6.4" fill="url(#m2lens)" stroke="#101216" stroke-width="1.4"/><circle cx="52.5" cy="95.5" r="6.4" fill="url(#m2lens)" stroke="#101216" stroke-width="1.4"/>
-  <path d="M43.9 95 Q45 93.8 46.1 95" fill="none" stroke="#101216" stroke-width="1.2"/>
-  <path d="M33.5 92.5 L36 91" stroke="#fff" stroke-width=".8" opacity=".7"/><path d="M48.5 92.5 L51 91" stroke="#fff" stroke-width=".8" opacity=".7"/>
-  <path d="M44.6 99 Q43.6 104 45.4 104.6" fill="none" stroke="#5E3620" stroke-width=".9"/>
-  <g class="mshut"><path d="M39.5 109.5 Q45 112.4 51.5 108.2" fill="none" stroke="#3B1D12" stroke-width="1.4" stroke-linecap="round"/></g>
-  <g class="mopen" style="display:none"><ellipse cx="45.5" cy="110" rx="4.6" ry="2.6" fill="#3B1D12"/><path d="M41.4 109 Q45.5 108 49.6 109" stroke="#F4EDE8" stroke-width="1" fill="none"/></g>
-  <circle cx="29.5" cy="99" r="1.1" fill="#FFC93C"/><circle cx="60.5" cy="99" r="1.1" fill="#FFC93C"/>
-</svg>`;
+// (Juno on her end of the call is herself now: her model's frames in her room, juno.js; the drawing she was is gone)
 
 // her screen share: Midtown's grid, the burner's twin pinging at 7th Ave and W 47th St (Times Square's bowtie), the
 // trail of older pings coming up from Chelsea
@@ -144,25 +108,25 @@ export function createM2UI(ui) {
   const content = () => ui.phone.el.querySelector('.content');
 
   /* ------------------------------------------------------- Juno's call -- */
-  let callEl = null, waveEl = null, clockEl = null, callT = 0, shut = null, open = null;
+  let callEl = null, waveEl = null, clockEl = null, callT = 0, feed = null;
   const call = {
     show() {
       ui.phone.show('ended'); // (the frame, the shade: its content is ours)
       const c = content(); if (!c) return;
-      c.innerHTML = `<div class="m2-call">${JUNO_SVG}${MAP_SVG}<div class="label">JUNO<small class="clock">VIDEO CALL · 00:00</small></div>
+      c.innerHTML = `<div class="m2-call"><div class="feed"></div>${MAP_SVG}<div class="label">JUNO<small class="clock">VIDEO CALL · 00:00</small></div>
         <div class="tag">BURNER TWIN · LAST PING 20 MIN AGO<b>7th Ave &amp; W 47th St</b></div><div class="pip"></div><div class="wave">${'<i></i>'.repeat(20)}</div><div class="end"></div></div>`;
       callEl = c.querySelector('.m2-call'); waveEl = c.querySelector('.wave'); clockEl = c.querySelector('.clock');
-      shut = c.querySelector('.mshut'); open = c.querySelector('.mopen'); callT = performance.now();
+      feed = junoPortrait(c.querySelector('.feed'), { crop: 'phone' }); callT = performance.now();
     },
     // level 0..1: her voice (the wave, her mouth)
     talk(level = 0) {
       if (!callEl) return;
       for (const b of waveEl.children) b.style.height = `${3 + Math.random() * 24 * level}px`;
-      const o = level > 0.15 && Math.random() < 0.6; if (shut) { shut.style.display = o ? 'none' : ''; open.style.display = o ? '' : 'none'; }
+      feed?.talk(level);
       const s = Math.floor((performance.now() - callT) / 1000); clockEl.textContent = `VIDEO CALL · 00:${String(s % 60).padStart(2, '0')}`;
     },
     share(on) { callEl?.classList.toggle('share', !!on); },
-    hide() { if (callEl) { ui.phone.hide(); callEl = null; } },
+    hide() { if (callEl) { ui.phone.hide(); feed?.stop(); feed = null; callEl = null; } },
     get on() { return !!callEl; },
   };
 

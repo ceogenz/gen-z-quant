@@ -17,7 +17,18 @@
 //   bootOff()                                    the boot veil (index.html: the key art until the gate is up) away
 //   story(on)                                    story mode: the sandbox's toolbar, telemetry, credit pill put away
 //   zk(on, name) · zkTalk(level)                 the video call's frame over ZK's room (mission/zk.js draws the room)
+//   step(id)                                     a new step ('m2:tail'): the one source of truth for what is asked of
+//                                                him. The help kept for the brief and the pause menu starts over with it
+//                                                (an older step's how-to never shows again), the lines said start over
+//                                                with a new mission. Instructions follow his mode too: an objective that
+//                                                asks him into his car gives way to the step's own once he is in it, a
+//                                                help about getting out goes when he is on foot (and getting in, in the car)
+//   holdAct({ label, secs }) -> { step(dt, d) }  a hold-F interaction: the ring (with its key) from `show` m off, the hold
+//                                                counting within `reach` m; step() true once held through
+//   offer({ title, note, options: [{ key, label, run }] }) / offer(null)   a small prompt of real help (top left), its
+//                                                options on the number keys (held off the city's own while it is up)
 import { createPause } from './pause.js';
+import { junoPortrait } from './juno.js';
 export const COLORS = { yellow: '#FFC93C', green: '#4ADE80', red: '#EF4444', blue: '#6CB8FF', acid: '#B6FF3B', white: '#FFFFFF' };
 const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -108,8 +119,21 @@ body.wg-story .wg-help { top: 20px; }
 
 .wg-hold { position: absolute; left: 50%; top: 58%; transform: translate(-50%, -50%); display: flex; align-items: center; gap: 10px; padding: 8px 14px 8px 10px; background: rgba(8,10,14,0.62); border-radius: 10px; font: 700 17px/1 'Barlow Condensed'; opacity: 0; transition: opacity .2s; z-index: 5; }
 .wg-hold.on { opacity: 1; }
+.wg-hold.far { opacity: .78; }
 .wg-hold svg { width: 26px; height: 26px; transform: rotate(-90deg); }
 .wg-hold circle { fill: none; stroke-width: 3.5; }
+/* (the ring says what to do: the objective line under it would only say it twice) */
+body.wg-holding #wg .wg-obj { opacity: 0 !important; }
+.wg-offer { position: absolute; left: 20px; top: 92px; max-width: 380px; padding: 12px 14px 10px; background: rgba(8,10,14,0.72); border-radius: 10px; border-left: 3px solid #FFC93C;
+  font: 600 17px/1.3 'Barlow Condensed'; opacity: 0; transform: translateY(-6px); transition: opacity .3s, transform .3s; z-index: 5; pointer-events: none; backdrop-filter: blur(6px); }
+.wg-offer.on { opacity: 1; transform: none; pointer-events: auto; }
+body.wg-story .wg-offer { top: 20px; }
+body.wg-offering #wg .wg-help { opacity: 0 !important; }
+.wg-offer .h { font: 700 12px/1 'Barlow Condensed'; letter-spacing: 2.5px; text-transform: uppercase; color: #FFC93C; margin-bottom: 6px; }
+.wg-offer .n { margin-bottom: 6px; color: rgba(255,255,255,.88); }
+.wg-offer button { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; margin: 4px 0 0; padding: 5px 8px 5px 4px; border: 0; border-radius: 7px; background: rgba(255,255,255,.05); color: #fff; font: 600 17px/1.2 'Barlow Condensed'; cursor: pointer; }
+.wg-offer button:hover { background: rgba(255,201,60,.16); }
+.wg-offer .x { margin-top: 6px; font: 600 13px/1 'Barlow Condensed'; color: rgba(255,255,255,.5); letter-spacing: 1px; }
 .wg-ph-burner { position: absolute; inset: 0; background: linear-gradient(#1A2216, #0B0F09); padding: 20% 7% 0; font-family: 'Courier New', monospace; color: #B6FF3B; }
 .wg-ph-burner .h { font: 700 13px/1 'Courier New', monospace; letter-spacing: 1px; opacity: .7; margin-bottom: 14px; }
 .wg-ph-burner .m { font: 700 17px/1.35 'Courier New', monospace; padding: 10px 12px; border: 1px solid rgba(182,255,59,.4); border-radius: 6px; background: rgba(182,255,59,.06); white-space: pre-wrap; }
@@ -165,7 +189,9 @@ body.wg-story .wg-help { top: 20px; }
 
 .wg-caller { position: absolute; right: 24px; bottom: 236px; display: flex; gap: 12px; align-items: center; padding: 10px 16px 10px 10px; background: rgba(8,10,14,0.62); border-radius: 10px; opacity: 0; transform: translateX(16px); transition: opacity .3s, transform .4s; z-index: 4; backdrop-filter: blur(6px); }
 .wg-caller.on { opacity: 1; transform: none; }
-.wg-caller .av { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; font: 800 22px/1 'Barlow Condensed'; color: #0A0C10; }
+.wg-caller .av { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; font: 800 22px/1 'Barlow Condensed'; color: #0A0C10; position: relative; overflow: hidden; }
+/* (Juno calling: her face on the call, a little video tile, not a letter: juno.js) */
+.wg-caller .av.cam { width: 66px; height: 88px; border-radius: 8px; box-shadow: 0 0 0 2px rgba(108,184,255,.55); }
 .wg-caller .n { font: 800 20px/1 'Barlow Condensed'; letter-spacing: 1px; }
 .wg-caller .s { font: 600 13px/1 'Barlow Condensed'; color: rgba(255,255,255,.6); margin-top: 4px; letter-spacing: 1px; }
 .wg-dm { position: absolute; right: 24px; top: 88px; width: 330px; padding: 12px 14px; background: rgba(8,10,14,0.72); border-radius: 10px; opacity: 0; transform: translateY(-10px); transition: opacity .3s, transform .4s; z-index: 4; backdrop-filter: blur(6px); }
@@ -239,10 +265,22 @@ export function createUI() {
   const blurEl = el('wg-blur');
   const phoneEl = el('wg-phone', `<div class="frame"><div class="screen"><div class="island"></div><div class="status"><span>5:45</span><span>5G ▮▮▮</span></div><div class="content"></div></div></div>`);
   const callerEl = el('wg-caller', `<div class="av"></div><div><div class="n"></div><div class="s"></div></div>`);
+  // Juno's face in the caller's tile while she's on (her frames, juno.js), talking while her line is up
+  let cam = null, camRaf = 0;
+  function callerCam(av) {
+    if (!av) { if (cam) { cam.stop(); cam = null; clearTimeout(camRaf); callerEl.querySelector('.av').classList.remove('cam'); } return; }
+    if (cam) return;
+    av.textContent = 'J'; av.classList.add('cam'); cam = junoPortrait(av, { crop: 'face' });
+    const subB = () => document.querySelector('#wg .wg-sub b');
+    const tick = () => { if (!cam) return; const on = /^juno/i.test(subB()?.textContent || '');
+      cam.talk(on ? Math.max(window.WAGMI?.voice?.level?.() || 0, 0.25 + Math.random() * 0.4) : 0); camRaf = setTimeout(() => requestAnimationFrame(tick), 110); };
+    tick();
+  }
   const dmEl = el('wg-dm', `<div class="a"></div><div class="b"></div>`);
   const countEl = el('wg-count', `<div class="l"></div><div class="v"></div>`);
   const bigEl = el('wg-big');
   const holdEl = el('wg-hold', `<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" stroke="rgba(255,255,255,.25)"/><circle class="p" cx="12" cy="12" r="9" stroke="#FFC93C" stroke-dasharray="56.5" stroke-dashoffset="56.5"/></svg><span></span>`);
+  const offerEl = el('wg-offer');
 
   const timers = new Map();
   const later = (key, ms, fn) => { clearTimeout(timers.get(key)); timers.set(key, setTimeout(fn, ms)); };
@@ -275,6 +313,22 @@ export function createUI() {
   trackEl.addEventListener('click', () => ui.brief());
 
   let objHtml = null, subOn = false;
+  // the step and his mode: what is asked of him follows both (see step() at the top)
+  let stepId = null, base = null, baseSecs = 7, ask = false, askT = 0, helpMode = null;
+  const askText = /^\s*get (back )?in(to)? (your|the|a) (car|vehicle)/i;
+  const isCarAsk = (parts) => !!parts && askText.test(plain(parts));
+  // (a help about the car's door: getting out is for the car, getting in is for on foot)
+  const modeOf = (text) => { const s = plain(text); return /\bget out\b/i.test(s) ? 'car' : /\bget (back )?in(to)? (a|your|the) (car|vehicle)\b/i.test(s) ? 'foot' : null; };
+  const modeNow = () => { const cm = window.WAGMI?.app?.controllerManager; return cm ? (cm.activeMode === 'car' ? 'car' : 'foot') : null; };
+  let offerKeys = null;
+  (function watch() {
+    requestAnimationFrame(watch);
+    const W = window.WAGMI; if (!W || W.paused) return;
+    const m = modeNow(); if (!m) return;
+    // in his car with an objective that asks him into it: the step's own objective back (or none)
+    if (ask && m === 'car' && !W.cutscene) { if (!askT) askT = performance.now(); else if (performance.now() - askT > 450) ui.objective(base, baseSecs); } else askT = 0;
+    if (helpMode && helpMode !== m && helpEl.classList.contains('on')) { helpEl.classList.remove('on'); helpMode = null; }
+  })();
   const ui = {
     root, COLORS,
     cine(on) { document.body.classList.toggle('wg-cine', !!on); },
@@ -313,6 +367,13 @@ export function createUI() {
     },
     // the objective: the line for a few seconds, the tracker until the next one (track: false leaves the tracker be)
     objective(parts, secs = 7, { track: keep = true } = {}) {
+      // (the step's own objective remembered, so one that asks him into his car can give way to it; one asking him in
+      // while he is already in never shows)
+      if (keep) {
+        ask = isCarAsk(parts); askT = 0;
+        if (!ask) { base = parts || null; baseSecs = secs; }
+        else if (modeNow() === 'car') parts = base;
+      }
       if (keep) track(parts || null);
       if (!parts) { objHtml = null; objEl.classList.add('hide'); return; }
       objHtml = rich(parts); objEl.innerHTML = objHtml;
@@ -328,8 +389,12 @@ export function createUI() {
     },
     // what the pause menu shows: the objective (html and plain), the last lines [speaker, colour, text], the last help
     recent() { return { objective: trackHtml, text: trackText, lines: said.slice(-6), help: helped.slice(-2) }; },
-    help(text, secs = 7) {
-      if (!text) { helpEl.classList.remove('on'); return; }
+    // (mode: 'car' | 'foot', the help only while he is so; read off the text when not given: a help about getting out is
+    // for the car, one about getting in for on foot)
+    help(text, secs = 7, { mode } = {}) {
+      if (!text) { helpEl.classList.remove('on'); helpMode = null; return; }
+      helpMode = mode === undefined ? modeOf(text) : mode;
+      if (helpMode && modeNow() && helpMode !== modeNow()) { helpMode = null; return; }
       helpEl.innerHTML = rich(text); helpEl.classList.add('on');
       if (helped[helped.length - 1] !== helpEl.innerHTML) { helped.push(helpEl.innerHTML); if (helped.length > 6) helped.shift(); }
       later('help', secs * 1000, () => helpEl.classList.remove('on'));
@@ -339,14 +404,70 @@ export function createUI() {
       skipEl.classList.add('on'); skipEl.querySelector('circle.p').setAttribute('stroke-dashoffset', String(56.5 * (1 - Math.min(1, k))));
     },
     // a hold-to-act ring in the middle of the screen (k 0..1; label null hides)
-    hold(label, k = 0) {
-      if (label == null) { holdEl.classList.remove('on'); return; }
-      holdEl.querySelector('span').innerHTML = rich(label); holdEl.classList.add('on');
+    hold(label, k = 0, far = false) {
+      if (label == null) { holdEl.classList.remove('on'); document.body.classList.remove('wg-holding'); return; }
+      const html = rich(label), sp = holdEl.querySelector('span'); if (sp.innerHTML !== html) sp.innerHTML = html;
+      holdEl.classList.add('on'); holdEl.classList.toggle('far', !!far); document.body.classList.add('wg-holding');
       holdEl.querySelector('circle.p').setAttribute('stroke-dashoffset', String(56.5 * (1 - Math.min(1, k))));
     },
+    // a hold-F interaction (the van's search, Lev's phone): the ring comes up `show` m out, saying what to do and how
+    // ('Walk up to the van, then hold F' out of reach, 'Hold F to search the van' in it), the hold counting anywhere within `reach`
+    // m (d: how far he is from the thing, its outline, not one spot by it). step(dt, d, onFoot) true once held through;
+    // stop() puts the ring and the key away
+    holdAct({ label, verb = 'Walk up to', noun = '', secs = 1.2, show = 7, reach = 3.2 } = {}) {
+      let k = 0, held = false, live = true;
+      const onKey = (e) => { if (e.code === 'KeyF' && !e.repeat) held = e.type === 'keydown'; else if (e.code === 'KeyF' && e.type === 'keyup') held = false; };
+      addEventListener('keydown', onKey); addEventListener('keyup', onKey);
+      return {
+        step(dt, d, onFoot = true) {
+          if (!live) return false;
+          const near = onFoot && d <= reach, seen = onFoot && d <= show;
+          k = near && held ? k + dt / secs : Math.max(0, k - dt * 2);
+          if (!seen) ui.hold(null);
+          else ui.hold(near ? `Hold [F] to ${label}` : `${verb} ${noun || 'it'}, then hold [F]`, k, !near);
+          return k >= 1;
+        },
+        get k() { return k; },
+        stop() { live = false; removeEventListener('keydown', onKey); removeEventListener('keyup', onKey); ui.hold(null); },
+      };
+    },
+    // the step (see the top): a new one starts the help over; a new mission, the lines too
+    step(id) {
+      if (id === stepId) return;
+      const mission = (id || '').split(':')[0];
+      if (mission !== (stepId || '').split(':')[0]) said.length = 0;
+      helped.length = 0; stepId = id || null;
+      // (the last step's how-to off the screen too, and any help offered for it)
+      helpEl.classList.remove('on'); helpMode = null;
+      ui.offer(null);
+    },
+    get stepId() { return stepId; },
+    // real help after a genuine stall: { title, note, options: [{ key: '1', label, run }] }, up for secs (null: down)
+    offer(o, secs = 14) {
+      if (offerKeys) { removeEventListener('keydown', offerKeys, true); offerKeys = null; }
+      clearTimeout(timers.get('offer'));
+      if (!o || !o.options?.length) { offerEl.classList.remove('on'); document.body.classList.remove('wg-offering'); return; }
+      offerEl.innerHTML = `<div class="h">${esc(o.title || 'Need a hand?')}</div>${o.note ? `<div class="n">${rich(o.note)}</div>` : ''}
+        ${o.options.map((p, i) => `<button type="button" data-i="${i}"><kbd>${esc(p.key)}</kbd><span>${rich(p.label)}</span></button>`).join('')}<div class="x">Or just carry on.</div>`;
+      offerEl.classList.add('on'); document.body.classList.add('wg-offering');
+      const pick = (p) => { ui.offer(null); try { p.run?.(); } catch (e) { console.warn('[wagmi] offer', e); } };
+      offerEl.querySelectorAll('button').forEach((b) => b.addEventListener('click', () => pick(o.options[+b.dataset.i])));
+      // (its number keys are its own while it is up: the city's mode keys don't hear them)
+      offerKeys = (e) => {
+        if (e.repeat || e.metaKey || e.ctrlKey || e.altKey || window.WAGMI?.paused) return;
+        const p = o.options.find((q) => e.code === 'Digit' + q.key || e.code === 'Numpad' + q.key);
+        // (a number that isn't one of its options still never reaches the city's camera-mode keys)
+        if (!p) { if (/^Digit[1-4]$/.test(e.code)) e.stopImmediatePropagation(); return; }
+        e.stopImmediatePropagation(); e.preventDefault(); pick(p);
+      };
+      addEventListener('keydown', offerKeys, true);
+      later('offer', secs * 1000, () => ui.offer(null));
+    },
     caller(name, color = '#6CB8FF', status = 'On call') {
-      if (!name) { callerEl.classList.remove('on'); return; }
-      const av = callerEl.querySelector('.av'); av.textContent = name[0]; av.style.background = color;
+      if (!name) { callerEl.classList.remove('on'); callerCam(null); return; }
+      const av = callerEl.querySelector('.av'); av.style.background = color;
+      // (Juno: her video feed in the tile, her mouth with her voice; anyone else: their initial)
+      if (name === 'Juno') callerCam(av); else { callerCam(null); av.textContent = name[0]; }
       callerEl.querySelector('.n').textContent = name.toUpperCase(); callerEl.querySelector('.s').textContent = status;
       callerEl.classList.add('on');
     },

@@ -12,6 +12,12 @@
 //                         at(), restart(id) }): active() true while it runs, at() the checkpoint it would restart from
 //                         now (the later ones are locked until reached), restart(id) starts it again from there
 //   import { missions } from './pause.js';  missions(W).register({ ... })   (the same registry, made if not yet)
+//   carry(W, id, keep, make)  the mission's stats (TIME, HITS...): kept through a checkpoint restart (keep), new from
+//                         make() when it starts from the top
+//   ui.pause.restartCurrent() the running mission from its last checkpoint (the stall help's 'Restart the checkpoint')
+// In the car, with WAGMI.recoverCar (the driving track's), the menu has 'Reset car to road'.
+// Credits: the music, sounds, voices and the rest (wagmi/credits.js); Enter, then ↑↓ scroll it.
+import { creditsHTML } from '../credits.js';
 const Q = new URLSearchParams(location.search);
 const DEBUG = Q.has('debug');
 const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -26,6 +32,11 @@ export function missions(W = window.WAGMI) {
     // the one running now (the newest registered first)
     active() { return [...list.values()].reverse().find((m) => { try { return !!m.active?.(); } catch { return false; } }) || null; },
   });
+}
+export function carry(W, id, keep, make) {
+  if (keep && W._mstats?.id === id) return W._mstats.s;
+  W._mstats = { id, s: make() };
+  return W._mstats.s;
 }
 
 const CSS = `
@@ -80,7 +91,7 @@ body.touch-enabled .wg-track .k kbd { display: none; }
 
 const CONTROLS = [
   ['On foot', [['Move', 'W A S D'], ['Sprint', 'Shift'], ['Jump', 'Space'], ['Get in the car', 'F'], ['Look round', 'drag the mouse']]],
-  ['In the car', [['Drive · brake', 'W · S'], ['Steer', 'A · D'], ['Boost', 'Shift'], ['Get out', 'F (slow down first)'], ['Thrusters: hop', 'Space'], ['Thrusters: dash left · right', 'Q · E'], ['Next station', 'R'], ['Radio off / on', 'T']]],
+  ['In the car', [['Drive · brake', 'W · S'], ['Steer', 'A · D'], ['Boost', 'Shift'], ['Get out', 'F (slow down first)'], ['Reset car to road', 'recover'], ['Thrusters: hop', 'Space'], ['Thrusters: dash left · right', 'Q · E'], ['Next station', 'R'], ['Radio off / on', 'T']]],
   ['Fighting', [['Strike', 'Left click · J'], ['Heavy', 'Right click · K'], ['Counter (on the cue)', 'Q · L'], ['Dodge', 'C · Space'], ['Grab · pick up · throw', 'E'], ['Lock the mouse to the view', 'click in a fight']]],
   ['Anywhere', [['Map', 'M'], ['Brief: the objective, the last lines', 'B'], ['Pause', 'Esc · P'], ['Skip a cutscene', 'hold Space']]],
 ];
@@ -154,9 +165,14 @@ export function createPause(ui) {
   }
 
   /* ----------------------------------------------------------- the menu -- */
-  const ITEMS = [
-    ['resume', 'Resume'], ['brief', 'Brief'], ['controls', 'Controls'], ['restart', 'Restart checkpoint'], ['select', 'Mission select'], ['sound', 'Sound'], ['title', 'Return to title'],
+  const ALL = [
+    ['resume', 'Resume'], ['brief', 'Brief'], ['controls', 'Controls'], ['recover', 'Reset car to road'], ['restart', 'Restart checkpoint'], ['select', 'Mission select'], ['sound', 'Sound'], ['credits', 'Credits'], ['title', 'Return to title'],
   ];
+  // (the car's reset only in the car, and only with the driving track's WAGMI.recoverCar: fixed while the menu is up)
+  let ITEMS = ALL;
+  const items = () => (ITEMS = ALL.filter(([id]) => id !== 'recover' || (cm.activeMode === 'car' && typeof W.recoverCar === 'function')));
+  // the recover key's name, from the driving track (WAGMI.recoverCar.key: 'KeyX' or 'X'), for the controls
+  const recoverKey = () => { const k = W.recoverCar?.key; return k ? String(k).replace(/^Key|^Digit/, '') : 'see the car controls'; };
   // Mission select: the story's missions (W.storyList(), mission/m3-save.js); a passed one can be played again (W.replay)
   const story = () => W.storyList?.() || [];
   let sel = 0, inPanel = false, sub = 0, isOpen = false, openedAt = 0;
@@ -180,7 +196,9 @@ export function createPause(ui) {
     const id = ITEMS[sel][0];
     panel.classList.toggle('focus', inPanel);
     if (id === 'resume' || id === 'brief') panel.innerHTML = brief();
-    else if (id === 'controls') panel.innerHTML = `<div class="cols">${CONTROLS.map(([h, rows]) => `<div><div class="t${h === 'On foot' ? '' : ''}">${esc(h)}</div>${rows.map(([a, k]) => `<div class="row"><span>${esc(a)}</span><span>${esc(k)}</span></div>`).join('')}</div>`).join('')}</div>`;
+    else if (id === 'controls') panel.innerHTML = `<div class="cols">${CONTROLS.map(([h, rows]) => `<div><div class="t${h === 'On foot' ? '' : ''}">${esc(h)}</div>${rows.filter(([, k]) => k !== 'recover' || W.recoverCar).map(([a, k]) => `<div class="row"><span>${esc(a)}</span><span>${esc(k === 'recover' ? recoverKey() : k)}</span></div>`).join('')}</div>`).join('')}</div>`;
+    else if (id === 'recover') panel.innerHTML = `<div class="t">Reset car to road</div><div class="ln">Stuck on a wall, a kerb or a lamp post? Your car goes back on the nearest lane, upright and facing the way the traffic goes.</div>
+      <div class="mu" style="margin-top:10px;font-size:15px"><kbd>Enter</kbd> to reset${W.recoverCar?.key ? ` · in the car, any time: <kbd>${esc(recoverKey())}</kbd>` : ''}</div>`;
     else if (id === 'restart') {
       const { M, list } = checkpoints();
       panel.innerHTML = M ? `<div class="t">${esc(M.act || 'Mission')}</div><div class="ms sh">${esc(M.title)}</div>
@@ -192,6 +210,8 @@ export function createPause(ui) {
     } else if (id === 'select') {
       panel.innerHTML = `<div class="t">Mission select</div>${story().map((m, i) => `<button class="opt${inPanel && i === sub ? ' sel' : ''}${m.passed ? '' : ' lock'}" data-ms="${i}">${esc(m.title)}<small>${m.passed ? 'Replay' : 'Not passed yet'}</small></button>`).join('') || '<div class="mu">No missions yet.</div>'}
         <div class="mu" style="margin-top:8px;font-size:15px">A replay starts the mission from the top. Your story stays where it is.</div>`;
+    } else if (id === 'credits') {
+      panel.innerHTML = creditsHTML();
     } else if (id === 'title') {
       panel.innerHTML = `<div class="t">Return to title</div><div class="ln">Back to the start screen. This mission starts over from the opening.</div><div style="height:10px"></div>
         <button class="opt${inPanel && sub === 0 ? ' sel' : ''}" data-yes="1">Return to title</button><button class="opt${inPanel && sub === 1 ? ' sel' : ''}" data-no="1">Cancel</button>`;
@@ -222,7 +242,7 @@ export function createPause(ui) {
     if (document.pointerLockElement) { gameLetGo = performance.now(); document.exitPointerLock?.(); }
     duck(); duckT = setInterval(duck, 500);
     ui.brief?.(false);
-    sel = 0; inPanel = false; sub = 0; draw();
+    items(); sel = 0; inPanel = false; sub = 0; draw();
     root.classList.add('on'); document.body.classList.add('wg-paused');
   }
   function close() {
@@ -234,7 +254,14 @@ export function createPause(ui) {
   }
   function act(id) {
     if (id === 'resume') close();
+    else if (id === 'recover') { close(); try { W.recoverCar?.(); } catch (e) { console.warn('[pause] recover', e); } }
+    else if (id === 'credits') { inPanel = true; panel.classList.add('focus'); }
     else if (subCount()) { inPanel = true; sub = 0; if (id === 'restart') { const l = checkpoints().list; sub = Math.max(0, l.findIndex((c) => c.cur)); } draw(); }
+  }
+  // the running mission from its last checkpoint (the stall help)
+  function restartCurrent() {
+    const { list } = checkpoints(), i = list.findIndex((c) => c.cur);
+    if (i >= 0) restart(i);
   }
   async function restart(i) {
     const { M, list } = checkpoints(), c = list[i]; if (!M || !c || c.lock) return;
@@ -270,6 +297,8 @@ export function createPause(ui) {
       return;
     }
     const n = subCount(), id = ITEMS[sel][0];
+    // (the credits only scroll: redrawing them would jump back to the top)
+    if (id === 'credits') { if (up || down) panel.scrollBy({ top: up ? -90 : 90 }); else if (back || left) { inPanel = false; draw(); } return; }
     if (up || down) { sub = (sub + (up ? -1 : 1) + n) % Math.max(1, n); drawPanel(); }
     else if (id === 'sound' && (left || right)) { const k = VOLS[sub][0]; setVol(k, vol[k] + (right ? 0.1 : -0.1)); }
     else if (ok) enterSub();
@@ -310,5 +339,5 @@ export function createPause(ui) {
   root.addEventListener('pointerdown', (e) => e.stopPropagation());
   root.addEventListener('wheel', (e) => e.stopPropagation(), { passive: true });
 
-  return { open, close, get isOpen() { return isOpen; }, pausable };
+  return { open, close, get isOpen() { return isOpen; }, pausable, restartCurrent };
 }

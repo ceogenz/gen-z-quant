@@ -99,6 +99,20 @@ nouns as the objectives. Ours: "Press F to get in a vehicle." "Your destination 
 "GPS shows the quickest legal route with a yellow line." "Hold Shift to boost." "Hold F to search." "Degens are marked
 with a red dot on the Radar." The combat team owns the fight help.
 
+**As built (23 Oct, owner's notes 1 and 8): one source of truth.** Each mission phase is a *step*
+(`ui.step('m2:tail')`, called by the mission runners and by the way to the next mission, `free:J`). A new step clears
+the help kept for the brief and the pause menu (an older mission's "Hold F to search" or "Go to the J" never shows
+again) and takes the last step's help off the screen; a new mission clears the "Lately" lines. Instructions follow his
+mode as well as the step: an objective that asks him into his car ("Get in / Get back in your car") gives way to the
+step's own objective as soon as he is in it (ui.js keeps the step's objective under it), and a help about getting out
+only shows in the car (getting in, only on foot). Hold-F interactions use one helper (`ui.holdAct`): the ring comes up
+several metres out ("Walk up to the van, then hold F"), the hold counts anywhere within reach of the thing's outline
+("Hold F to search the van"), and while the ring is up the objective line under it is hidden (said once, not twice).
+No reminders on a timer: after a genuine stall (no headway along the route to a place for 50 s of play, or the car
+going nowhere with the pedal down for 4 s) the GPS offers real help once (`ui.offer`, top left, number keys): "Show me
+the way" (the route again, the brief open, the blip pulsing), "Put my car back on the road" (`WAGMI.recoverCar`, in the
+car), "Restart the checkpoint" (a mission running); with the first one, one gentle line from the contact.
+
 ### 2.6 Subtitles
 Bottom centre (the objective line), 24 px, white; the speaker's name first in caps, 700: QUANT in white, JUNO in
 #6CB8FF, the Degens and ZK in acid green #B6FF3B. Two lines at most; 15 characters per second reading time, 1.4 s
@@ -154,6 +168,12 @@ minimum. Phone calls show the caller card bottom-right (name, small avatar, "On 
   the street crowd's own hold (`WAGMI.street.crowd.hold`: the avenue's traffic left be), its crash and phone scenes
   with a hold round the crash site; Mission 3's rally with 5th Ave's last block, the stage and the lawn to the rigs,
   its dump with the stage's east side.
+- As built (23 Oct): a checkpoint restart from the pause menu keeps the mission's stats (TIME, HITS, DEGENS REKT: the
+  card counts the whole mission, `carry()` in pause.js); a replay from Mission select starts them over. In the car, the
+  pause menu has "Reset car to road" (with the driving track's `WAGMI.recoverCar`). Every restart puts him at the
+  start of that beat in the vehicle state it needs: a drive starts at the wheel (M2 "To Times Square" by Bryant Park,
+  M3 "To Washington Square" outside the garage), the tail and the chase in the car behind the van / Lev with his lane
+  held clear of traffic, the fights and the hold-F beats on foot.
 - Reasons: "Quant got rekt." "The van got away." "Moon's trail went cold." "You were spotted." "Pete got rekt."
   "You abandoned Pete." "You left the fight." "Lev got away."
 
@@ -247,7 +267,8 @@ back by crossing the whole city, and on the way the Degens find out who really t
 - **Moon**: a small white long-haired dog, pink-brown nose, dark eyes. On screen always "Moon" or "the dog", never a
   gendered pronoun.
 - **Juno**: Quant's friend from the group chat, an on-chain sleuth who reads wallets like gossip. Mostly a voice on the
-  phone; in person at Bryant Park. Blip **J**.
+  phone; in person at Bryant Park. Blip **J**. Built: assets/characters/juno.glb (an original teen: round glasses,
+  headphones round her neck, a light-blue headband and oversized hoodie, loose dark jeans, a curly puff), wagmi/mission/juno.js.
 - **Gears**: big, gentle, an ex-pit-crew mechanic with an EV tuning garage in West Chelsea who built the rocket
   package on Quant's car. Blip **G**.
 - **Coach Ruth**: a retired boxing champ with a gym on W 125th St; tough love; teaches the slams. Blip **C**.
@@ -316,8 +337,11 @@ Twilight (Times Square lights on). Juno traces the burner's twin to a Degens cou
 - Fails: spotted on the tail (from beat 2: branches into the chase; in beat 3: "You were spotted."), "Lev got away.",
   "Quant got rekt."
 - Reward: FOLLOWERS +9,800; trash cans and bottles. Hand-off: Act II opens; **G** at the Static Garage.
-- **As built** (wagmi/mission/m2*.js): Juno has no body yet, so she meets him by video call from "the library's
-  wifi" at the J (6th Ave entrance). W 47th St ends at 10th Ave and 12th Ave's east roadway between 49th and 52nd St
+- **As built** (wagmi/mission/m2*.js): 'start' is Bryant Park at twilight, about 28 s (m2-scenes.js `burnerMeet`):
+  Juno in person (assets/characters/juno.glb) at a park table on the 6th Ave side with her laptop. Quant hands her the
+  burner, her laptop traces its twin, cut to the van at 7th & W 47th; "Don't run up to it. Follow it." She stays at
+  her table until he is 70 m off. Her calls show her (juno-call.jpg, frames of her model in her room; her initial
+  until it loads). The old video call (`burnerScene`) is kept as the fallback. W 47th St ends at 10th Ave and 12th Ave's east roadway between 49th and 52nd St
   is a tree grove, so the tail runs W 47th St, 10th Ave north, W 55th St west to the yard, which stands on the 12th
   Ave apron at W 54th-55th St (-1946..-1898, -1080..-1022; Pier 88/90's apron is past the shore limit). Spotted on the
   tail, the van bolts and the yard is on alert. Lev's chase runs W 55th St, 11th Ave south past Javits, W 34th St
@@ -339,6 +363,19 @@ Twilight (Times Square lights on). Juno traces the burner's twin to a Degens cou
     their last man) a second wind (health topped up to 80%) and two more out of the containers at the back (a grunt with
     a bottle, a brute); Quant's health is 130 for the fight, with a slow regen (4/s up to 60%) when nothing has hit him
     for 3.5 s. Losing it restarts at the **yard** checkpoint (the lookouts at their posts again, the quiet way open).
+  - The owner's notes (23 Oct): the meeting at the J plays m2-scenes.js `burnerMeet(W, { U, say, van, at })` when the
+    characters track exports it (Juno in person: the burner handed over, opened on her laptop, the twin in Times Square;
+    a scene def for runScene, or a promise that plays itself), else the old video call; the trip's objective is "Bring
+    the burner to **Juno** at **Bryant Park**." A restart of "To Times Square" starts at the wheel by the park. Once he
+    has reached Times Square (160 m from the van) the checkpoint is the tail's: a restart puts him in his car on 7th Ave
+    50 m behind the van (-589.5, -498, facing south), 7th Ave's west lanes from W 49th St to the van held clear (no bus
+    in front). Out of the car by the van: "Get back in your car.", and once he is back in, the step's own objective
+    again ("Find the van. Stay in your car.": it used to stay on "Get in your car." while he drove). The tail's fair
+    start: the van idles at the curb till he is rolling (or 10 s), then pulls out at 6 m/s + 1.4 a second; "The van got
+    away." not in its first 14 s on the move. The chase: a GPS line on Lev (re-planned as he goes, a few times a second
+    at most); on a restart his car is on 12th Ave facing south toward W 55th St (-1880, -1056; the old spot faced the building line) and Lev waits till Quant is rolling (or 4 s) and builds up (9 m/s + 3 a second); Skip after three
+    fails plays the crash scene (it used to drop him by the phone with no wreck). Lev's phone: the hold-F ring from 8 m,
+    the pick-up within 2.8 m.
 
 #### M3 · Pump and Dump (Act II) · West Chelsea -> Washington Square -> West Village
 Midday. The Degens launch $MOON2, a copycat coin with Moon's photo on it, at a rally under the Washington Square arch.
@@ -369,8 +406,8 @@ Midday. The Degens launch $MOON2, a copycat coin with Moon's photo on it, at a r
     both faces: seen through the arch from 5th Ave), Moon's face on a banner on the attic (a drawing of Moon), speaker
     stacks, a crowd barrier, 18 of the city's own people as the crowd (they run when the fight starts), three rigs at
     the doc's spots (a blow 1, a heavy 2, a bat or a bottle 3, a thrown can or bottle 3, the car 3; 2 hp: two punches).
-    Fiona is thug.glb repainted (white puffer, platinum hood, no mask) with hair, white shades and a megaphone (arm IK).
-    Gears is thug.glb repainted (navy overalls, a beard), a cap, a rag. No fiona.glb yet.
+    Fiona is her own model, assets/characters/fiona.glb (platinum ponytail, the pack's tee and jeans), white shades on
+    her head bone and a megaphone in her right hand. Gears is gears.glb (navy overalls, a beard, his own cap), a rag.
   - Arrival scene (~11 s): the arch from 5th Ave, the crowd, Fiona close, Wick spots Quant. Fight (23 Oct, eased: it
     was 3 grunts with 2 bats + a brute, 2 more at 2/3): 2 grunts by the rigs (one bat), a brute by the stage who holds
     back till the first rig goes down (or Quant goes for him), 1 more (a bottle) at 2/3; Quant's health 130 for it, a
@@ -389,6 +426,12 @@ Midday. The Degens launch $MOON2, a copycat coin with Moon's photo on it, at a r
   - Passed: TIME, RIGS SMASHED, DEGENS REKT, HITS TAKEN, FOLLOWERS +18,500, "NEW: bats · cold-gas thrusters"; the save;
     Pete's DM; the **P** at Sara D. Roosevelt Park (933, 3561: by the benches, clear of the park's trees) with a corona
     and a "MISSION 4 · COMING SOON" sign.
+  - The owner's notes (23 Oct): the rally scene always leaves him on foot at the arch (2.5, 2790) with his car parked on
+    5th Ave behind him (4.6, 2772), under a quick fade when he arrived elsewhere: the fight starts a few steps from the
+    rigs, not in his car a block back with the Degens dragging him out. More than 24 m from the nearest rig standing, the
+    GPS line goes to it. The escape's two cars set out from just round the corner of W 8th St (-48, 2700) at 16 m/s (it
+    was 150 m down W 8th St at 8 m/s: a boost up 5th Ave lost them in 25 s). A restart of "To Washington Square" starts
+    at the wheel outside the garage.
   - Fail screen choices: Quit leaves the mission (the **G** at the garage again: "Go to Gears' garage."); Skip (after
     three fails) goes on to the next beat with its scene: the rigs' Skip plays the dump (Fiona runs, the chart red)
     and starts the escape in the car on 5th Ave at the arch.
@@ -563,7 +606,11 @@ TIME, MY COMMUNITY, $QUANT · 1H), kept below the call's corner labels in every 
 - Objective: "Get in your **car**." (car in #6CB8FF). Quant's car is a blue blip.
 - Help: "Press F to get in a vehicle." (game.js's own F prompt "F · Get in" also shows beside the car). The car is
   solid to Quant on foot; F gets him in from beside it.
-- In the car: vehicle name bottom-right, *Quant's car* (the speed panel says QUANT'S CAR too).
+- In the car: vehicle name bottom-right, *Quant's car* (the speed panel says QUANT'S CAR too). The in-car controls bar
+  shows **X · Reset car**: X, any time in the car (not in a scene, the pause menu or the map), puts it back on the
+  nearest lane facing the lane's way, stopped and clear of other cars (WAGMI.recoverCar; also "Reset car to road" in
+  the pause menu, and offered by the stall help). Held against a wall going nowhere for 1.2 s, the centre prompt says
+  "X · Reset car to road".
 
 ### 5.4 Phase 2 · The drive (~2.0 km, ~110 s)
 - Objective: "Follow Moon's tag to **Chelsea Park**." Destination blip and corona at **(-1139, 0, 1160)**: 9th Ave's
@@ -629,6 +676,10 @@ it) and it passes Quant at 27 m/s.
 ### 5.7 Phase 4 · The van and ZK's text (checkpoint 3)
 - Objective: "Search the **van**." (green). Marker on the park sidewalk at its sliding door: **(-1240, 0.22, 1123.6)**.
   Help: "Hold F to search." (1.2 s hold, a ring fills.)
+  As built (23 Oct, owner's note 7: it took very precise positioning): a green ring of light round the whole van and a
+  green chevron over it; the prompt comes up 10 m out ("Walk up to the van, then hold F"); the search works from any
+  side of the van within 4.6 m of its outline (the whole sidewalk along it) ("Hold F to search the van", 1.0 s); the scene walks him round to the
+  door.
 - Cutscene "The collar" (15.5 s; ZK's call is in the opening now, so here he texts):
   - Low on the lip of the van's door as it slides open: Moon's collar with its tag, chewed through, and a cheap
     burner phone.
@@ -640,9 +691,12 @@ it) and it passes Quant at 27 m/s.
   trending"). Unlock: Juno's contact.
 
 ### 5.8 Hand-off
-6 s later, a DM card top-right, "New message · Juno": "that burner is a gift. bring it to me. bryant park, by the
-library. try not to get mugged on the way." The **J** blip drops at Bryant Park, the 6th Ave entrance at W 41st St
-(-296, 0.22, 84.5), and pulses. Help: "A new mission is available. Go to the **J** on the Radar."
+6 s later, a DM card top-right, "New message · Juno": "that burner is a gift. bring it to me and i'll crack it open.
+bryant park, 6th ave side. try not to get mugged on the way." The **J** blip drops at Bryant Park, the 6th Ave entrance
+at W 41st St (-296, 0.22, 84.5), and pulses. Objective: "Bring the burner to **Juno** at **Bryant Park**." Help: "A new
+mission is available. Go to the **J** on the Radar." No reminders on the way (they nagged): after a genuine stall, the
+help offer (2.5) and one line from Juno: "no rush. i'm at bryant park, 6th ave side. the J on your radar." The map's
+search finds the J by "Juno" and by "Bryant" (mission places by their second name too).
 
 ### 5.9 Fails and checkpoints
 

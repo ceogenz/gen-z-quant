@@ -145,6 +145,17 @@ export function createWrecks({ TS, cm, fx, play, props, camera }) {
           if (-vn > 6) fx.bits(hit.x, 0.7, hit.z, R.vx, R.vz, Math.round(-vn * 0.6), Math.random() < 0.5 ? 'glass' : 'plastic');
         }
       }
+      // Quant's car (driven or parked): it has had its turn (wagmi/crash meets the wrecks in its own steps, by the
+      // weights), so a wreck that has slid into it since is put back out of it, its speed into it taken off
+      const Q = cm.entities.car, QB = Q && Q.body;
+      if (QB && Q.mesh && Q.mesh.visible && (cm.activeMode === 'car' || Q.position.y < 2.6)) {
+        const qh = Q.heading, qcz = (QB.z1 + QB.z0) / 2, qx = Q.position.x + Math.sin(qh) * qcz, qz = Q.position.z + Math.cos(qh) * qcz;
+        if (Math.abs(qx - R.x) < 9 && Math.abs(qz - R.z) < 9 && boxes(R.x, R.z, R.yaw, hw, hl, qx, qz, qh, QB.hx, (QB.z1 - QB.z0) / 2, hit)) {
+          R.x += hit.nx * hit.pen; R.z += hit.nz * hit.pen;
+          const vn = R.vx * hit.nx + R.vz * hit.nz;
+          if (vn < 0) { R.vx -= hit.nx * vn * 1.2; R.vz -= hit.nz * vn * 1.2; }
+        }
+      }
       // the street furniture in its way
       if (sp > 2) props.collide(mover(R, v, hw, hl, m));
     }

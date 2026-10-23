@@ -13,8 +13,9 @@ import * as THREE from 'three/webgpu';
 import { place, getCast, upright, UPRIGHT_BONES } from '../intro.js';
 import { createGPS } from './gps.js';
 import { createMarker } from './marker.js';
-import { missions } from './pause.js';
+import { missions, carry } from './pause.js';
 import { createDirector, keys, angleKeys, spline, travel, handheld, clamp, lerp } from './cine.js';
+import { buildChevron } from './m2-set.js';
 
 const PI = Math.PI;
 const WHITE = '#FFFFFF', ACID = '#B6FF3B', BLUE = '#6CB8FF';
@@ -46,13 +47,20 @@ function buildSUV(scene) {
 class Fail extends Error { constructor(reason, rekt = false) { super(reason); this.reason = reason; this.rekt = rekt; } }
 class Quit extends Error {}
 
-export async function start(W, { at = 'car', fromIntro = false } = {}) {
+export async function start(W, { at = 'car', fromIntro = false, keep = false } = {}) {
   if (W.mission) W.mission.stop();
-  const M = (W.mission = createMission(W));
+  const M = (W.mission = createMission(W, { keep }));
   return M.run(at, fromIntro);
 }
 
-function createMission(W) {
+// how far (x, z) is from the van's outline (its box: 5.6 x 2.0 m, along its heading): 0 against its side
+function fromVan(x, z) {
+  const dx = x - VAN[0], dz = z - VAN[1], s = Math.sin(VAN[2]), c = Math.cos(VAN[2]);
+  const along = dx * s + dz * c, across = dx * c - dz * s;
+  return Math.hypot(Math.max(0, Math.abs(along) - 2.8), Math.max(0, Math.abs(across) - 1.0));
+}
+
+function createMission(W, { keep = false } = {}) {
   const app = W.app, cm = app.controllerManager, P = W.person, car = W.car, ui = W.ui, sfx = W.sfx;
   const gps = W.gps || (W.gps = createGPS(W));
   const marker = W.marker || (W.marker = createMarker(THREE, app.scene, { color: '#FFC93C', radius: 3 }));
@@ -119,7 +127,8 @@ function createMission(W) {
     ], t);
     ui.caller(null);
   }
-  const stats = { t0: now(), hits: 0, rekt: 0 };
+  // (kept through a checkpoint restart: the card counts the whole mission)
+  const stats = carry(W, 'm1', keep, () => ({ t0: now(), hits: 0, rekt: 0 }));
   let lastHp = null;
   const fails = {};
   const frameHooks = new Set();
@@ -237,10 +246,12 @@ function createMission(W) {
           for (const e of combat.enemies) if (e.alive && dist(e.pos, P.position.x, P.position.z) < 150) { live.add('e:' + e.id); gps.blip('e:' + e.id, { x: e.pos.x, z: e.pos.z, kind: 'enemy' }); }
           for (const id of [...gps.blips.keys()]) if (id.startsWith('e:') && !live.has(id)) gps.unblip(id);
           ui.counter('DEGENS', `${down()}/${total}`);
-          // FOMO runs in along W 28th St at two down
+          // FOMO runs in along W 28th St at two down: from about 30 m off him on the line to the street, so the last
+          // fight reads as one fight (from the street itself, 110 m out, he took half a minute to walk in)
           if (!fomo && down() >= 2) {
             fomo = true; total = 5;
-            crews.push(combat.spawnCrew({ x: -1262, z: 1124, count: 1, props: false }).engage());
+            const dx = -1262 - P.position.x, dz = 1124 - P.position.z, k = Math.min(1, 30 / Math.max(1, Math.hypot(dx, dz)));
+            crews.push(combat.spawnCrew({ x: P.position.x + dx * k, z: P.position.z + dz * k, count: 1, props: false }).engage());
             say([['Fomo', ACID, 'Wait! Did I miss the pump?'], ['Bagsy', ACID, 'You always miss the pump!']]).catch(() => {});
           }
           // too far from the fight
@@ -265,21 +276,20 @@ function createMission(W) {
       const C = await getCast(W);
       setVan(C, true);
       parkHolds();
-      const spot = createMarker(THREE, app.scene, { color: '#4ADE80', radius: 0.8, height: 0.9, alpha: 0.28 }); spot.at(SEARCH_AT[0], 0.22, SEARCH_AT[1]);
-      let k = 0, held = false, helped = false;
-      const onKey = (e) => { if (e.code === 'KeyF') held = e.type === 'keydown'; };
-      addEventListener('keydown', onKey); addEventListener('keyup', onKey);
+      // the van made plain: a green ring of light round the whole of it and a chevron over it; the prompt comes up a
+      // few metres out, and the search works from any side of it (the scene walks him round to its door)
+      const ring = createMarker(THREE, app.scene, { color: '#4ADE80', radius: 3.9, height: 1.1, alpha: 0.2 }); ring.at(VAN[0], 0.02, VAN[1]);
+      const chev = buildChevron(W, '#4ADE80');
+      // (reach: anywhere on the sidewalk along it, 4.6 m off its side, or round its ends in the road)
+      const act = ui.holdAct({ label: 'search the van', noun: 'the van', secs: 1.0, show: 10, reach: 4.6 });
       try {
         let last = now();
         await wait(() => {
           const t = now(), dt = Math.min(0.05, (t - last) / 1000); last = t;
-          const near = !inCar() && dist(P.position, SEARCH_AT[0], SEARCH_AT[1]) < 2.2;
-          if (near && !helped) { helped = true; ui.help('Hold [F] to search.', 8); }
-          k = near && held ? k + dt / 1.2 : Math.max(0, k - dt * 2);
-          ui.hold(near ? 'Search the van' : null, k);
-          return k >= 1;
+          chev.at(VAN[0], 3.3, VAN[1], dt);
+          return act.step(dt, fromVan(P.position.x, P.position.z), !inCar());
         });
-      } finally { removeEventListener('keydown', onKey); removeEventListener('keyup', onKey); ui.hold(null); spot.hide(); app.scene.remove(spot.group); }
+      } finally { act.stop(); ring.hide(); app.scene.remove(ring.group); chev.hide(); app.scene.remove(chev.group); }
       gps.unblip('van'); gps.objective(null, null); ui.help(null);
       await scene('collar');
     },
@@ -473,7 +483,9 @@ function createMission(W) {
     cleanup();
     delete W.directed; delete W.sceneClock; D.onFrame = null;
     if (grade) grade.exposure.value = exp0;
-    if (name === 'collar') { C.van.setDoor(1); place(W, { quant: [VAN[0] - 0.1, VAN[1] + 2.4, 0.25] }); }
+    // (after the collar: turned along the sidewalk toward 9th Ave and his car, so the camera comes down behind him with
+    // the street ahead, not low behind him against the van's side)
+    if (name === 'collar') { C.van.setDoor(1); place(W, { quant: [VAN[0] - 0.1, VAN[1] + 2.6, PI / 2] }); }
     else place(W, { quant: [-1145.5, 1160, -PI / 2] });
     const rel = D.release(skip ? 0.4 : 1.2);
     ui.cine(false); W.cutscene = false;
@@ -504,6 +516,7 @@ function createMission(W) {
       while (i < ORDER.length && running) {
         const phase = (M._phase = ORDER[i]);
         tok = { dead: false, err: null };
+        ui.step('m1:' + phase);
         try {
           await PHASES[phase](fresh);
           fresh = false; i++;
@@ -534,7 +547,7 @@ function createMission(W) {
     checkpoints: ORDER.map((id) => ({ id, label: LABELS[id] })),
     active: () => running && !!M._phase && M._phase !== 'passed',
     at: () => M._phase,
-    restart: (at) => { W.combat?.clear?.(); holds([]); ui.rekt(false); start(W, { at }).catch((e) => console.error('[m1]', e)); },
+    restart: (at) => { W.combat?.clear?.(); holds([]); ui.rekt(false); start(W, { at, keep: true }).catch((e) => console.error('[m1]', e)); },
   });
   return M;
 }

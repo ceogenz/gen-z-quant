@@ -2033,7 +2033,8 @@ function buildCityGrid(scene) {
       for (let gz = z0; gz <= z1; gz += spacing) {
         const tx = gx + (prand(gx, gz) - 0.5) * spacing * 0.7;
         const tz = gz + (prand(gz, gx, 1) - 0.5) * spacing * 0.7;
-        if (!inPolygon(tx, tz, inner)) continue;
+        // (and inside the polygon itself: one that isn't convex, offset as if it were, can reach past it into a street)
+        if (!inPolygon(tx, tz, inner) || !inPolygon(tx, tz, pts)) continue;
         const r = prand(tx, tz, 2);
         const species = r < speciesMix[0] ? 0 : (r < speciesMix[0] + speciesMix[1] ? 1 : 2);
         parkTreeSites.push({ x: tx, y, z: tz, scale: 0.95 + prand(tx, tz, 3) * 0.35, species });
@@ -2303,7 +2304,8 @@ function buildCityGrid(scene) {
         const tz = gz + (prand(gz, gx, 1) - 0.5) * SP * 0.7;
         if (prand(tx, tz, 9) < 0.3) continue; // glades
         const inner = lawnTop || bed;
-        if (!inPolygon(tx, tz, inner)) continue;
+        // (and inside the park's own outline: a bed offset in from an outline that isn't convex can reach past it)
+        if (!inPolygon(tx, tz, inner) || !inPolygon(tx, tz, b.poly)) continue;
         const r = prand(tx, tz, 2);
         parkTreeSites.push({ x: tx, y: BED_Y, z: tz, scale: 0.9 + prand(tx, tz, 3) * 0.4, species: r < 0.55 ? 0 : (r < 0.75 ? 1 : 2) });
       }
@@ -2635,7 +2637,8 @@ function buildManhattanWaterfrontEdge(group, { blockSidewalks, parkTreeSites, la
       let front = Infinity;
       for (const b of near) if (Math.abs(r.z - b.cz) < b.d / 2 - 1) front = Math.min(front, edgeD(b, r.s));
       const a = r.land ? r.land[0] : r.d0 + HWY_W + 0.5;
-      if (front < Infinity && front - 1.2 - (r.land ? r.land[1] : a) >= (west && r.z < -350 ? 14 : 8)) r.land = [a, front - 1.2];
+      // (WAGMI City: r.landTrees, where the belt ended before: past it, trees only on a block, see plantBelt)
+      if (front < Infinity && front - 1.2 - (r.land ? r.land[1] : a) >= (west && r.z < -350 ? 14 : 8)) { r.landTrees = r.land ? r.land[1] : a; r.land = [a, front - 1.2]; }
     }
     return rows;
   }
@@ -2794,6 +2797,9 @@ function buildManhattanWaterfrontEdge(group, { blockSidewalks, parkTreeSites, la
         const d = a + 1.9 + k * rowGap + (hash(k, zt) - 0.5) * 1.0;
         if (d > b - 1.6) break;
         if (blocked(r, d) || (key === 'river' && blocked(r, a)) || hash(z, d) < 0.1) continue;
+        // (WAGMI City: out on the stretch the belt reaches over to a receding front (see sampleShore), only on a block,
+        // a park's or a sidewalk's: off one it may be an avenue carrying on, 12th Ave south of W 52nd and of W 45th)
+        if (key === 'land' && r.landTrees != null && d > r.landTrees - 1.6 && !window.NYC.blockAt(X(r, d), z)) continue;
         parkTreeSites.push({ x: X(r, d), y: LAWN_Y, z, scale: s0 + hash(d, z) * (s1 - s0), species: pickSpecies(hash(z * 0.37, d), mix), tier });
       }
     }
@@ -3066,6 +3072,40 @@ function buildManhattanWaterfrontEdge(group, { blockSidewalks, parkTreeSites, la
     for (let k = 1; k < n; k++) a.pts.push(new THREE.Vector3().lerpVectors(p0, p1, k / n));
     a.pts.push(...b.pts);
     highwayLanes.splice(highwayLanes.indexOf(b), 1);
+  }
+  // (WAGMI City) No tree in the carriageway: a park's tree site (any park's, the belts', the squares') within a lane's
+  // half width and a trunk's room of a lane's centre line is dropped (the groves planted across 12th Ave at W 52nd-54th
+  // and W 44th-45th, where the park outlines reach over the highway)
+  {
+    const CELL = 16, R = 2.7, cells = new Map();
+    const key = (ix, iz) => (ix + 4096) * 8192 + (iz + 4096);
+    for (const lane of highwayLanes) {
+      const P = lane.pts;
+      for (let i = 0; i + 1 < P.length; i++) {
+        const a = P[i], b = P[i + 1];
+        if (a.y < -1 && b.y < -1) continue;
+        const seg = [a.x, a.z, b.x, b.z];
+        for (let ix = Math.floor((Math.min(a.x, b.x) - R) / CELL); ix <= Math.floor((Math.max(a.x, b.x) + R) / CELL); ix++) {
+          for (let iz = Math.floor((Math.min(a.z, b.z) - R) / CELL); iz <= Math.floor((Math.max(a.z, b.z) + R) / CELL); iz++) {
+            const k = key(ix, iz);
+            let list = cells.get(k);
+            if (!list) cells.set(k, (list = []));
+            list.push(seg);
+          }
+        }
+      }
+    }
+    const onLane = (x, z) => {
+      for (const [ax, az, bx, bz] of cells.get(key(Math.floor(x / CELL), Math.floor(z / CELL))) || []) {
+        const sx = bx - ax, sz = bz - az, l2 = sx * sx + sz * sz || 1;
+        const t = Math.max(0, Math.min(1, ((x - ax) * sx + (z - az) * sz) / l2));
+        if (Math.hypot(ax + sx * t - x, az + sz * t - z) < R) return true;
+      }
+      return false;
+    };
+    for (let i = parkTreeSites.length - 1; i >= 0; i--) {
+      if (onLane(parkTreeSites[i].x, parkTreeSites[i].z)) parkTreeSites.splice(i, 1);
+    }
   }
   return highwayLanes;
 }

@@ -25,7 +25,7 @@ import { createGPS } from './gps.js';
 import { createMarker } from './marker.js';
 import { createUI } from './ui.js';
 import { createAudio } from './audio.js';
-import { missions } from './pause.js';
+import { missions, carry } from './pause.js';
 import { createM2UI } from './m2-ui.js';
 import { runScene } from './m2-scenes.js';
 import { buildChevron } from './m2-set.js';
@@ -82,21 +82,22 @@ async function boot(W) {
   for (let i = 0; i < 600 && !W.app.ready; i++) await sleep(100);
 }
 
-export async function start(W, { at = 'garage' } = {}) {
+export async function start(W, { at = 'garage', keep = false } = {}) {
   if (W.mission) W.mission.stop();
   W.between?.stop();
-  const M = (W.mission = createMission(W));
+  const M = (W.mission = createMission(W, { keep }));
   return M.run(['square', 'rigs', 'escape', 'return'].includes(at) ? at : 'garage');
 }
 
 /* ----------------------------------------------------- between missions -- */
-// the way to a mission (GTA's): its contact's letter on the radar, the route, the corona where it starts; a nudge on
-// the phone when he makes no headway; a sign over the corona if it has one (sign: [big, small])
+// the way to a mission (GTA's): its contact's letter on the radar, the route, the corona where it starts; no reminders
+// on a timer: after a genuine stall the GPS offers real help once (gps.js), with one gentle line (note); a sign over
+// the corona if it has one (sign: [big, small])
 // (carR: how near a stopped car counts as in it: the curb lane by a door on the building line is ~7.5 m off)
-function between(W, { letter, at, name, objective, nudges = [], onArrive, radius = 2.2, carR = radius + 4.5, sign = null }) {
-  const app = W.app, cm = app.controllerManager, P = W.person, car = W.car, ui = W.ui, sfx = W.sfx;
+function between(W, { letter, at, name, objective, note = null, onArrive, radius = 2.2, carR = radius + 4.5, sign = null }) {
+  const app = W.app, cm = app.controllerManager, P = W.person, car = W.car, ui = W.ui;
   const gps = W.gps || (W.gps = createGPS(W));
-  const now = () => (W.clock ? W.clock.now() : performance.now());
+  ui?.step?.('free:' + letter);
   const m = createMarker(THREE, app.scene, { color: '#FFC93C', radius, height: 2.2, alpha: 0.3 });
   const gy = cm.getGroundHeight(at.x, at.z, 'person');
   m.at(at.x, gy, at.z);
@@ -115,12 +116,13 @@ function between(W, { letter, at, name, objective, nudges = [], onArrive, radius
     if (gps.objective) gps.objective(objective, dest, { blip: false }); else { ui?.objective(objective); gps.set(dest); }
     gps.unblip('dest');
     gps.blip('next', { x: at.x, z: at.z, kind: 'letter', letter, pulse: 6, edge: true, name });
+    gps.stallNote = note;
   };
   setObjective();
-  let live = true, best = Infinity, sinceT = now(), nudgeI = 0, arrived = false;
+  let live = true, arrived = false;
   const B = {
     m3: true, marker: m, objective: setObjective, at,
-    stop() { live = false; m.hide(); app.scene.remove(m.group); if (label) app.scene.remove(label); gps.unblip('next'); gps.unblip('car'); if (gps.dest && gps.dest.x === at.x && gps.dest.z === at.z) gps.clear(); if (W.between === B) W.between = null; },
+    stop() { live = false; m.hide(); app.scene.remove(m.group); if (label) app.scene.remove(label); gps.unblip('next'); gps.unblip('car'); if (gps.stallNote === note) gps.stallNote = null; if (gps.dest && gps.dest.x === at.x && gps.dest.z === at.z) gps.clear(); if (W.between === B) W.between = null; },
   };
   (function loop() {
     if (!live) return;
@@ -133,13 +135,6 @@ function between(W, { letter, at, name, objective, nudges = [], onArrive, radius
     if (!inCar && Math.hypot(car.position.x - P.position.x, car.position.z - P.position.z) > 25) gps.blip('car', { x: car.position.x, z: car.position.z, kind: 'car', edge: true, name: car.label || "Quant's car" });
     else gps.unblip('car');
     const d = Math.hypot(p.x - at.x, p.z - at.z);
-    if (d < best - 30) { best = d; sinceT = now(); }
-    if (nudges.length && now() - sinceT > 50000 && d > 40) {
-      sinceT = now(); best = d;
-      const [from, text] = nudges[nudgeI++ % nudges.length];
-      sfx?.play('buzz', { gain: 0.16, times: 1 }); sfx?.play('ding', { gain: 0.12 }); W.audio?.play?.('phoneBuzz');
-      ui?.dm(from, text, 8); setObjective();
-    }
     if (!arrived && (inCar ? d < carR && Math.abs(car.speed) < 3 : d < radius && Math.abs(p.y - gy) < 1.2)) { arrived = true; onArrive?.(B); }
     if (d > Math.max(radius + 6, carR + 1.5)) arrived = false;
   })();
@@ -151,7 +146,7 @@ function between(W, { letter, at, name, objective, nudges = [], onArrive, radius
 export function toGarage(W, { quick = false } = {}) {
   between(W, {
     letter: 'G', at: G_AT, name: "Gears' garage · W 22nd St", objective: ['Go to ', { "Gears' garage": 'yellow' }, '.'], carR: 9,
-    nudges: [['Juno', "gears' garage. west chelsea. the G on your radar."], ['Juno', 'you need sleep. the G. go.']],
+    note: ['Juno', "gears' garage is in west chelsea, the G on your radar. he's expecting you."],
     onArrive: (b) => { b.stop(); start(W, { at: 'garage' }).catch((e) => console.error('[m3]', e)); },
   });
   if (!quick) W.ui?.help(['A new mission is available. Go to the ', { G: 'yellow' }, ' on the Radar.'], 9);
@@ -161,14 +156,14 @@ export function toPete(W, { quick = false } = {}) {
   between(W, {
     letter: 'P', at: P_AT, name: 'Pete · Sara D. Roosevelt Park', objective: ['Meet ', { Pete: 'blue' }, ' at ', { 'Sara D. Roosevelt Park': 'yellow' }, '.'],
     sign: ['MISSION 4', 'COMING SOON'],
-    nudges: [['Unknown number', 'sara roosevelt park. by the benches. come alone. -P']],
+    note: ['Unknown number', 'sara roosevelt park. by the benches. take your time. -P'],
     onArrive: () => { W.ui?.place('Sara D. Roosevelt Park', 'Lower East Side · WAGMI City', 3); W.ui?.help(['Mission 4 is coming soon. ', { Pete: 'blue' }, ' will meet you here.'], 9); },
   });
   if (!quick) W.ui?.help(['A new mission is available. Go to the ', { P: 'yellow' }, ' on the Radar.'], 9);
 }
 
 /* ---------------------------------------------------------- the mission -- */
-function createMission(W) {
+function createMission(W, { keep = false } = {}) {
   const app = W.app, cm = app.controllerManager, P = W.person, car = W.car, ui = W.ui, sfx = W.sfx;
   const gps = W.gps || (W.gps = createGPS(W));
   const U = W.m2ui || (W.m2ui = createM2UI(ui));
@@ -212,7 +207,8 @@ function createMission(W) {
   };
   const holds = (rects) => app.trafficSystem.hold?.(rects);
   const midday = () => { if (app.lightingSystem?.activePresetId !== 'midday') app.selectTime?.('midday'); };
-  const stats = { t0: now(), hits: 0, rekt: 0, smashed: 0 };
+  // (kept through a checkpoint restart: the card counts the whole mission)
+  const stats = carry(W, 'm3', keep, () => ({ t0: now(), hits: 0, rekt: 0, smashed: 0 }));
   let lastHp = null;
   const fails = {};
   const hooks = new Set();
@@ -321,12 +317,13 @@ function createMission(W) {
     async square(fresh) {
       // (played straight in: the light and his place first, the sets after: a slow load doesn't leave him at the city's
       // own start in its golden hour)
-      if (fresh) { midday(); place(W, { car: SPOT.out.car, quant: SPOT.out.quant }); }
+      // (a restart: at the wheel outside the garage, the drive ahead of him)
+      if (fresh) { midday(); inTheCar(...SPOT.out.car); }
       await sets(); midday();
       if (fresh) S.Gar.show(true);
       // (the blip on the arch; the route down 5th Ave to its last lane, and on foot near the square, to the arch; in the
-      // car on that last stretch, no line: the stage is in sight)
-      const dest = { ...SQ, follow: () => (inCar() || dist(me(), SQ.x, SQ.z) > 140 ? FIFTH : SQ) };
+      // car on that last stretch, no line: the stage is in sight. still: a place, for the stall watch)
+      const dest = { ...SQ, still: true, follow: () => (inCar() || dist(me(), SQ.x, SQ.z) > 140 ? FIFTH : SQ) };
       const drive = gps.drive({ dest, objective: ['Go to ', { 'Washington Square': 'yellow' }, '.'] });
       const t0 = now(); let called = false, up = false, bare = false;
       const at5th = (p) => Math.abs(p.x) < 22 && p.z > FIFTH.z - 6 && p.z < ARCH.z;
@@ -349,7 +346,11 @@ function createMission(W) {
     // the launch, seen; a Degen spots him
     async rally(fresh) {
       await sets(); midday();
-      if (fresh) place(W, { car: FRESH.rigs.car, quant: [2.5, 2790, 0] });
+      // (however he came, the scene leaves him on foot at the arch, his car parked on 5th Ave behind him: the fight
+      // after it starts a few steps from the rigs, not in his car a block back; under a quick fade when he moves)
+      const moved = fresh || inCar() || dist(P.position, 2.5, 2790) > 8;
+      if (moved) { W.cutscene = true; ui.cine(true); cm.resetInput?.(); if (!fresh) await ui.fade(1, 0.25); }
+      place(W, { car: FRESH.rigs.car, quant: [2.5, 2790, 0] });
       await spawnRally();
       car.speed = 0;
       // (its shots kept clear while it plays, M1's way: 5th Ave's last block down to the arch, the stage, the lawn to
@@ -357,6 +358,7 @@ function createMission(W) {
       holds([STAGE_HOLD, { minX: -26, maxX: 26, minZ: 2735, maxZ: 2905 }]);
       const def = rallyScene(W, { say, fiona: S.fiona, rally: S.R, spotter: S.crew?.enemies[0] || null });
       def.setup();
+      if (moved && !fresh) setTimeout(() => ui.fade(0, 0.6), 120);
       try { await runScene(W, def); } finally { holds([STAGE_HOLD]); }
     },
     // the fight round the rigs
@@ -383,7 +385,10 @@ function createMission(W) {
         go();
         ui.counter('RIGS', `${R.smashed}/3`);
         delay(1.6).then(() => ui.help(['Bats: walk up to one and press [E] to pick it up. One swing smashes a ', { rig: 'green' }, '.'], 9)).catch(() => {});
-        let warned = false, barkT = now() + 6000, helped2 = false, extra = false, lastMv = 'free', swing = null, said = 0;
+        let warned = false, barkT = now() + 6000, helped2 = false, extra = false, lastMv = 'free', swing = null, said = 0, routed = false;
+        // (out of reach of them, a retry or a chase off the lawn: the line to the nearest rig standing)
+        const nearestRig = () => { let b = null, bd = Infinity; for (const r of R.rigs) if (!r.down) { const d = dist(me(), r.x, r.z); if (d < bd) { bd = d; b = r; } } return [b, bd]; };
+        const rigTarget = { follow: () => { const [r] = nearestRig(); return r ? { x: r.x, z: r.z } : me(); }, name: 'Livestream rig' };
         const BARKS = [
           ['Fiona', PINK, 'Number go up! Number go UP!'], ['Fiona', PINK, 'Buy the dip! There is no dip!'], ['Fiona', PINK, 'Diamond hands, everybody! Diamond hands!'],
           ['Fiona', PINK, "Don't look at the kid! Look at the chart!"], ['Fiona', PINK, 'Moon two! To the moon!'],
@@ -471,8 +476,10 @@ function createMission(W) {
           if (inCar() && Math.abs(car.speed) > 2.5) for (const r of R.rigs) if (!r.down && dist(car.position, r.x, r.z) < 2.4) r.hit(3, car.position);
           // (each rig down, whatever brought it down: counted, its marks off, the chart shaken)
           for (const r of R.rigs) if (r.down && !r.counted) { r.counted = true; smashed(r); }
-          // the rigs marked (green blips, a chevron over each), the Degens red
+          // the rigs marked (green blips, a chevron over each, the line to the nearest from afar), the Degens red
           for (const r of R.rigs) if (!r.down) { gps.blip('rig' + r.i, { x: r.x, z: r.z, kind: 'object', edge: true, name: 'Livestream rig' }); S.chev[r.i].at(r.x, 2.9, r.z, dt); }
+          const far = nearestRig()[1] > (routed ? 18 : 24);
+          if (far !== routed) { routed = far; gps.to(far ? rigTarget : null); }
           const live = new Set();
           for (const e of W.combat?.enemies || []) if (e.alive && dist(e.pos, P.position.x, P.position.z) < 150) { live.add('e:' + e.id); gps.blip('e:' + e.id, { x: e.pos.x, z: e.pos.z, kind: 'enemy' }); }
           for (const id of [...gps.blips.keys()]) if (id.startsWith('e:') && !live.has(id)) gps.unblip(id);
@@ -531,8 +538,12 @@ function createMission(W) {
         else ui.help(['Cold-gas thrusters: [Space] hops the car, [Q] / [E] dash it sideways.'], 9);
       }).catch(() => {});
       delay(9).then(() => junoEscape()).catch(() => {});
-      // (they come out of W 8th St onto 5th Ave, ~80 m up from him, out of sight until they turn the corner)
-      const chase = S.chase = W.pursuit?.start?.({ heat: 2, kind: 'degens', count: 2, from: { x: -150, z: 2696 }, target: () => (inCar() ? car.position : P.position) }) || null;
+      // (they come out of W 8th St onto 5th Ave, ~80 m up from him, out of sight until they turn the corner: from just
+      // round it, already rolling, so they are on him as he sets off and it takes a real run to lose them; from 150 m
+      // down W 8th St at 8 m/s, a boost up 5th Ave lost them at the first corner in 25 s)
+      // (escape / vmax: this chase's own lose time (s) and top speed (m/s), for the pursuit to read when it takes them:
+      // at heat 2's 8 s and 30 m/s a boost up 5th Ave still loses them in ~20 s; the brief wants 45-60 s)
+      const chase = S.chase = W.pursuit?.start?.({ heat: 2, kind: 'degens', count: 2, from: { x: -48, z: 2700 }, speed: 16, escape: 16, vmax: 35, target: () => (inCar() ? car.position : P.position) }) || null;
       let lost = false, wasIn = inCar();
       const t0 = now();
       const off = hook(() => {
@@ -649,6 +660,7 @@ function createMission(W) {
       while (i < ORDER.length && running) {
         const phase = (M._phase = ORDER[i]);
         tok = { dead: false, err: null };
+        ui.step('m3:' + phase);
         try {
           await PHASES[phase](fresh);
           // (the phase's leftovers stop with it: a call or a timer it started doesn't run on into the next)
@@ -684,7 +696,7 @@ function createMission(W) {
     checkpoints: ['garage', 'square', 'rigs', 'escape', 'return'].map((id) => ({ id, label: LABELS[id] })),
     active: () => running && !!M._phase && M._phase !== 'passed',
     at: () => CHECKPOINT[M._phase] || 'garage',
-    restart: (at) => { ui.rekt(false); start(W, { at }).catch((e) => console.error('[m3]', e)); },
+    restart: (at) => { ui.rekt(false); start(W, { at, keep: true }).catch((e) => console.error('[m3]', e)); },
   });
   return M;
 }

@@ -1,0 +1,7 @@
+{
+ "design": "Male, 17 years old, American, light tenor, casual and deadpan, quick dry delivery, very online, slightly nasal teenage timbre, close-mic, clean dry studio audio, natural and conversational, not an announcer.",
+ "seed": 1701,
+ "refText": "Honestly, I just wanted to walk my dog and get a bagel. Instead my phone has been buzzing all morning, and half the internet is mad at me. Cool. Normal Tuesday.",
+ "model": "Qwen3-TTS-12Hz-1.7B-VoiceDesign-bf16",
+ "take": 0
+}

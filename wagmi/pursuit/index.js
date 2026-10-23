@@ -31,14 +31,15 @@
 //     decides what that means). The traffic brakes for them (trafficSystem.blockers).
 // API (window.WAGMI.pursuit):
 //   start({ heat = 2, kind = 'degens' | 'police', count, from: { x, z }, target: () => ({ x, z }), lose = true,
-//           reinforce, speed }) -> chase { on(ev, cb), off(ev, cb), stop(), heat (get / set), state, view() }
+//           reinforce, speed, escape, vmax }) -> chase { on(ev, cb), off(ev, cb), stop(), heat (get / set), state, view() }
 //     (one chase at a time: a new start ends the last; stop() after 'lost' lets the cars drive off out of view)
 //     events: 'lost' (escaped), 'caught' ({ onFoot }), 'wrecked' ({ car, left }), 'spotted' / 'hidden' (sight
 //     changes), 'hit' ({ speed }: a chase car hit Quant's car), 'crew' ({ car, crew }: Degens out of a car at him on
 //     foot), 'runover' ({ speed, car }: a chase car ran him down on foot)
 //     from: where they set out (the nearest lane to it, in a column facing him); else 45-90 m off him, out of view.
 //     target: what they chase (default: Quant, in his car or on foot). lose: false, they can't be lost (an escort);
-//     reinforce: replace the wrecked (default: heat 3 and up); speed: m/s they set out at
+//     reinforce: replace the wrecked (default: heat 3 and up); speed: m/s they set out at; escape: s out of sight to
+//     lose them (default RULE.escape(heat)); vmax: their top speed (default RULE.vmax(heat))
 //   stop() · heat (0-5) · active · chase (the current one) · RULE (the numbers) · debug
 // WAGMI.thrusters: see thrusters.js. URL: ?pursuit=2 (a heat 2 Degens chase where Quant is, put in his car first;
 // ?pursuit=2&police for the police), ?thrusters=all (or ?thrusters=hop,dash).
@@ -112,7 +113,7 @@ export function install(W) {
   // where it heads, and how fast: straight at him (close, seen), the route to him, to where he was last seen, a search
   // point round there, or away
   function steerFor(P, ch, dt, T) {
-    const vmax0 = RULE.vmax(ch._heat), dx = T.x - P.x, dz = T.z - P.z, d = Math.hypot(dx, dz);
+    const vmax0 = vmaxOf(ch), dx = T.x - P.x, dz = T.z - P.z, d = Math.hypot(dx, dz);
     let ax, az, vt, direct = false;
     if (P.mode === 'leave') {
       if (!P.leaveTo) P.leaveTo = nav.spot(T.x, T.z, 260, 420, (x, z) => Math.hypot(x - P.x, z - P.z) < Math.hypot(x - T.x, z - T.z)) || { x: P.x + Math.sin(P.h) * 300, z: P.z + Math.cos(P.h) * 300 };
@@ -499,7 +500,7 @@ export function install(W) {
   // turning; its smoke when wrecked; its engine (and siren) heard near the camera; the Degens on the horn
   function pose(P, dt) {
     P.y += (cm.getGroundHeight(P.x, P.z, 'car') - P.y) * Math.min(1, dt * 14);
-    const vmax = RULE.vmax(P.ch._heat);
+    const vmax = vmaxOf(P.ch);
     const tp = clamp(-P.acc * 0.006, -0.05, 0.06), tr = clamp(-P.steer * (P.speed / vmax) * 0.11, -0.09, 0.09);
     P.pitchV += ((tp - P.pitch) * 68 - P.pitchV * 10.8) * dt; P.pitch = clamp(P.pitch + P.pitchV * dt, -0.2, 0.2);
     P.rollV += ((tr - P.roll) * 68 - P.rollV * 10.8) * dt; P.roll = clamp(P.roll + P.rollV * dt, -0.24, 0.24);
@@ -547,6 +548,8 @@ export function install(W) {
 
   /* ------------------------------------------------------------------ a chase -- */
   let chase = null;
+  // (a chase's own numbers, when its start() set them: opts.escape s to lose them, opts.vmax their top speed)
+  const escOf = (ch) => ch.escN ?? RULE.escape(ch._heat), vmaxOf = (ch) => ch.vmaxN ?? RULE.vmax(ch._heat);
   const tgtState = { x: 0, z: 0, vx: 0, vz: 0, h: 0, speed: 0, onFoot: false, px: null, pz: null };
   function start(opts = {}) {
     if (chase) end(chase, true);
@@ -555,7 +558,7 @@ export function install(W) {
     const ch = {
       kind, cars: [], state: 'on', seen: true, lastSeen: { x: 0, z: 0 }, esc: 0, hideT: 0, t: 0, lose, target,
       reinforce: opts.reinforce, want: 0, refill: 0, caughtT: 0, caughtSent: false, _heat: clamp(opts.heat ?? 2, 1, 5),
-      crews: [], ramNext: 0, brute: false,
+      crews: [], ramNext: 0, brute: false, escN: opts.escape ?? null, vmaxN: opts.vmax ?? null,
       on(ev, cb) { (listeners[ev] || (listeners[ev] = [])).push(cb); return ch; },
       off(ev, cb) { listeners[ev] = (listeners[ev] || []).filter((x) => x !== cb); return ch; },
       emit(ev, d) { for (const cb of listeners[ev] || []) { try { cb(d); } catch (e) { console.error('[pursuit]', ev, e); } } },
@@ -588,7 +591,7 @@ export function install(W) {
     }
     // (the streets ~1.4 times the straight line, at ~80% of top speed, to within sight of him)
     const d0 = Math.min(...ch.cars.map((P) => Math.hypot(P.x - T.x, P.z - T.z)));
-    ch.grace = clamp(2.5 + (1.4 * d0 - RULE.sight(ch._heat)) / (0.8 * RULE.vmax(ch._heat)), 2.5, 12);
+    ch.grace = clamp(2.5 + (1.4 * d0 - RULE.sight(ch._heat)) / (0.8 * vmaxOf(ch)), 2.5, 12);
     hud.show(ch);
     console.log(`[pursuit] ${kind} heat ${ch._heat}: ${ch.cars.length} cars`);
     return ch;
@@ -629,7 +632,7 @@ export function install(W) {
       // (at first they know where he is: long enough to get near him from where they set out)
       const seen = ch.t < ch.grace || live.some((P) => P.sees);
       if (seen !== ch.seen) { ch.seen = seen; if (seen) for (const P of live) P.search = null; ch.emit(seen ? 'spotted' : 'hidden', { x: T.x, z: T.z }); }
-      const N = RULE.escape(ch._heat), R = RULE.radius(ch._heat);
+      const N = escOf(ch), R = RULE.radius(ch._heat);
       if (seen) { ch.lastSeen.x = T.x; ch.lastSeen.z = T.z; ch.esc = 0; ch.hideT = 0; }
       else if (ch.lose) {
         // out of the circle (shrinking as the escape runs), the escape runs; inside it, the slow way (hiding)
@@ -762,7 +765,7 @@ export function install(W) {
     if (chase === ch) { chase = null; hud.show(null); }
   }
   function view(ch) {
-    const N = RULE.escape(ch._heat), R = RULE.radius(ch._heat), on = ch.state === 'on', T = tgtState;
+    const N = escOf(ch), R = RULE.radius(ch._heat), on = ch.state === 'on', T = tgtState;
     const escaping = on && !ch.seen && ch.esc > 0;
     return {
       on, kind: ch.kind, seen: on && ch.seen, escaping, heat: ch._heat,

@@ -59,9 +59,20 @@ export function createRadio(W, out) {
   // start a deck on a segment of station s, off seconds into it, faded in over secs
   // (each file fetched whole and played from memory: a plain static server, python's among them, can't serve the byte
   // ranges a media element needs to seek, and the radio seeks all the time)
-  const blobs = new Map();
+  // (the last KEEP files asked for are kept; an older one is let go once neither deck nor the street's stereo has it
+  // loaded, so a long drive round every station doesn't hold every track in memory: 2-4.5 MB each)
+  const blobs = new Map(), urls = new Map(), KEEP = 6;
   const blob = (file) => {
-    if (!blobs.has(file)) blobs.set(file, fetch(file).then((r) => { if (!r.ok) throw new Error(file); return r.blob(); }).then((b) => URL.createObjectURL(b)).catch((e) => { blobs.delete(file); throw e; }));
+    if (blobs.has(file)) { const p = blobs.get(file); blobs.delete(file); blobs.set(file, p); return p; }
+    blobs.set(file, fetch(file).then((r) => { if (!r.ok) throw new Error(file); return r.blob(); }).then((b) => { const u = URL.createObjectURL(b); urls.set(file, u); return u; }).catch((e) => { blobs.delete(file); throw e; }));
+    if (blobs.size > KEEP) {
+      const loaded = new Set([...(g ? g.decks.map((d) => d.el.src) : []), boom.d?.src]);
+      for (const f of [...blobs.keys()]) {
+        if (blobs.size <= KEEP) break;
+        const u = urls.get(f); if (!u || loaded.has(u)) continue; // (still coming, or loaded on a deck)
+        blobs.delete(f); urls.delete(f); URL.revokeObjectURL(u);
+      }
+    }
     return blobs.get(file);
   };
   function start(d, s, i, off, secs) {

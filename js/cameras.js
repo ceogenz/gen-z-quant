@@ -22,12 +22,14 @@ const CAMERA_PRESETS = [
 // The follow cameras' lens keeps LENS_PAD m off the buildings (the near plane, 0.35 m out, stays clear of a wall)
 const LENS_PAD = 0.3;
 // How far a line from p (unit direction ux, uy, uz) runs, up to len, before it comes within LENS_PAD of one of the
-// boxes: the controllers' colliders, boxes from the ground up to maxY, some turned (obb). A box the line starts within
-// the pad of counts at its own size, one it starts inside not at all.
+// boxes: the controllers' colliders, boxes from the ground up to maxY, some turned (obb); (WAGMI City) a box with a minY
+// starts there instead (a sign, a screen up on its truss). A box the line starts within the pad of counts at its own
+// size, one it starts inside not at all.
 function rayClear(p, ux, uy, uz, len, boxes) {
   let t = len;
   for (const c of boxes) {
     if (c.carOnly || p.y - LENS_PAD > c.maxY && uy >= 0) continue;
+    const y0 = c.minY != null ? c.minY : -1e4;
     let ox = p.x, oz = p.z, dx = ux, dz = uz, x0 = c.minX, x1 = c.maxX, z0 = c.minZ, z1 = c.maxZ;
     if (c.obb) {
       const o = c.obb;
@@ -39,12 +41,12 @@ function rayClear(p, ux, uy, uz, len, boxes) {
       dz = ux * o.sn + uz * o.cs;
       x0 = -o.hx; x1 = o.hx; z0 = -o.hz; z1 = o.hz;
     }
-    const within = (m) => ox > x0 - m && ox < x1 + m && oz > z0 - m && oz < z1 + m && p.y < c.maxY + m;
+    const within = (m) => ox > x0 - m && ox < x1 + m && oz > z0 - m && oz < z1 + m && p.y < c.maxY + m && p.y > y0 - m;
     if (within(0)) continue;
     const pad = within(LENS_PAD) ? 0 : LENS_PAD;
     let t0 = 0;
     let t1 = t;
-    for (const [o, d, lo, hi] of [[ox, dx, x0 - pad, x1 + pad], [p.y, uy, -1e4, c.maxY + pad], [oz, dz, z0 - pad, z1 + pad]]) {
+    for (const [o, d, lo, hi] of [[ox, dx, x0 - pad, x1 + pad], [p.y, uy, y0 - pad, c.maxY + pad], [oz, dz, z0 - pad, z1 + pad]]) {
       if (Math.abs(d) < 1e-9) {
         if (o < lo || o > hi) { t0 = Infinity; break; }
         continue;
@@ -103,6 +105,9 @@ class CameraSystem {
     this._view = null;
     this._pivot = new THREE.Vector3();
     this._look = new THREE.Vector3();
+    // (WAGMI City) what else stands in the street, for keepInView: blockers(x, z, r, entity) -> boxes in the colliders'
+    // form (the traffic, a parked car, a mission's van or stage screen: wagmi/combat/camera.js createBlockers), or null
+    this.blockers = null;
 
     this.bindPointerControls();
   }
@@ -446,6 +451,42 @@ class CameraSystem {
   // swings round him to the clearest way within reach, no faster than ~140 degrees a second, and back once straight
   // behind him is clear again; with no clear way at all it rises over him, looking down. (Only the camera moves: the
   // follow and orbit state are left as they are.)
+  // the buildings' collision boxes within r of p, and (WAGMI City) the street's other things (this.blockers)
+  nearBoxes(p, r, entity) {
+    const near = this.controllerManager.nearColliders(p.x, p.z, r);
+    const more = this.blockers ? this.blockers(p.x, p.z, r, entity) : null;
+    return more && more.length ? near.concat(more) : near;
+  }
+
+  // (WAGMI City) how much of the line from p to q is clear of the buildings and the street's things (0 to 1; 1: all of
+  // it): a cutscene's hand-back glides only while the line from him to the lens stays clear (wagmi/mission/cine.js)
+  segClear(p, q, entity) {
+    const x = q.x - p.x, y = q.y - p.y, z = q.z - p.z, L = Math.hypot(x, y, z);
+    if (L < 1e-3) return 1;
+    return rayClear(p, x / L, y / L, z / L, L, this.nearBoxes(p, L + 1, entity)) / L;
+  }
+
+  // (WAGMI City) the turn of the player (rad: the least there is) that puts the view behind him clear of all round him
+  // at its full length; 0 when straight behind him already is, or in a car. A cutscene's hand-back turns him by it (a
+  // van, a wall or the stage right at his back would have the view in it): wagmi/mission/cine.js release()
+  clearTurn(entity) {
+    if (!entity || entity.type === 'car' || entity.type === 'helicopter') return 0;
+    const dist = entity.chaseDistance, height = entity.chaseHeight + Math.sin(0.09) * dist * 0.85, horiz = Math.cos(0.09) * dist;
+    const P = this._pivot.set(entity.position.x, entity.position.y + 1.45, entity.position.z);
+    const near = this.nearBoxes(P, dist + 1, entity);
+    const clearAt = (yaw) => {
+      const h = entity.heading + yaw, x = -Math.sin(h) * horiz, y = entity.position.y + height - P.y, z = -Math.cos(h) * horiz, L = Math.hypot(x, y, z);
+      return rayClear(P, x / L, y / L, z / L, L, near) / L;
+    };
+    let best = 0, bk = -1;
+    for (const yaw of [0, ...SWINGS, Math.PI]) {
+      const k = clearAt(yaw);
+      if (k > 0.97) return yaw;
+      if (k > bk + 0.05) { bk = k; best = yaw; }
+    }
+    return best;
+  }
+
   keepInView(entity, dt) {
     const car = entity.type === 'car';
     const P = this._pivot.set(entity.position.x, entity.position.y + (car ? 1.15 : entity.type === 'helicopter' ? 1.0 : 1.45), entity.position.z);
@@ -457,7 +498,7 @@ class CameraSystem {
     if (L < 0.05) return;
     const v = this._view || (this._view = { boom: L, swing: 0, want: 0, lift: 0 });
     const minBoom = car ? 3.2 : 1.8;
-    const near = this.controllerManager.nearColliders(P.x, P.z, L + 1);
+    const near = this.nearBoxes(P, L + 1, entity);
     // the boom turned `yaw` about him (at the same height), and how far it is clear
     const dirAt = (yaw, out) => {
       const c = Math.cos(yaw);

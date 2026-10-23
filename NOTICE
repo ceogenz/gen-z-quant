@@ -27,22 +27,85 @@ the MIT License in LICENSE; they remain under their author's terms.
 Props (street fight)
 --------------------
   - assets/props/trash-cans.glb: "Metal Trash Can" by GurJas Studios, from Poly Haven
-    (https://polyhaven.com/a/metal_trash_can), CC0-1.0 (https://polyhaven.com/license). Taken from
-    the GameMog asset library's copy (triangles cut from 13960 to 5994, transforms baked), re-packed
-    as a GLB with its textures reduced to 512 px. Both cans (galvanised, rusted) and their lids.
+    (https://polyhaven.com/a/metal_trash_can), CC0-1.0 (https://polyhaven.com/license). Its triangles
+    cut from 13960 to 5994 and its transforms baked, re-packed as a GLB with its textures reduced
+    to 512 px. Both cans (galvanised, rusted) and their lids.
   - The bats and bottles are made in code (wagmi/combat/items.js); the fight's sounds are made in
     code with WebAudio (wagmi/combat/sfx.js). No recorded audio is used.
 
 
+Characters (assets/characters)
+------------------------------
+  - quant.glb, gears.glb, juno.glb, fiona.glb: original characters made for WAGMI City (invented people;
+    nobody is modelled on a real person), built from MakeHuman's base body, clothes and hair
+    (http://www.makehuman.org, CC0-1.0), then shaped, dressed, recoloured and texture-baked for the game.
+    Juno's headband, glasses and headphones, Gears' beard and cap and Fiona's megaphone and shades are
+    made in code.
+  - Their walk, idle, talk, phone and similar clips come from the CMU Graphics Lab Motion Capture
+    Database (http://mocap.cs.cmu.edu), which Carnegie Mellon University provides free for all uses:
+    it may be included in products, but the data itself may not be resold. The database was created
+    with funding from NSF EIA-0196217.
+  - Quant's freeflow fight moves (the ff* clips) are Spiderbench's, retargeted to his rig (see
+    Spiderbench above).
+
+
 Music (the car radio: wagmi/radio/stations.js)
 ----------------------------------------------
-  - WAGMI FM: "We All Gonna Make It" (the theme), "Pump & Dump" and "Fifth Ave Glide"
-    (assets/music/wagmi-theme.m4a, wagmi-pump.m4a, wagmi-glide.m4a) are original to this game,
+The same list is in assets/CREDITS.md, and in the game on the pause menu's Credits page
+(wagmi/credits.js). The game's theme is "Pyro Flow" by Kevin MacLeod (WAGMI FM's first track).
+
+  - "We All Gonna Make It", "Pump & Dump" and "Fifth Ave Glide" (WAGMI FM;
+    assets/music/wagmi-theme.m4a, wagmi-pump.m4a, wagmi-glide.m4a) are original to this game,
     composed as code and rendered offline by wagmi/radio/build/music/ (no samples, no loops from
     anyone else).
-  - The other stations play these CC0-1.0 tracks (https://creativecommons.org/publicdomain/zero/1.0/),
-    copied from the GameMog asset library (which measured their loudness and loop points and encoded
-    them to AAC); each from OpenGameArt:
+
+  - These tracks are licensed under Creative Commons Attribution. Each was trimmed of leading and
+    trailing silence, levelled to -14 LUFS and re-encoded to AAC (assets/music/<file>.m4a); the music
+    itself is unchanged.
+
+    Kevin MacLeod (incompetech.com), Creative Commons Attribution 4.0 (CC BY 4.0,
+    https://creativecommons.org/licenses/by/4.0/). Credit as the composer asks:
+    "<Title>" Kevin MacLeod (incompetech.com) Licensed under Creative Commons: By Attribution 4.0
+    License http://creativecommons.org/licenses/by/4.0/
+      assets/music/pyro-flow.m4a          "Pyro Flow" Kevin MacLeod (incompetech.com)
+                                          https://incompetech.com/music/royalty-free/mp3-royaltyfree/Pyro%20Flow.mp3
+      assets/music/basic-implosion.m4a    "Basic Implosion" Kevin MacLeod (incompetech.com)
+                                          https://incompetech.com/music/royalty-free/mp3-royaltyfree/Basic%20Implosion.mp3
+      assets/music/mta.m4a                "MTA" Kevin MacLeod (incompetech.com)
+                                          https://incompetech.com/music/royalty-free/mp3-royaltyfree/MTA.mp3
+      assets/music/lewis-and-dekalb.m4a   "Lewis and Dekalb" Kevin MacLeod (incompetech.com)
+                                          https://incompetech.com/music/royalty-free/mp3-royaltyfree/Lewis%20and%20Dekalb.mp3
+      assets/music/vicious.m4a            "Vicious" Kevin MacLeod (incompetech.com)
+                                          https://incompetech.com/music/royalty-free/mp3-royaltyfree/Vicious.mp3
+      assets/music/got-funk.m4a           "Got Funk" Kevin MacLeod (incompetech.com)
+                                          https://incompetech.com/music/royalty-free/mp3-royaltyfree/Got%20Funk.mp3
+
+    Alexandr Zhelanov, from OpenGameArt, Creative Commons Attribution 4.0 (CC BY 4.0,
+    https://creativecommons.org/licenses/by/4.0/):
+      assets/music/gangstazz.m4a          "Gang$tazz" by Alexandr Zhelanov
+                                          (https://soundcloud.com/alexandr-zhelanov)
+                                          https://opengameart.org/content/gangtazz
+
+    From ccMixter, Creative Commons Attribution 3.0 (CC BY 3.0,
+    https://creativecommons.org/licenses/by/3.0/), with the works each remix samples:
+      assets/music/i-dunno.m4a            "I dunno" by grapes (ft. J.Lang, Morusque)
+                                          https://ccmixter.org/files/grapes/16626
+                                          samples "It's Time {Bootcamp}" by J.Lang
+                                          (https://ccmixter.org/files/djlang59/16366) and "260808 loops
+                                          piano" by Morusque (https://ccmixter.org/files/Nurykabe/16527)
+      assets/music/spheres.m4a            "Spheres (Hip Hop Instrumental)" by Robbero
+                                          https://ccmixter.org/files/Robbero/43483
+                                          samples "Spheres" by Doxent Zsigmond
+                                          (https://ccmixter.org/files/doxent/43475)
+      assets/music/sunbirds.m4a           "SUNBIRDS" by BOCrew (THEDEEPR / THECORNER, feat. FORENSIC)
+                                          https://ccmixter.org/files/BOCrew/38854
+                                          samples "ccmixter promo" by FORENSIC
+                                          (https://ccmixter.org/files/4nsic/22923)
+      assets/music/let-em-have-it.m4a     "Let 'Em Have It (Hip Hop Instrumental)" by Robbero
+                                          https://ccmixter.org/files/Robbero/43749
+
+  - These tracks are CC0-1.0 (https://creativecommons.org/publicdomain/zero/1.0/), their loudness
+    and loop points measured and encoded to AAC for the game; each from OpenGameArt:
       assets/music/chill-lofi.m4a         "Chill Lofi Inspired (loop edit)" by omfgdude, loop edit by
                                           qubodup  https://opengameart.org/content/chill-lofi-inspired-loop-edit
       assets/music/midnight-cruiser.m4a   "Midnight Cruiser" by Zane Little
@@ -57,11 +120,25 @@ Music (the car radio: wagmi/radio/stations.js)
                                           https://opengameart.org/content/dance-field
 
 
+Engine sounds
+-------------
+  - assets/sfx/engine/v8-idle.m4a, v8-2000.m4a, v8-2500.m4a, v8-4000.m4a, v8-4900.m4a: loops cut from
+    "Maserati GranTurismo S Exhaust" by lmartins
+      https://freesound.org/people/lmartins/sounds/465453/
+      (via Wikimedia Commons: https://commons.wikimedia.org/wiki/File:Maserati_GranTurismo_S_Exhaust.ogg)
+    licensed CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/). Changed: trimmed, pitch-flattened
+    to constant engine speeds, looped, levelled and re-encoded to AAC.
+  - The gearbox, the shifts, the pops and the mix (wagmi/audio/supercar.js) are original to WAGMI City.
+
+
 Voices (assets/voice)
 ---------------------
-  - PLACEHOLDERS: every spoken line in assets/voice/ was made with the macOS speech voices (the `say`
-    command: Eddy, Rocko, Reed, Samantha and Daniel; ZK's through a voice changer made in code).
-    Apple's macOS licence allows that output for personal, non-commercial use only. They must be
-    replaced by recordings (actors or a voice service with a commercial licence) before the game
-    is published. assets/voice/manifest.json records each line's source; docs/VOICE-LINES.md is the
-    line sheet and says how to drop the recordings in.
+  - Quant and Juno: synthesised with Qwen3-TTS by the Qwen team, Alibaba Cloud (Apache-2.0,
+    https://github.com/QwenLM/Qwen3-TTS). Each voice was designed once with Qwen3-TTS-12Hz-1.7B-VoiceDesign
+    and every line cloned from it with Qwen3-TTS-12Hz-0.6B-Base, using the mlx-community conversions
+    (Apache-2.0) run with mlx-audio (MIT, https://github.com/Blaizzy/mlx-audio). The voices are invented:
+    no real person's voice was used. Their reference clips are in wagmi/radio/build/tts/.
+  - Everyone else (ZK, Bagsy, Lev, Gears, Fiona and the rest): placeholders made with the macOS speech
+    voices (the `say` command; ZK's through a voice changer made in code). They are meant to be replaced
+    by recordings or synthesised voices like Quant's and Juno's. assets/voice/manifest.json records
+    each line's source; docs/VOICE-LINES.md is the line sheet and says how to drop new voices in.

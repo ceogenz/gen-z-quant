@@ -241,6 +241,7 @@ export function buildYard(W) {
     poolMat.colorNode = color(0xffe6c4).mul(fall.mul(0.07).add(spot.mul(0.11)).mul(night));
     poolMat.mrtNode = mrt({ normal: vec4(0, 0, 0, 0), metalRough: vec4(0, 0, 0, 0) }); // (the reflections keep seeing the ground under it)
   }
+  const pools = [];
   const lampMat = new THREE.MeshStandardMaterial({ color: '#FFF4DE', emissive: '#FFF1DC', emissiveIntensity: 4.0 });
   const housing = new THREE.MeshStandardMaterial({ color: '#2A2D31', metalness: 0.5, roughness: 0.55 });
   const galv = new THREE.MeshStandardMaterial({ color: '#8A9097', metalness: 0.6, roughness: 0.48 });
@@ -260,7 +261,7 @@ export function buildYard(W) {
     // the pool: from just short of the pole out past the aim point
     const d = Math.hypot(tx - px, tz - pz), gy = ground(tx, tz);
     const pg = new THREE.PlaneGeometry(14, d + 9).rotateX(-PI / 2);
-    const p = new THREE.Mesh(pg, poolMat); p.rotation.y = yaw + PI; p.position.set(px + (tx - px) / d * (d + 9) / 2 + (tx - px) / d * 0.5, gy + 0.03, pz + (tz - pz) / d * (d + 9) / 2 + (tz - pz) / d * 0.5); p.renderOrder = 4; g.add(p);
+    const p = new THREE.Mesh(pg, poolMat); p.rotation.y = yaw + PI; p.position.set(px + (tx - px) / d * (d + 9) / 2 + (tx - px) / d * 0.5, gy + 0.03, pz + (tz - pz) / d * (d + 9) / 2 + (tz - pz) / d * 0.5); p.renderOrder = 4; g.add(p); pools.push(p);
   }
 
   /* ------------------------------------------------------------ dressing -- */
@@ -339,8 +340,16 @@ export function buildYard(W) {
       cm._colliderCells = null;
     },
     get on() { return on; },
-    // (its pipelines built before it is first seen)
-    async warm() { const v = g.visible; g.visible = true; try { await app.renderer.compileAsync(g, app.cameraSystem.camera, scene); } catch (e) { console.warn('[m2] warm', e); } g.visible = v || on; },
+    // (its pipelines built before it is first seen; not the light pools': they write only the scene pass's normal and
+    // roughness, and compiled outside that pass (no MRT) their shader has no output at all, an invalid WGSL module.
+    // They build with the scene pass the first time they are drawn)
+    async warm() {
+      const v = g.visible; g.visible = true;
+      for (const p of pools) p.visible = false;
+      try { await app.renderer.compileAsync(g, app.cameraSystem.camera, scene); } catch (e) { console.warn('[m2] warm', e); }
+      for (const p of pools) p.visible = true;
+      g.visible = v || on;
+    },
   };
   return Y;
 }

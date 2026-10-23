@@ -143,16 +143,17 @@ export function createFx(scene, ground) {
       J.drops += dt * 110 * k;
       for (; J.drops >= 1; J.drops--) {
         // (most in a tight core, streaming; the rest thrown wider, breaking into drops)
+        // (sized to read from the chase camera: at 10-20 m a few-cm drop is under a pixel and the jet a wisp)
         const core = Math.random() < 0.6, up = rnd(7.5, 10) * (0.6 + 0.4 * k), a = rnd(0, Math.PI * 2), out = core ? rnd(0.04, 0.25) : rnd(0.3, 1.1);
         water.emit({ x: J.x + rnd(-0.05, 0.05), y: J.y + 0.5, z: J.z + rnd(-0.05, 0.05), vx: Math.cos(a) * out + wx, vy: up, vz: Math.sin(a) * out + wz,
-          life: 2.6, size: core ? rnd(0.05, 0.075) : rnd(0.03, 0.05), size1: 0.05, stretch: core ? 5 : 2.4, alpha: core ? 0.7 : 0.5, tile: 1, grav: G, drag: 0.2, gy: J.y, drop: true });
+          life: 2.6, size: core ? rnd(0.09, 0.13) : rnd(0.05, 0.08), size1: core ? 0.08 : 0.06, stretch: core ? 4.5 : 2.4, alpha: core ? 0.85 : 0.65, tile: 1, grav: G, drag: 0.2, gy: J.y, drop: true });
       }
-      J.mist += dt * 18 * k;
+      J.mist += dt * 26 * k;
       for (; J.mist >= 1; J.mist--) {
         // (the column's own spray, slowing as it climbs and spreading at the top; low ones round the hydrant's foot)
         const low = Math.random() < 0.25, up = low ? rnd(0.4, 1.2) : rnd(6, 9.5) * (0.6 + 0.4 * k), a = rnd(0, Math.PI * 2), out = low ? rnd(0.6, 1.4) : rnd(0.05, 0.4);
         water.emit({ x: J.x, y: J.y + (low ? 0.2 : 0.6), z: J.z, vx: Math.cos(a) * out + wx, vy: up, vz: Math.sin(a) * out + wz,
-          life: low ? rnd(0.9, 1.4) : rnd(1.3, 1.9), size: low ? 0.3 : 0.24, size1: low ? rnd(0.9, 1.3) : rnd(1.2, 1.8), alpha: low ? 0.24 : 0.34, tile: 0, grav: 1.5, drag: 1.4, fadeIn: 0.12 });
+          life: low ? rnd(0.9, 1.4) : rnd(1.3, 1.9), size: low ? 0.36 : 0.3, size1: low ? rnd(1.1, 1.6) : rnd(1.5, 2.2), alpha: low ? 0.36 : 0.5, tile: 0, grav: 1.5, drag: 1.4, fadeIn: 0.12 });
       }
     }
     let n = 0;

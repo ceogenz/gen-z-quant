@@ -3,8 +3,10 @@
 //   hand-off  Juno's DM, 'Meet Juno at Bryant Park.', the route to the J, its corona at the park's 6th Ave entrance;
 //             free roam with the J always on the radar and a nudge from Juno when he wanders; into the corona (on foot,
 //             or stopped in the car): the mission
-//   start     'Burner' (a scene, twilight): Juno on a video call (she's on the library's wifi), the burner's twin in
-//             a van idling in Times Square                                                   checkpoint 'start'
+//   start     'Burner' (a scene, twilight, m2-scenes.js burnerMeet): Juno in person at a park table on the 6th Ave
+//             side, her laptop; Quant hands her the burner, she traces its twin: a van idling in Times Square. She
+//             stays at her table until he is 70 m off (her old video call, burnerScene, is the fallback)
+//                                                                                            checkpoint 'start'
 //   go        'Go to Times Square.'  the van at 7th Ave & W 47th St                            checkpoint 'go'
 //   tail      'Follow the van.' stay 18-70 m back (the tail meter); too close or in its mirrors fills SUSPICION:
 //             spotted, it bolts ('Don't lose the van.'); over 140 m for 5 s: 'The van got away.' Juno calls. W 47th St
@@ -32,11 +34,12 @@ import { createGPS } from './gps.js';
 import { createMarker } from './marker.js';
 import { createUI } from './ui.js';
 import { createAudio } from './audio.js';
-import { missions } from './pause.js';
+import { missions, carry } from './pause.js';
 import { createM2UI } from './m2-ui.js';
 import { createDriver } from './m2-drive.js';
 import { createStealth } from './m2-stealth.js';
 import { buildYard, buildLevCar, buildLev, buildChevron, YARD } from './m2-set.js';
+import * as SCENES from './m2-scenes.js';
 import { runScene, burnerScene, crashScene, phoneScene, J_AT, CRASH } from './m2-scenes.js';
 import { clamp } from './cine.js';
 
@@ -64,12 +67,19 @@ const LEV_ROUTE = [
 // the traffic kept off the van's way while the mission needs it (the 7th Ave block behind it, W 47th St, 10th Ave and
 // W 55th St between the cross streets: the crossings keep theirs, so it still meets the traffic at every corner; held
 // up there, it honks and noses through)
+// (7th Ave's west lanes from W 49th St down to the van: the tail's restart puts his car in them, TAIL_CAR)
 const TAIL_HOLDS = [
-  { minX: -592, maxX: -586, minZ: -470, maxZ: -416 },
+  { minX: -592, maxX: -586, minZ: -548, maxZ: -416 },
   { minX: -844, maxX: -598, minZ: -409.5, maxZ: -397.5 }, { minX: -1121, maxX: -875, minZ: -409.5, maxZ: -397.5 }, { minX: -1395, maxX: -1149, minZ: -409.5, maxZ: -397.5 },
   ...[[-413, -470], [-494, -549], [-573, -630], [-651, -709], [-732, -789], [-810, -869], [-889, -948], [-969, -1028]].map(([a, b]) => ({ minX: -1412, maxX: -1406, minZ: b, maxZ: a })),
   { minX: -1676, maxX: -1416, minZ: -1045.5, maxZ: -1033.5 }, { minX: -1896, maxX: -1700, minZ: -1045.5, maxZ: -1033.5 },
 ];
+
+// the tail's restart: his car on 7th Ave ~50 m behind the van at the curb, facing south the way it will go
+const TAIL_CAR = [-589.5, -498, 0];
+// the chase's restart: on 12th Ave a few metres north of W 55th St, facing south toward it, Lev pulling out of the side
+// gate in front of him and off east along it (facing east, the old spot put the car's nose into the building line)
+const CHASE_CAR = [-1880, -1056, 0];
 
 class Fail extends Error { constructor(reason, rekt = false) { super(reason); this.reason = reason; this.rekt = rekt; } }
 class Quit extends Error {}
@@ -98,21 +108,22 @@ async function boot(W) {
   for (let i = 0; i < 600 && !W.app.ready; i++) await sleep(100);
 }
 
-export async function start(W, { at = 'start' } = {}) {
+export async function start(W, { at = 'start', keep = false } = {}) {
   if (W.mission) W.mission.stop();
   W.between?.stop();
-  const M = (W.mission = createMission(W));
+  const M = (W.mission = createMission(W, { keep }));
   return M.run(at);
 }
 
 /* ----------------------------------------------------- between missions -- */
 // The way to the next mission, GTA's: its contact's letter on the radar (always, held at the edge), the route to it,
-// the corona of light where it starts, the objective with them; when he makes no headway for a while, a nudge on the
-// phone. Into the corona on foot (or stopped in it in the car): onArrive.
-function between(W, { letter, at, name, objective, nudges = [], onArrive, radius = 2.2 }) {
-  const app = W.app, cm = app.controllerManager, P = W.person, car = W.car, ui = W.ui, sfx = W.sfx;
+// the corona of light where it starts, the objective with them. No reminders on a timer: after a genuine stall the GPS
+// offers real help once (gps.js), with one gentle line from the contact (note). Into the corona on foot (or stopped in
+// it in the car): onArrive.
+function between(W, { letter, at, name, objective, note = null, onArrive, radius = 2.2 }) {
+  const app = W.app, cm = app.controllerManager, P = W.person, car = W.car, ui = W.ui;
   const gps = W.gps || (W.gps = createGPS(W));
-  const now = () => (W.clock ? W.clock.now() : performance.now());
+  ui.step?.('free:' + letter);
   const m = createMarker(THREE, app.scene, { color: '#FFC93C', radius, height: 2.2, alpha: 0.3 });
   m.at(at.x, cm.getGroundHeight(at.x, at.z, 'person'), at.z);
   const dest = { x: at.x, z: at.z, name };
@@ -120,12 +131,13 @@ function between(W, { letter, at, name, objective, nudges = [], onArrive, radius
     if (gps.objective) gps.objective(objective, dest, { blip: false }); else { ui.objective(objective); gps.set(dest); }
     gps.unblip('dest');
     gps.blip('next', { x: at.x, z: at.z, kind: 'letter', letter, pulse: 6, edge: true, name });
+    gps.stallNote = note;
   };
   setObjective();
-  let live = true, best = Infinity, sinceT = now(), nudgeI = 0, arrived = false;
+  let live = true, arrived = false;
   const B = {
     marker: m, objective: setObjective, at,
-    stop() { live = false; m.hide(); app.scene.remove(m.group); gps.unblip('next'); gps.unblip('car'); if (gps.dest && gps.dest.x === at.x && gps.dest.z === at.z) gps.clear(); if (W.between === B) W.between = null; },
+    stop() { live = false; m.hide(); app.scene.remove(m.group); gps.unblip('next'); gps.unblip('car'); if (gps.stallNote === note) gps.stallNote = null; if (gps.dest && gps.dest.x === at.x && gps.dest.z === at.z) gps.clear(); if (W.between === B) W.between = null; },
   };
   (function loop() {
     if (!live) return;
@@ -138,14 +150,6 @@ function between(W, { letter, at, name, objective, nudges = [], onArrive, radius
     if (!inCar && Math.hypot(car.position.x - P.position.x, car.position.z - P.position.z) > 25) gps.blip('car', { x: car.position.x, z: car.position.z, kind: 'car', edge: true, name: car.label || "Quant's car" });
     else gps.unblip('car');
     const d = Math.hypot(p.x - at.x, p.z - at.z);
-    // a nudge when he has made no headway for a while: a text, the objective and the route again
-    if (d < best - 30) { best = d; sinceT = now(); }
-    if (nudges.length && now() - sinceT > 50000 && d > 40) {
-      sinceT = now(); best = d;
-      const [from, text] = nudges[nudgeI++ % nudges.length];
-      sfx?.play('buzz', { gain: 0.16, times: 1 }); sfx?.play('ding', { gain: 0.12 }); W.audio?.play?.('phoneBuzz');
-      ui.dm(from, text, 8); setObjective();
-    }
     if (!arrived && (inCar ? d < radius + 4.5 && Math.abs(car.speed) < 3 : d < radius && Math.abs(p.y - cm.getGroundHeight(at.x, at.z, 'person')) < 1.2)) {
       arrived = true; onArrive?.(B);
     }
@@ -162,11 +166,11 @@ export function handoff(W, { quick = false } = {}) {
   (async () => {
     if (!quick) await sleep(200);
     sfx?.play('buzz', { gain: 0.18, times: 1 }); sfx?.play('ding', { gain: 0.16 }); W.audio?.play?.('phoneBuzz');
-    ui.dm('Juno', 'that burner is a gift. bring it to me. bryant park, by the library. try not to get mugged on the way.', 10);
+    ui.dm('Juno', "that burner is a gift. bring it to me and i'll crack it open. bryant park, 6th ave side. try not to get mugged on the way.", 10);
     await sleep(2200);
     between(W, {
-      letter: 'J', at: J_AT, name: 'Juno · Bryant Park', objective: ['Meet Juno at ', { 'Bryant Park': 'yellow' }, '.'],
-      nudges: [['Juno', "still waiting. bryant park, 6th ave side. the burner won't trace itself."], ['Juno', 'quant. the J on your radar. the yellow line goes right to it.'], ['Juno', 'are you sightseeing? bryant park. now please.']],
+      letter: 'J', at: J_AT, name: 'Juno · Bryant Park', objective: ['Bring the burner to ', { Juno: 'blue' }, ' at ', { 'Bryant Park': 'yellow' }, '.'],
+      note: ['Juno', "no rush. i'm at bryant park, 6th ave side. the J on your radar."],
       onArrive: (b) => { b.stop(); start(W, { at: 'start' }).catch((e) => console.error('[m2]', e)); },
     });
     await sleep(1800);
@@ -175,7 +179,7 @@ export function handoff(W, { quick = false } = {}) {
 }
 
 /* ---------------------------------------------------------- the mission -- */
-function createMission(W) {
+function createMission(W, { keep = false } = {}) {
   const app = W.app, cm = app.controllerManager, P = W.person, car = W.car, ui = W.ui, sfx = W.sfx;
   const gps = W.gps || (W.gps = createGPS(W));
   const U = W.m2ui || (W.m2ui = createM2UI(ui));
@@ -220,7 +224,8 @@ function createMission(W) {
   };
   const holds = (rects) => app.trafficSystem.hold?.(rects);
   const twilight = () => { if (app.lightingSystem?.activePresetId !== 'twilight') app.selectTime?.('twilight'); };
-  const stats = { t0: now(), hits: 0, rekt: 0, quiet: 0, lookouts: 0 };
+  // (kept through a checkpoint restart: the card counts the whole mission)
+  const stats = carry(W, 'm2', keep, () => ({ t0: now(), hits: 0, rekt: 0, quiet: 0, lookouts: 0 }));
   let lastHp = null;
   const fails = {};
   const hooks = new Set();
@@ -314,30 +319,44 @@ function createMission(W) {
       if (!S.C || !S.Y) { ui.fade(1, 0.35); await sets(); ui.fade(0, 0.6); } else await sets();
       twilight();
       W.combat?.clear?.();
-      const def = burnerScene(W, { U, say, van: S.C.van });
-      def.setup();
-      // (the street crowd kept off his stretch of the sidewalk, curb to terrace, and the curb by the van in Times Square
-      // for the cutaway, while it plays: nobody walks through its close shots; the avenues' traffic is left be)
-      W.street?.crowd?.hold([{ minX: J_AT.x - 3, maxX: J_AT.x + 5, minZ: J_AT.z - 12, maxZ: J_AT.z + 12 }, { minX: -598, maxX: -584, minZ: -462, maxZ: -432 }]);
-      try { await runScene(W, def); } finally { W.street?.crowd?.hold([]); }
-      place(W, { quant: [J_AT.x, J_AT.z, PI] });
+      // the meeting (the point of the trip): Juno there in person, the burner handed over and opened on her laptop, the
+      // twin found in Times Square: m2-scenes.js burnerMeet(W, { U, say, van, at }) when the characters track has it (a
+      // scene def for runScene, or a promise that plays itself); until then, her video call from the library's wifi
+      const meet = SCENES.burnerMeet;
+      const def = meet ? meet(W, { U, say, van: S.C.van, at: J_AT }) : burnerScene(W, { U, say, van: S.C.van });
+      if (def && typeof def.then !== 'function') def.setup?.();
+      // (the street crowd kept off his stretch of the sidewalk, curb to terrace, Juno's table and the street-side cameras
+      // west of it, and the curb by the van in Times Square for the cutaway, while it plays: nobody walks through its
+      // close shots; the avenues' traffic is left be, but for the curb lane where his car stands. The traffic's hold
+      // goes first: street/index.js hands the traffic's rects to the crowd too, so the crowd's own hold is set after it)
+      holds([{ minX: car.position.x - 2, maxX: car.position.x + 2, minZ: car.position.z - 7, maxZ: car.position.z + 7 }]);
+      W.street?.crowd?.hold([{ minX: J_AT.x - 4, maxX: J_AT.x + 6, minZ: J_AT.z - 14, maxZ: J_AT.z + 12 }, { minX: -598, maxX: -584, minZ: -462, maxZ: -432 }]);
+      try { if (def && typeof def.then === 'function') await def; else await runScene(W, def); } finally { W.street?.crowd?.hold([]); holds([]); }
+      // (where play goes on: the meeting's scene leaves him where it ends; the call, at the J)
+      if (!meet) place(W, { quant: [J_AT.x, J_AT.z, PI] });
     },
     // to Times Square: the van at the curb, idling
     async go(fresh) {
+      // (straight in, from the pause menu: in his car at the curb by the park, the drive ahead of him)
+      if (fresh) { twilight(); inTheCar(-303.5, 66, PI); }
       await sets(); twilight();
-      if (fresh) place(W, { car: [-303.5, 66, PI], quant: [J_AT.x - 4, J_AT.z - 8, PI] });
       S.vanD = vanDriver(); const vanD = S.vanD;
       vanD.place(0); S.C.van.group.visible = true; S.C.van.setDoor(0);
       holds(TAIL_HOLDS);
-      objective(['Go to ', { 'Times Square': 'yellow' }, '.'], { x: -589, z: -488, name: 'Times Square · 7th Ave & W 47th St' });
-      let near = false, footTold = false;
+      // the step's objective, as it stands: the drive, then (Times Square reached) the van; out of the car by the van,
+      // back into it, and the step's own again once he is
+      const goObj = () => objective(['Go to ', { 'Times Square': 'yellow' }, '.'], { x: -589, z: -488, name: 'Times Square · 7th Ave & W 47th St' });
+      const findObj = () => objective(['Find the ', { van: 'red' }, '. Stay in your car.'], null);
+      goObj();
+      let footTold = false;
       const off = hook(() => {
         const d = dist(me(), vanD.pos.x, vanD.pos.z);
         if (d < 260) gps.blip('van', { x: vanD.pos.x, z: vanD.pos.z, kind: 'enemy', edge: true, name: 'The van' }); else gps.unblip('van');
         if (d < 160) S.chev.at(vanD.pos.x, vanD.pos.y + 3.4, vanD.pos.z, frameDt()); else S.chev.hide();
-        if (!near && d < 160) { near = true; ui.place('Times Square', 'Midtown · WAGMI City', 3); objective(['Find the ', { van: 'red' }, '. Stay in your car.'], null); }
-        if (!inCar() && d < 60 && !footTold) { footTold = true; objective(['Get in your ', { car: 'blue' }, '.'], null); blipCar(); }
-        if (inCar() && footTold) { footTold = false; gps.unblip('car'); }
+        // (Times Square reached: from here a restart puts him in his car behind the van, not back at the park)
+        if (!S.square && d < 160) { S.square = true; ui.place('Times Square', 'Midtown · WAGMI City', 3); findObj(); }
+        if (!inCar() && d < 60 && !footTold) { footTold = true; objective(['Get back in your ', { car: 'blue' }, '.'], null); blipCar(); }
+        if (inCar() && footTold) { footTold = false; gps.unblip('car'); if (S.square) findObj(); else goObj(); }
         // (right on top of it: they know)
         if (inCar() && d < 9) S.flee = true;
       });
@@ -347,12 +366,14 @@ function createMission(W) {
     async tail(fresh) {
       // (played straight in: the light and his car first, the sets after: a slow load doesn't leave him at the city's
       // own start in its golden hour)
-      if (fresh) { twilight(); inTheCar(-589.5, -512, 0); }
+      // (a restart: in his car 50 m behind the van at the curb, in GOOD range; his lane and the block ahead held clear
+      // of the traffic, so no bus stands between them)
+      if (fresh) { twilight(); inTheCar(...TAIL_CAR); holds(TAIL_HOLDS); }
       await sets(); twilight();
       const { C } = S;
       if (fresh || !S.vanD) {
         S.vanD = vanDriver(); S.vanD.place(0); C.van.group.visible = true; C.van.setDoor(0);
-        inTheCar(-589.5, -512, 0);
+        inTheCar(...TAIL_CAR);
         holds(TAIL_HOLDS);
       }
       const vanD = S.vanD;
@@ -360,7 +381,7 @@ function createMission(W) {
       // (its tail lamps up for the tail, brighter when it brakes: a dark van on a dark street stays in sight)
       let lamps = null; C.van.group.traverse((o) => { if (!lamps && o.isMesh && o.material?.emissive?.getHex() === 0xFF2A1A) lamps = o.material; });
       const lamps0 = lamps?.emissiveIntensity ?? 0;
-      let sus = 0, farT = 0, lost = false, helped = false, called = false, onFootT = 0, yardUp = false, lastV = vanD.v;
+      let sus = 0, farT = 0, lost = false, helped = false, called = false, onFootT = 0, yardUp = false, lastV = vanD.v, goT = null;
       const t0 = now();
       // (a tail has no route: the van's blip and the chevron over it, GTA's way)
       const vanTarget = null;
@@ -375,7 +396,12 @@ function createMission(W) {
         // corner to make)
         let want = (S.flee ? 27 : 23.5) * (d < 70 ? 1 : d < 100 ? 0.8 : d < 130 ? 0.6 : 0.35);
         if (!S.flee && d < 18) want *= 1.12;
-        if (!S.flee) want = Math.min(want, 9 + t * 1.5);
+        // (a fair start: it idles at the curb till he's rolling in his car (or 10 s), then pulls out gently, so he
+        // makes its first corner with it)
+        if (goT == null && (S.flee || t > 10 || (inCar() && Math.abs(car.speed) > 2.5 && d < 90))) goT = t;
+        if (goT == null) want = 0;
+        // (pulling out: gently, but quicker with him close behind it, so a heavy right foot doesn't run him into it)
+        else if (!S.flee) want = Math.min(want, 6 + (t - goT) * (d < 30 ? 3 : 1.4));
         if (!inCar()) want = Math.min(want, 7);
         vanD.step(dt, want);
         if (lamps && dt > 0) { lamps.emissiveIntensity += ((vanD.v < lastV - dt * 1.5 || vanD.v < 0.5 ? 9 : 3.5) - lamps.emissiveIntensity) * Math.min(1, dt * 10); lastV = vanD.v; }
@@ -386,7 +412,9 @@ function createMission(W) {
         if (!S.flee) {
           const fx = Math.sin(vanD.heading), fz = Math.cos(vanD.heading), bx = p.x - vanD.pos.x, bz = p.z - vanD.pos.z;
           const behind = -(bx * fx + bz * fz), lat = Math.abs(bx * fz - bz * fx), mirror = behind > 0 && lat < 3 && d < 24;
-          if (d < 12) sus += dt * 0.55; else if (mirror) sus += dt * 0.12; else sus = Math.max(0, sus - dt * 0.12);
+          // (its first seconds at the curb and pulling out: a slow fill, he's still finding his distance)
+          const early = goT == null || t - goT < 6 ? 0.35 : 1;
+          if (d < 12) sus += dt * 0.55 * early; else if (mirror) sus += dt * 0.12 * early; else sus = Math.max(0, sus - dt * 0.12);
           if (sus >= 1) {
             S.flee = true; sus = 1;
             objective(['You were ', { spotted: 'red' }, ". Don't lose the ", { van: 'red' }, '.'], vanTarget);
@@ -398,8 +426,8 @@ function createMission(W) {
         if (!helped && t > 1.5) { helped = true; ui.help('Keep the van in sight. Too close and they spot you, too far and you lose it. Watch the meter.', 9); }
         // losing it
         if (d > 110) { farT += dt; if (!lost) { lost = true; objective(["Don't lose the ", { van: 'red' }, '.'], vanTarget); } } else { farT = Math.max(0, farT - dt); if (lost && d < 80) { lost = false; say1(); } }
-        // (not in its first seconds: he's still making the corner)
-        if (t > 12 && ((d > 140 && farT > 5) || d > 240)) fail('The van got away.');
+        // (not in its first seconds on the move: he's still making the corner)
+        if (goT != null && t - goT > 14 && ((d > 140 && farT > 5) || d > 240)) fail('The van got away.');
         // out of the car on the way
         if (!inCar()) { onFootT += dt; if (onFootT > 1.5 && onFootT - dt <= 1.5) objective(['Get back in your ', { car: 'blue' }, '.'], null); blipCar(); } else if (onFootT) { onFootT = 0; gps.unblip('car'); say1(); }
         // Juno calls a little way in
@@ -507,9 +535,9 @@ function createMission(W) {
     },
     // Lev bolts: the chase
     async chase(fresh) {
-      if (fresh) { twilight(); inTheCar(-1886, -1049, PI / 2); }
+      if (fresh) { twilight(); inTheCar(...CHASE_CAR); }
       await sets(); twilight();
-      if (fresh) { S.Y.show(true); parkInYard({ van: true, lev: true }); inTheCar(-1886, -1049, PI / 2); }
+      if (fresh) { S.Y.show(true); parkInYard({ van: true, lev: true }); inTheCar(...CHASE_CAR); }
       W.combat?.clear?.(); S.stealth?.dispose(); S.stealth = null; S.crew = null;
       parkInYard({ van: true, lev: false });
       // (on foot after the fight with his car left far off: it waits by the side gate instead, when that isn't in view)
@@ -528,12 +556,13 @@ function createMission(W) {
       levD.place(0); L.group.visible = true; L.smoke(false);
       sfx?.play('squeal', { gain: 0.4, dur: 1.1 }); W.audio?.play?.('engineStart', { pos: [levD.pos.x, 0.8, levD.pos.z] });
       U.target("LEV'S CAR", 0);
-      const levTarget = null;
+      // (the GPS line on Lev, re-planned as he goes: the streets to him, not just his blip)
+      const levTarget = { follow: () => levD.pos, name: 'Lev' };
       const go = () => objective(['Take down ', { Lev: 'red' }, '.'], levTarget);
       if (!inCar()) { objective(['Get in your ', { car: 'blue' }, '.'], null); blipCar(); } else go();
       say([['Lev', ACID, "You can't catch leverage, kid!"]]).catch(() => {});
       S.engine = sfx?.engine?.();
-      let farT = 0, warned = false, wasIn = inCar(), everIn = wasIn, helped = false, juno = false;
+      let farT = 0, warned = false, wasIn = inCar(), everIn = wasIn, helped = false, juno = false, goT = null;
       const t0 = now();
       const off = hook(() => {
         const dt = frameDt(), t = (now() - t0) / 1000, p = me(), d = dist(p, levD.pos.x, levD.pos.z);
@@ -543,6 +572,9 @@ function createMission(W) {
         // (on foot: he dawdles till Quant's first in his car, then waits a little less)
         if (inCar()) everIn = true;
         if (!inCar()) want = Math.min(want, !everIn ? 4 : t < 30 ? 5 : 12);
+        // (a fair start: in his car, Lev's engine revs till Quant is rolling (or 4 s), then he pulls away, building up)
+        if (goT == null && (!inCar() || Math.abs(car.speed) > 3 || t > 4)) goT = t;
+        if (goT == null) want = 0; else if (inCar()) want = Math.min(want, 9 + (t - goT) * 3);
         if (d > 90) want *= 0.8; if (d > 140) want *= 0.65; if (d > 200) want *= 0.6; if (d < 28) want *= 1.08;
         levD.step(dt, want);
         S.chev.at(levD.pos.x, levD.pos.y + 2.6, levD.pos.z, dt);
@@ -597,21 +629,17 @@ function createMission(W) {
       objective(['Take ', { "Lev's phone": 'green' }, '.'], null);
       gps.blip('phone', { x: drop[0], z: drop[1], kind: 'object', edge: true, name: "Lev's phone" });
       const spot = createMarker(THREE, app.scene, { color: '#4ADE80', radius: 0.7, height: 0.8, alpha: 0.3 }); spot.at(drop[0], cm.getGroundHeight(drop[0], drop[1], 'person'), drop[1]);
-      let k = 0, held = false, helped = false, carTold = false;
-      const onKey = (e) => { if (e.code === 'KeyF') held = e.type === 'keydown'; };
-      addEventListener('keydown', onKey); addEventListener('keyup', onKey);
+      let carTold = false;
+      // (the ring a few metres out, the pick-up from anywhere near it: ui.holdAct)
+      const act = ui.holdAct({ label: "take Lev's phone", noun: "Lev's phone", secs: 1.0, show: 8, reach: 2.8 });
       try {
         await wait(() => {
           const dt = frameDt();
           S.L.update(dt);
-          const near = !inCar() && dist(P.position, drop[0], drop[1]) < 2.2;
-          if (inCar() && !carTold && dist(car.position, drop[0], drop[1]) < 30) { carTold = true; ui.help('Press [F] to get out.', 6); }
-          if (near && !helped) { helped = true; ui.help('Hold [F] to pick it up.', 8); }
-          k = near && held ? k + dt / 1.0 : Math.max(0, k - dt * 2);
-          ui.hold(near ? "Take Lev's phone" : null, k);
-          return k >= 1;
+          if (inCar() && !carTold && dist(car.position, drop[0], drop[1]) < 30) { carTold = true; ui.help('Press [F] to get out.', 6, { mode: 'car' }); }
+          return act.step(dt, dist(P.position, drop[0], drop[1]), !inCar());
         });
-      } finally { removeEventListener('keydown', onKey); removeEventListener('keyup', onKey); ui.hold(null); spot.hide(); app.scene.remove(spot.group); }
+      } finally { act.stop(); spot.hide(); app.scene.remove(spot.group); }
       gps.unblip('phone'); S.phone.visible = false;
       const h = Math.atan2(drop[0] - P.position.x, drop[1] - P.position.z) + PI;
       const def = phoneScene(W, { U, say, at: [P.position.x, P.position.z, h] });
@@ -622,7 +650,11 @@ function createMission(W) {
   const ORDER = ['start', 'go', 'tail', 'yard', 'fight', 'chase', 'crash', 'phone'];
   // (the fight lost: back to the yard's own start, the lookouts at their posts again, the quiet way open again)
   const CHECKPOINT = { start: 'start', go: 'go', tail: 'tail', yard: 'yard', fight: 'yard', chase: 'chase', crash: 'chase', phone: 'phone' };
-  const LABELS = { start: 'Bryant Park', go: 'To Times Square', tail: 'The tail', yard: 'The yard', fight: 'The fight', chase: 'The chase', phone: "Lev's phone" };
+  // (a skip goes on to the next thing that happens: the chase's skip still plays the crash, Lev's car and all)
+  const SKIP_TO = { chase: 'crash' };
+  const LABELS = { start: 'Bryant Park', go: 'To Times Square', tail: 'Times Square · the tail', yard: 'The yard', fight: 'The fight', chase: 'The chase', phone: "Lev's phone" };
+  // the checkpoint he'd restart from now: Times Square reached, the tail's (in his car behind the van), not the park's
+  const checkpointNow = () => (M._phase === 'go' && S.square ? 'tail' : CHECKPOINT[M._phase] || 'start');
 
   // the yard's people: the lookouts at their posts, the crew at the stash (none of them awake yet)
   async function spawnYard() {
@@ -698,7 +730,7 @@ function createMission(W) {
     W.progress = { ...(W.progress || {}), m2: true };
     between(W, {
       letter: 'G', at: G_AT, name: "Gears' garage · W 22nd St", objective: ['Go to ', { "Gears' garage": 'yellow' }, '.'],
-      nudges: [['Juno', "gears' garage. west chelsea. the G on your radar."], ['Juno', 'you need sleep. the G. go.']],
+      note: ['Juno', "gears' garage is in west chelsea, the G on your radar. he's expecting you."],
       onArrive: (b) => {
         ui.place('Static Garage', 'West Chelsea · WAGMI City', 3.5);
         ui.objective(null); W.gps?.clear();
@@ -718,6 +750,7 @@ function createMission(W) {
       while (i < ORDER.length && running) {
         const phase = (M._phase = ORDER[i]);
         tok = { dead: false, err: null };
+        ui.step('m2:' + phase);
         try {
           await PHASES[phase](fresh);
           fresh = false; i++;
@@ -726,13 +759,17 @@ function createMission(W) {
           if (!(e instanceof Fail)) { console.error('[m2]', phase, e); tidy(); return; }
           tidy(); cm.resetInput?.();
           if (e.rekt) { ui.rekt(true); sfx?.play('failed'); await sleep(2600); ui.rekt(false); } else sfx?.play('failed');
-          const cp = CHECKPOINT[phase]; fails[cp] = (fails[cp] || 0) + 1;
+          const cp = checkpointNow(); fails[cp] = (fails[cp] || 0) + 1;
           const choice = await ui.failed(e.reason, { skip: fails[cp] >= 3 });
           W.combat?.clear?.(); S.stealth?.dispose(); S.stealth = null; S.crew = null; S.alarm = false;
           if (choice === 'quit') { M.stop(); return; }
           // (a retry starts the tail over unspotted)
           S.flee = false;
-          if (choice === 'skip') { i = ORDER.indexOf(cp) + 1; while (i < ORDER.length && CHECKPOINT[ORDER[i]] === cp) i++; fresh = true; continue; }
+          if (choice === 'skip') {
+            if (SKIP_TO[cp]) i = ORDER.indexOf(SKIP_TO[cp]);
+            else { i = ORDER.indexOf(cp) + 1; while (i < ORDER.length && CHECKPOINT[ORDER[i]] === cp) i++; }
+            fresh = true; continue;
+          }
           i = ORDER.indexOf(cp); fresh = true;
         }
       }
@@ -748,8 +785,8 @@ function createMission(W) {
     id: 'm2', act: 'Act I · Mission 2', title: 'Burner',
     checkpoints: ['start', 'go', 'tail', 'yard', 'chase', 'phone'].map((id) => ({ id, label: LABELS[id] })),
     active: () => running && !!M._phase && M._phase !== 'passed',
-    at: () => CHECKPOINT[M._phase] || 'start',
-    restart: (at) => { ui.rekt(false); start(W, { at }).catch((e) => console.error('[m2]', e)); },
+    at: checkpointNow,
+    restart: (at) => { ui.rekt(false); start(W, { at, keep: true }).catch((e) => console.error('[m2]', e)); },
   });
   return M;
 }

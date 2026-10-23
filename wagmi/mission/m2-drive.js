@@ -11,7 +11,9 @@
 import * as THREE from 'three/webgpu';
 import { spline, clamp } from './cine.js';
 
-const PCAR = { hx: 0.95, hl: 2.2 }; // Quant's car's half width and half length (wagmi/game.js BODY)
+// Quant's car's box, read off car.body (wagmi/game.js, measured off the model) when it is used: its half width, half
+// length, and the offset of its middle along it (with a fallback before the body is measured)
+const pbox = (car) => { const B = car.body; return B ? { hx: B.hx, hl: (B.z1 - B.z0) / 2, cz: (B.z1 + B.z0) / 2 } : { hx: 1.08, hl: 2.4, cz: 0 }; };
 
 export function createDriver(W, { obj, path, halfW = 1.0, halfL = 2.8, plow = false, onWheels = null, onHit = null, accel = 3.2, brake = 7, stopAtEnd = true }) {
   const app = W.app, cm = app.controllerManager, car = W.car, TS = app.trafficSystem;
@@ -41,7 +43,10 @@ export function createDriver(W, { obj, path, halfW = 1.0, halfL = 2.8, plow = fa
     if (!plow && !jam) for (const v of TS.cars || []) if (v.edge) test(v.x, v.z, v.halfWidth || 0.9, v.half || 2.2, (v.tx || 0) * (v.speed || 0), (v.tz || 0) * (v.speed || 0));
     if (!plow && !jam) for (const v of TS.buses || []) if (v.edge) test(v.x, v.z, v.halfWidth || 1.3, v.half || 5.7, (v.tx || 0) * (v.speed || 0), (v.tz || 0) * (v.speed || 0));
     // (Quant's car: braked for unless it plows; on foot he is no obstacle (a van stopping for him would give it away))
-    if (!plow && cm.activeMode === 'car') test(car.position.x, car.position.z, PCAR.hx, PCAR.hl, Math.sin(car.heading) * car.speed, Math.cos(car.heading) * car.speed);
+    if (!plow && cm.activeMode === 'car') {
+      const Q = pbox(car), sh = Math.sin(car.heading), ch = Math.cos(car.heading);
+      test(car.position.x + sh * Q.cz, car.position.z + ch * Q.cz, Q.hx, Q.hl, sh * car.speed, ch * car.speed);
+    }
     D.gap = best;
     return [best, bv];
   }
@@ -91,11 +96,11 @@ export function createDriver(W, { obj, path, halfW = 1.0, halfL = 2.8, plow = fa
   function collidePlayer() {
     const driving = cm.activeMode === 'car';
     if (!driving && !car.mesh?.visible) return;
-    const px = car.position.x, pz = car.position.z;
+    const Q = pbox(car), px = car.position.x + Math.sin(car.heading) * Q.cz, pz = car.position.z + Math.cos(car.heading) * Q.cz;
     if (Math.abs(px - D.pos.x) > 9 || Math.abs(pz - D.pos.z) > 9) return;
     const ah = D.heading, bh = car.heading;
     const A = { x: D.pos.x, z: D.pos.z, f: [Math.sin(ah), Math.cos(ah)], r: [Math.cos(ah), -Math.sin(ah)], hw: halfW, hl: halfL };
-    const B = { x: px, z: pz, f: [Math.sin(bh), Math.cos(bh)], r: [Math.cos(bh), -Math.sin(bh)], hw: PCAR.hx, hl: PCAR.hl };
+    const B = { x: px, z: pz, f: [Math.sin(bh), Math.cos(bh)], r: [Math.cos(bh), -Math.sin(bh)], hw: Q.hx, hl: Q.hl };
     _ax[0] = A.f; _ax[1] = A.r; _ax[2] = B.f; _ax[3] = B.r;
     const dx = B.x - A.x, dz = B.z - A.z;
     let pen = Infinity, nx = 0, nz = 0;

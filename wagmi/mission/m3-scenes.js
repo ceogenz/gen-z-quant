@@ -21,7 +21,8 @@ export const SPOT = {
   gearsLie: [GX - 0.45, GZ + 5.4],           // his feet, out from under the car's left side (his head under it, east)
   gears: [GX - 1.9, GZ + 6.3, 3.02],         // up, facing Quant
   out: { car: [GX + 6, 1603.6, PI / 2], quant: [GX - 1.2, 1607.6, PI] }, // after: the car at the curb, Quant on the sidewalk
-  door: { gears: [GX + 0.6, GZ - 1.3], quant: [GX - 0.9, 1607.3] },     // the home scene
+  // the home scene (23 Oct: a metre more between them, across the wide shot's line, which had him right in front of Gears)
+  door: { gears: [GX + 0.9, GZ - 1.4], quant: [GX - 1.9, 1607.6] },
 };
 // where Quant's car waits for the escape (5th Ave at the arch, beside where Fiona's SUV stood, facing north)
 export const ESCAPE_CAR = [-3.2, 2787, PI];
@@ -167,6 +168,8 @@ export function garageScene(W, { U, say, gears, garage }) {
           if (i === 5) U.call.share(false);
           if (i === 6) { T.down = now + 0.3; U.call.hide(); sfx?.play('hangup', { gain: 0.12 }); }
           if (who === 'Juno') talkUntil = performance.now() + 400;
+          // (Gears talks with his hands on his own lines, once he's up)
+          if (who === 'Gears' && gearsUp) gears.rig.set([[0, 'idle'], [now, 'talk', { fade: 0.4, speed: 0.8 }], [now + 3.2, 'idle', { fade: 0.6 }]]);
         }).finally(() => { const now = W.sceneClock?.t; if (now != null) def.END = now + 1.2; U.call.hide(); });
       }],
       // (an impact wrench under the car)
@@ -193,7 +196,7 @@ export function garageScene(W, { U, say, gears, garage }) {
       const car = W.car; car.position.set(SPOT.car[0], GY, SPOT.car[1]); car.heading = SPOT.car[2]; car.speed = 0; car.mesh.position.copy(car.position); car.mesh.rotation.y = car.heading;
       garage.show(true); garage.inside(false);
       C.qRig.set([[0, 'idle'], [6, ['idle/noArmL', ['talk/armL', { from: 0.6, speed: 0.7 }]], { fade: 0.5 }]]);
-      gears.rig.set([[0, 'thugIdle']]);
+      gears.rig.set([[0, 'idle']]);
     },
     cleanup() {
       U.call.hide(); C.phone.visible = false; gears.root.visible = false; garage.inside(false);
@@ -320,14 +323,18 @@ export function homeScene(W, { say, gears, garage }) {
     shots: [
       { t: 0, cam: (t, t0) => ({ pos: drift([GX - 10, 2.3, 1596.5], [GX - 9, 2.2, 1597.5], 5)(t, t0), look: [GX - 0.2, 1.5, 1608.5], fov: 40, shake: 0.4 }) },
       { line: 1, t: Infinity, cam: () => ({ pos: [gx - 0.5, G + 1.65, gz - 0.9], look: [qx, G + 1.55, qz], fov: 34, shake: 0.3 }) },
-      { line: 2, t: Infinity, cam: () => ({ pos: [qx + 0.35, G + 1.6, qz + 0.8], look: [gx, G + 1.78, gz], fov: 32, shake: 0.3 }) },
+      // (his whole cap in, with room over it)
+      { line: 2, t: Infinity, cam: () => ({ pos: [qx + 0.35, G + 1.62, qz + 0.8], look: [gx, G + 1.72, gz], fov: 36, shake: 0.3 }) },
       { line: 3, t: Infinity, cam: () => ({ pos: [gx - 0.6, G + 1.6, gz - 1.0], look: [qx, G + 1.5, qz], fov: 30, shake: 0.3 }) },
       { line: 4, t: Infinity, cam: (t, t0) => ({ pos: drift([GX - 6, 1.8, 1599], [GX - 6.5, 2.4, 1597.5], 4)(t, t0), look: [GX - 0.2, 1.6, 1609], fov: 38, shake: 0.4 }) },
     ],
     cues: [
       [0.2, () => W.ui.place('Static Garage', 'West Chelsea · WAGMI City', 3)],
       [0.6, (st) => {
-        say(LINES, st, (who, i) => { const now = W.sceneClock?.t ?? 0; for (const sh of def.shots) if (sh.line === i) sh.t = now; })
+        say(LINES, st, (who, i) => {
+          const now = W.sceneClock?.t ?? 0; for (const sh of def.shots) if (sh.line === i) sh.t = now;
+          if (who === 'Gears') gears.rig.set([[0, 'idle'], [now, 'talk', { fade: 0.4, speed: 0.8 }], [now + 3.2, 'idle', { fade: 0.6 }]]);
+        })
           .finally(() => { const now = W.sceneClock?.t; if (now != null) def.END = now + 1.0; });
       }],
     ],
@@ -341,7 +348,7 @@ export function homeScene(W, { say, gears, garage }) {
       car.position.set(cx, 0, cz); car.heading = ch; car.speed = 0; car.mesh.position.copy(car.position); car.mesh.rotation.y = ch;
       garage.show(true);
       C.qRig.set([[0, 'idle'], [3, ['idle/noArmL', ['talk/armL', { from: 0.6, speed: 0.7 }]], { fade: 0.5 }]]);
-      gears.rig.set([[0, 'thugIdle']]);
+      gears.rig.set([[0, 'idle']]);
     },
     cleanup() { gears.root.visible = false; },
   };

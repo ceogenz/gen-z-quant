@@ -8,8 +8,8 @@
 //           behind it (built inside the building's shell: its walls face out, so from in here only ours are seen):
 //           concrete, a tool wall, a bench, tyres, strip lights and a work lamp
 //   suv     Fiona's black SUV (the city's SUV body, acid-green rims), parked on 5th Ave by the arch
-//   people  Gears (his own model, gears.glb: navy overalls, a beard, a cap: a big gentle mechanic) and Floor Price Fiona (thug.glb in a
-//           white puffer, platinum hair, white shades, a megaphone), each posed by its clips (rig) plus an arm to a point
+//   people  Gears (his own model, gears.glb: navy overalls, a beard, a cap: a big gentle mechanic) and Floor Price Fiona (her own
+//           model, fiona.glb: platinum ponytail, white shades, a megaphone), each posed by its clips (rig) plus an arm to a point
 //   const R = buildRally(W); R.show(true); R.screen.mode('pump' | 'dump'); R.rigs[i].hit(dmg, from); R.update(dt, cam)
 //   const G = buildGarage(W); G.show(true); G.inside(true)     const suv = buildSUV(W)
 //   const F = await buildFiona(W); const g = await buildGears(W)   (each { root, inner, bones, mixer, rig, clips, arm(...) })
@@ -618,75 +618,10 @@ export function buildSUV(W) {
 }
 
 /* ------------------------------------------------------------ people -- */
-let thugP = null;
-const thug = () => thugP || (thugP = new GLTFLoader().loadAsync('assets/characters/thug.glb'));
+const MH_ARM = ['upperarm01_', 'lowerarm01_', 'wrist_'];
 
-// the thug's colours repainted (its look's texture copied to a canvas): fn(r, g, b, zone, u, v) -> [r, g, b] | null
-// (kept); u, v: where in the atlas (v down from its top, as the zones are)
-function repaint(inner, fn) {
-  let done = null;
-  inner.traverse((o) => {
-    if (!o.isMesh || !o.material?.map?.image || done) return;
-    const src = o.material.map, img = src.image, w = img.width, h = img.height;
-    const c = document.createElement('canvas'); c.width = w; c.height = h; const x = c.getContext('2d', { willReadFrequently: true });
-    x.drawImage(img, 0, 0, w, h);
-    const d = x.getImageData(0, 0, w, h), p = d.data;
-    // (which way up the decoded image is: the eyes' box is skin either way round, the right one has more of it)
-    const skinIn = (flip) => { let n = 0; for (let k = 0; k < 400; k++) { const u = 0.165 + (k % 20) / 20 * 0.08, v0 = 0.397 + Math.floor(k / 20) / 20 * 0.024, v = flip ? 1 - v0 : v0;
-      const j = ((Math.floor(v * h) * w) + Math.floor(u * w)) * 4; if (p[j] > 120 && p[j] > p[j + 1] + 15 && p[j + 1] > p[j + 2]) n++; } return n; };
-    const flip = skinIn(true) > skinIn(false);
-    for (let i = 0; i < p.length; i += 4) {
-      const px = (i / 4) % w, py = (i / 4 / w) | 0, u = px / w, v = flip ? 1 - py / h : py / h;
-      // the head's island (left of the middle of the atlas): the beanie on top (v < 0.365), the band of skin with the
-      // eyes, and the mask: the fan below the eyes (the eyes and brows kept out of it)
-      const fan = Math.hypot(u - 0.205, v - 0.365) < 0.218;
-      const eyes = u > 0.158 && u < 0.252 && v > 0.393 && v < 0.424;
-      const zone = !fan ? 'body' : v < 0.362 ? 'hair' : eyes ? 'eyes' : 'face';
-      const out = fn(p[i], p[i + 1], p[i + 2], zone, u, v);
-      if (out) { p[i] = out[0]; p[i + 1] = out[1]; p[i + 2] = out[2]; }
-    }
-    x.putImageData(d, 0, 0);
-    const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.flipY = src.flipY; t.wrapS = src.wrapS; t.wrapT = src.wrapT; t.anisotropy = 4;
-    done = t;
-  });
-  if (done) inner.traverse((o) => { if (o.isMesh && o.material) { o.material.map = done; o.material.needsUpdate = true; } });
-}
-const isGreen = (r, g, b) => g > 140 && g - b > 70 && r < 215;
-const isDark = (r, g, b) => Math.max(r, g, b) < 92 && Math.max(r, g, b) - Math.min(r, g, b) < 34;
-const isSkin = (r, g, b) => r > 110 && r > g + 12 && g > b - 5 && g < 190;
-
-async function person(W, name, look, { scale = 1, paint = null } = {}) {
-  const gltf = await thug();
-  const root = new THREE.Group(); root.name = name;
-  const inner = skClone(gltf.scene); root.add(inner);
-  if (W.combat?.dressDegen) W.combat.dressDegen(inner, look);
-  else inner.traverse((o) => { if (o.isMesh) o.material = o.material.clone(); });
-  if (paint) try { repaint(inner, paint); } catch (e) { console.warn('[m3] repaint', e); }
-  inner.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; o.frustumCulled = false; } });
-  inner.scale.setScalar(scale);
-  const bones = {}; inner.traverse((o) => { if (o.isBone) bones[o.name] = o; });
-  inner.updateMatrixWorld(true);
-  const top = new THREE.Box3().setFromObject(inner).max.y;
-  const mixer = new THREE.AnimationMixer(inner);
-  const clipMap = Object.fromEntries(gltf.animations.map((c) => [c.name, c]));
-  root.visible = false; W.app.scene.add(root);
-  const P = { root, inner, bones, mixer, rig: rig(mixer, clipMap), clips: Object.keys(clipMap), top, arm: (side, target, pole, w) => armTo(bones, side, target, pole, w) };
-  // (after the pose: his arms let down by his sides, out of the fighter's guard the thug's idle holds them in; sides:
-  // 'LR', 'L' or 'R')
-  P.relax = (h, k = 1, sides = 'LR', t = 0) => {
-    root.updateMatrixWorld(true);
-    const F = V(Math.sin(h), 0, Math.cos(h)), Rt = V(-Math.cos(h), 0, Math.sin(h));
-    for (const side of sides) {
-      const sh = bones['upperArm' + side]?.getWorldPosition(V()); if (!sh) continue;
-      const out = side === 'R' ? Rt.clone() : Rt.clone().negate(), sw = Math.sin(t * 1.3 + (side === 'R' ? 0 : 2)) * 0.02;
-      armTo(bones, side, sh.clone().add(V(0, -0.56 * scale, 0)).addScaledVector(out, 0.13 * scale).addScaledVector(F, 0.05 + sw), sh.clone().add(V(0, -0.3, 0)).addScaledVector(F, -0.5).addScaledVector(out, 0.2), k);
-    }
-  };
-  return P;
-}
-
-// two-bone reach for a thug.glb arm (side 'L' | 'R'): the hand to a world point, the elbow toward pole, by weight w
-// (names: the arm's three bones less the side, the thug's by default; Quant's skeleton's are MH_ARM)
+// two-bone reach for an arm (side 'L' | 'R'): the hand to a world point, the elbow toward pole, by weight w
+// (names: the arm's three bones less the side, the thug's by default; Quant's skeleton's (Gears', Fiona's) are MH_ARM)
 const _q = new THREE.Quaternion(), _w = new THREE.Quaternion();
 function turnWorld(b, q) { b.getWorldQuaternion(_w); const want = q.clone().multiply(_w); b.parent.getWorldQuaternion(_w); b.quaternion.copy(_w.invert().multiply(want)); b.updateMatrixWorld(true); }
 export function armTo(B, side, target, pole, w = 1, names = ['upperArm', 'forearm', 'hand']) {
@@ -710,27 +645,37 @@ export function armTo(B, side, target, pole, w = 1, names = ['upperArm', 'forear
 // a thing fixed to a bone, placed in the rest pose (built at the origin, root at the origin facing +z)
 function onBone(P, bone, obj, x, y, z) { P.inner.updateMatrixWorld(true); obj.position.copy(P.inner.worldToLocal(V(x, y, z))); P.inner.add(obj); P.bones[bone]?.attach(obj); obj.traverse((m) => { if (m.isMesh) { m.castShadow = true; m.frustumCulled = false; } }); return obj; }
 
-// Floor Price Fiona: the Degens' hype host
+// Floor Price Fiona: the Degens' hype host, her own model (assets/characters/fiona.glb, made the way Gears' is, from the
+// a MakeHuman-built human: an invented woman, a platinum ponytail, a white tee and a long white denim skirt, white trainers;
+// idle, talk, cheer, wave, walk, jog, run, shrug, phone, arms), on Quant's skeleton (upperarm01_, lowerarm01_, wrist_).
+// The scenes ask for the thug's 'thugIdle' (her idle) and 'run' (the library's run). White shades on her head bone, the
+// megaphone in her right hand (posed each frame by hype()).
+let fionaP = null;
+const fionaGLB = () => fionaP || (fionaP = new GLTFLoader().loadAsync('assets/characters/fiona.glb'));
 export async function buildFiona(W) {
-  const P = await person(W, 'Degen-Fiona', 'a', { scale: 0.97, paint: (r, g, b, zone) => {
-    // (her face: no mask; her hood platinum; the hoodie a white puffer, its stripes still acid green)
-    if ((zone === 'face' && !isSkin(r, g, b)) || (zone === 'eyes' && isGreen(r, g, b))) return [206, 152, 120];
-    if (zone === 'hair' && isDark(r, g, b)) { const k = 0.7 + Math.max(r, g, b) / 92 * 0.4; return [238 * k, 226 * k, 196 * k]; }
-    if (zone === 'body' && isDark(r, g, b)) { const k = 0.62 + Math.max(r, g, b) / 92 * 0.5; return [236 * k, 236 * k, 242 * k]; }
-    return null;
-  } });
-  const B = P.bones, hp = B.head.getWorldPosition(V()), top = P.top;
-  const hair = new THREE.MeshStandardMaterial({ color: '#EDE3C8', roughness: 0.55 });
-  const cap = new THREE.Mesh(new THREE.SphereGeometry(0.118, 20, 12, 0, PI * 2, 0, PI * 0.62), hair); cap.scale.set(1, 0.9, 1.08);
-  onBone(P, 'head', cap, 0, top - 0.115, hp.z - 0.005);
-  const tail = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.012, 0.52, 10), hair); tail.rotation.x = 0.35;
-  onBone(P, 'head', tail, 0, top - 0.33, hp.z - 0.13);
-  const tie = new THREE.Mesh(new THREE.TorusGeometry(0.04, 0.012, 6, 14), new THREE.MeshStandardMaterial({ color: '#B6FF3B', emissive: '#6FA81A', emissiveIntensity: 0.6 })); tie.rotation.x = PI / 2 + 0.35;
-  onBone(P, 'head', tie, 0, top - 0.09, hp.z - 0.105);
-  // white shades
+  const gltf = await fionaGLB();
+  const root = new THREE.Group(); root.name = 'Degen-Fiona';
+  const inner = skClone(gltf.scene); root.add(inner);
+  inner.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; o.frustumCulled = false; } });
+  const bones = {}; inner.traverse((o) => { if (o.isBone) bones[o.name] = o; });
+  inner.updateMatrixWorld(true);
+  const top = new THREE.Box3().setFromObject(inner).max.y;
+  const mixer = new THREE.AnimationMixer(inner);
+  const clipMap = Object.fromEntries(gltf.animations.map((c) => [c.name, c]));
+  if (clipMap.idle) clipMap.thugIdle = clipMap.idle;
+  if (!clipMap.run && clipMap.jog) clipMap.run = clipMap.jog;
+  root.visible = false; W.app.scene.add(root);
+  const P = { root, inner, bones, mixer, rig: rig(mixer, clipMap), clips: Object.keys(clipMap), top, arm: (side, target, pole, w) => armTo(bones, side, target, pole, w, MH_ARM), relax: () => {} };
+  const B = bones;
+  // her eyes (the vertices the eyes' own primitive draws, in the rest pose: the GLB's primitives share one vertex list,
+  // so not its bounding box): the shades sit just in front of them
+  const eb = new THREE.Box3(), _v = V();
+  inner.traverse((o) => { if (!o.isMesh || !/eyes/.test(o.material?.name || '')) return; const g = o.geometry, pa = g.attributes.position, ix = g.index;
+    const n = ix ? ix.count : pa.count; for (let i = 0; i < n; i++) eb.expandByPoint(_v.fromBufferAttribute(pa, ix ? ix.getX(i) : i).applyMatrix4(o.matrixWorld)); });
+  const eye = eb.isEmpty() ? B.head.getWorldPosition(V()).add(V(0, 0.09, 0.09)) : eb.getCenter(V()).setZ(eb.max.z);
   const shades = new THREE.Group(), frame = new THREE.MeshStandardMaterial({ color: '#F4F4F6', roughness: 0.3 }), lens = new THREE.MeshPhysicalMaterial({ color: '#08080A', roughness: 0.05, metalness: 0.5, clearcoat: 1 });
-  for (const sx of [-1, 1]) { const l = new THREE.Mesh(new THREE.BoxGeometry(0.064, 0.042, 0.012), frame); l.position.x = sx * 0.036; l.rotation.y = sx * 0.18; shades.add(l); const k = new THREE.Mesh(new THREE.BoxGeometry(0.054, 0.032, 0.008), lens); k.position.set(sx * 0.036, 0, 0.005); k.rotation.y = sx * 0.18; shades.add(k); }
-  onBone(P, 'head', shades, 0, top - 0.152, hp.z + 0.11);
+  for (const sx of [-1, 1]) { const l = new THREE.Mesh(new THREE.BoxGeometry(0.058, 0.038, 0.01), frame); l.position.x = sx * 0.033; l.rotation.y = sx * 0.18; shades.add(l); const k = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.029, 0.007), lens); k.position.set(sx * 0.033, 0, 0.004); k.rotation.y = sx * 0.18; shades.add(k); }
+  onBone(P, 'head', shades, 0, eye.y + 0.004, eye.z + 0.022);
   // the megaphone (in her right hand; posed by the scene or the rally each frame: P.mega)
   const mega = new THREE.Group();
   const white = new THREE.MeshStandardMaterial({ color: '#F2F2F0', roughness: 0.4 }), acidM = new THREE.MeshStandardMaterial({ color: '#B6FF3B', emissive: '#6FA81A', emissiveIntensity: 0.5 });
@@ -746,15 +691,15 @@ export async function buildFiona(W) {
     const F = V(Math.sin(h), 0, Math.cos(h)), Rt = V(-Math.cos(h), 0, Math.sin(h));
     const head = B.head.getWorldPosition(V());
     if (k > 0.01) {
-      const mouth = head.clone().addScaledVector(F, 0.3).add(V(0, -0.02, 0)).addScaledVector(Rt, 0.04);
-      const sh = B.upperArmR.getWorldPosition(V());
-      armTo(B, 'R', mouth, sh.clone().addScaledVector(Rt, 0.5).add(V(0, -0.4, 0)), k);
+      const mouth = head.clone().addScaledVector(F, 0.3).add(V(0, 0.04, 0)).addScaledVector(Rt, 0.04);
+      const sh = B.upperarm01_R.getWorldPosition(V());
+      armTo(B, 'R', mouth, sh.clone().addScaledVector(Rt, 0.5).add(V(0, -0.4, 0)), k, MH_ARM);
     }
     if (pump > 0.01) {
-      const shL = B.upperArmL.getWorldPosition(V()), up = 0.25 + 0.2 * Math.abs(Math.sin(t * 5.5));
-      armTo(B, 'L', shL.clone().addScaledVector(Rt, -0.22).addScaledVector(F, 0.15).add(V(0, up, 0)), shL.clone().addScaledVector(Rt, -0.6).add(V(0, -0.3, 0)), pump);
+      const shL = B.upperarm01_L.getWorldPosition(V()), up = 0.25 + 0.2 * Math.abs(Math.sin(t * 5.5));
+      armTo(B, 'L', shL.clone().addScaledVector(Rt, -0.22).addScaledVector(F, 0.15).add(V(0, up, 0)), shL.clone().addScaledVector(Rt, -0.6).add(V(0, -0.3, 0)), pump, MH_ARM);
     }
-    const hand = B.handR.getWorldPosition(V());
+    const hand = B.wrist_R.getWorldPosition(V());
     mega.visible = P.root.visible && k > 0.5;
     mega.position.copy(hand).addScaledVector(F, 0.05);
     mega.lookAt(hand.clone().addScaledVector(F, 1).add(V(0, 0.08, 0)));
@@ -763,13 +708,12 @@ export async function buildFiona(W) {
 }
 
 // Gears: big, gentle, in his late forties: his own model (assets/characters/gears.glb, made the way Quant's is, from the
-// GameMog human: a heavy build 1.9 m tall, a full beard going grey, cropped hair under a navy cap, navy work overalls
+// a MakeHuman-built human: a heavy build 1.9 m tall, a full beard going grey, cropped hair under a navy cap, navy work overalls
 // over a white tee, worn boots; idle, talk, arms, shrug, wave, walk, jog, pickup, shift and phone), on Quant's
 // skeleton, so his arms are Quant's (upperarm01_, lowerarm01_, wrist_). The scenes ask for the thug's 'thugIdle':
 // it is his idle. His idle already lets his arms hang, so relax() leaves them be. A red rag in his back pocket.
 let gearsP = null;
 const gearsGLB = () => gearsP || (gearsP = new GLTFLoader().loadAsync('assets/characters/gears.glb'));
-const MH_ARM = ['upperarm01_', 'lowerarm01_', 'wrist_'];
 export async function buildGears(W) {
   const gltf = await gearsGLB();
   const root = new THREE.Group(); root.name = 'Gears';

@@ -25,8 +25,93 @@ const SWING = 1.6;   // the fastest it turns round him by itself (rad/s)
 const NEAR = [0.3, -0.3, 0.6, -0.6], OFFS = [0.9, -0.9, 1.25, -1.25, 1.65, -1.65, 2.1, -2.1, 2.6, -2.6, Math.PI];
 const CROWN = 2.6; // a street tree's trunk: solid to 2.6 m x its scale (its leaves above are looked through)
 
+// ------------------------------------------------------------------ what stands in the street, for the city's camera
+// The city's follow camera (js/cameras.js keepInView) keeps its lens off the buildings' collision boxes only. This gives
+// it the rest, as boxes in the colliders' own form (turned ones with obb, minY for one off the ground): Quant's car
+// parked (on foot), the traffic's cars and buses, and whatever the game has set in the street since the city was built
+// (a mission's van or SUV, the rally's stage screen and trusses, a wreck): its solid meshes, prop-sized, gathered now and
+// then, their boxes turned with them. A vehicle's box reaches a little over its roof, so the view on foot never skims
+// low over it with the car filling the frame (cs.blockers(x, z, r, entity)).
+export function createBlockers(c) {
+  const app = c.app, cm = c.cm, scene = app.scene, W = c.W, car = W.car, P = W.person;
+  const base = new Set(scene.children); // (the city's own: its colliders already stand for it)
+  const TV = [...(app.trafficSystem?.cars || []), ...(app.trafficSystem?.buses || [])];
+  const props = []; let scanT = -1, scanN = -1;
+  const out = [], pool = [];
+  const _c = new THREE.Vector3();
+  const corners = [0, 1, 2, 3, 4, 5, 6, 7].map(() => new THREE.Vector3());
+  const box = (k) => { const o = pool[k] || (pool[k] = { obb: { cx: 0, cz: 0, cs: 1, sn: 0, hx: 0, hz: 0 }, minX: 0, maxX: 0, minZ: 0, maxZ: 0, minY: -1e4, maxY: 0 }); o.minY = -1e4; return o; };
+  const set = (o, cx, cz, yaw, hx, hz, minY, maxY) => {
+    const b = o.obb; b.cx = cx; b.cz = cz; b.cs = Math.cos(yaw); b.sn = Math.sin(yaw); b.hx = hx; b.hz = hz;
+    const ex = Math.abs(b.cs) * hx + Math.abs(b.sn) * hz, ez = Math.abs(b.sn) * hx + Math.abs(b.cs) * hz;
+    o.minX = cx - ex; o.maxX = cx + ex; o.minZ = cz - ez; o.maxZ = cz + ez; o.minY = minY; o.maxY = maxY;
+    return o;
+  };
+  // (a mesh that is ours to skip: Quant, his car, a Degen, a person; or not solid to look at: see-through, flat)
+  const own = (o) => { for (let p = o; p; p = p.parent) if (p === car?.mesh || p === P?.mesh || p === W.quant?.root || p.userData?.noCamBlock) return true; return false; };
+  function scan() {
+    props.length = 0;
+    for (const top of scene.children) {
+      if (base.has(top)) continue;
+      top.traverse((o) => {
+        if (!o.isMesh || o.isInstancedMesh || o.isSkinnedMesh || o.isSprite || !o.geometry) return;
+        const m = o.material; if (!m || Array.isArray(m) || m.transparent && !m.depthWrite || m.visible === false || m.blending === THREE.AdditiveBlending) return;
+        const g = o.geometry; if (!g.boundingBox) g.computeBoundingBox(); const bb = g.boundingBox; if (!bb || bb.isEmpty()) return;
+        o.updateWorldMatrix(true, false);
+        const e = o.matrixWorld.elements, sx = Math.hypot(e[0], e[1], e[2]), sy = Math.hypot(e[4], e[5], e[6]), sz = Math.hypot(e[8], e[9], e[10]);
+        const w = (bb.max.x - bb.min.x) * sx, h = (bb.max.y - bb.min.y) * sy, d = (bb.max.z - bb.min.z) * sz;
+        // (prop-sized: as tall as a man's waist, a metre or more across one way, not a slab of ground or a whole block)
+        if (Math.max(w, h, d) < 0.9 || Math.max(w, d) > 40 || Math.min(h, Math.max(w, d)) < 0.6 && h < 0.9) return;
+        if (own(o)) return;
+        props.push({ o, bb, r: 0.5 * Math.hypot(w, h, d) });
+      });
+    }
+  }
+  const visible = (o) => { for (let p = o; p; p = p.parent) if (!p.visible) return false; return true; };
+  // the boxes within r of (x, z); for `entity` (the one the camera follows: never its own box)
+  return function blockers(x, z, r, entity, only) {
+    out.length = 0; let k = 0;
+    const onFoot = cm.activeMode !== 'car', all = only !== 'props';
+    // (the street's things, gathered again every 1.5 s, or as soon as something was added to the scene or taken out)
+    const now = performance.now();
+    if (now - scanT > 1500 || scene.children.length !== scanN) { scanT = now; scanN = scene.children.length; scan(); }
+    // his car, parked
+    if (all && onFoot && car?.mesh?.visible && car.body && Math.abs(car.position.x - x) < r + 4 && Math.abs(car.position.z - z) < r + 4) {
+      const B = car.body, h = car.heading, m = (B.z0 + B.z1) / 2;
+      out.push(set(box(k++), car.position.x + Math.sin(h) * m, car.position.z + Math.cos(h) * m, h, B.hx, (B.z1 - B.z0) / 2, -1e4, car.position.y + B.top + 0.75));
+    }
+    // the traffic (driving: only one the lens would be in or right at, a car stopped close behind his: else every car
+    // crossing behind him in traffic would pull the view in and let it out again)
+    const L = app.cameraSystem.camera.position;
+    if (all) for (const v of TV) {
+      if (!v.edge || Math.abs(v.x - x) > r + 7 || Math.abs(v.z - z) > r + 7) continue;
+      const hx = v.halfWidth || 0.95, hz = v.half || 2.3;
+      if (!onFoot) { const dx = L.x - v.x, dz = L.z - v.z, cs = Math.cos(v.yaw), sn = Math.sin(v.yaw); if (Math.abs(dx * cs - dz * sn) > hx + 1 || Math.abs(dx * sn + dz * cs) > hz + 1) continue; }
+      out.push(set(box(k++), v.x, v.z, v.yaw, hx, hz, -1e4, (v.y || 0) + (v.bus ? 3.2 : 1.6) + (onFoot ? 0.6 : 0.1)));
+    }
+    // the game's things in the street
+    for (const p of props) {
+      const e = p.o.matrixWorld.elements;
+      if (Math.abs(e[12] - x) > r + p.r + 1 || Math.abs(e[14] - z) > r + p.r + 1 || !visible(p.o)) continue;
+      // (its box's corners in the world, measured along its own turn: tipped or not, it fits round them)
+      const bb = p.bb; let i = 0;
+      for (const cx of [bb.min.x, bb.max.x]) for (const cy of [bb.min.y, bb.max.y]) for (const cz of [bb.min.z, bb.max.z]) corners[i++].set(cx, cy, cz).applyMatrix4(p.o.matrixWorld);
+      const yaw = Math.atan2(-e[2], e[0]), cs = Math.cos(yaw), sn = Math.sin(yaw);
+      let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+      for (const q of corners) { const lx = q.x * cs - q.z * sn, lz = q.x * sn + q.z * cs; x0 = Math.min(x0, lx); x1 = Math.max(x1, lx); z0 = Math.min(z0, lz); z1 = Math.max(z1, lz); y0 = Math.min(y0, q.y); y1 = Math.max(y1, q.y); }
+      const lx = (x0 + x1) / 2, lz = (z0 + z1) / 2;
+      _c.set(lx * cs + lz * sn, 0, -lx * sn + lz * cs);
+      // (one off the ground, a sign or a screen up on its truss: from where it starts; one standing on it, from the ground)
+      out.push(set(box(k++), _c.x, _c.z, yaw, (x1 - x0) / 2, (z1 - z0) / 2, y0 > cm.getGroundHeight(_c.x, _c.z, 'person') + 0.6 ? y0 : -1e4, y1));
+    }
+    void entity;
+    return out;
+  };
+}
+
 export function createFightCamera(c) {
   const cs = c.app.cameraSystem, cam = cs.camera, P = c.W.person, cm = c.cm;
+  const blockers = cs.blockers = createBlockers(c);
   const st = { w: 0, yaw: null, lastOff: 0, idle: 9, dist: 5.6, pivot: new THREE.Vector3(), pivotOn: false, frame: new THREE.Vector3(),
     shake: 0, punchT: 9, punchK: 0, cine: null, look: new THREE.Vector3(), kick: new THREE.Vector3(), kickV: new THREE.Vector3(), roll: 0, rollV: 0,
     downK: 0, cueK: 0, canK: 0, over: 0, lift: 0, swing: 0, searchT: 0, elUp: 0, elWant: 0, freeD: 9, crownY: 0, handback: false, tgt: null, tgtV: new THREE.Vector3(), occlT: 0 };
@@ -34,7 +119,7 @@ export function createFightCamera(c) {
 
   // ------------------------------------------------------------------ the street round him
   // (the buildings near him, the trees and the poles: gathered now and then; the cans and the traffic every frame)
-  const near = { at: new THREE.Vector3(1e9, 0, 0), t: 9, blds: [], trees: [], poles: [], cans: [] };
+  const near = { at: new THREE.Vector3(1e9, 0, 0), t: 9, blds: [], trees: [], poles: [], cans: [], props: [] };
   let poles = null;
   // every lamp and signal pole in the city, once (the street details' instanced posts: tall, thin, standing on the street)
   function findPoles() {
@@ -58,6 +143,8 @@ export function createFightCamera(c) {
       near.blds = cm.nearColliders(q.x, q.z, 16).slice();
       if (!poles) findPoles();
       near.poles = poles.filter((o) => Math.abs(o.x - q.x) < 22 && Math.abs(o.z - q.z) < 22);
+      // (the game's things in the street: a mission's van, the rally's screen and trusses, a wreck: boxes like the traffic's)
+      near.props = blockers(q.x, q.z, 16, null, 'props').map((b) => ({ x: b.obb.cx, z: b.obb.cz, cs: b.obb.cs, sn: b.obb.sn, hx: b.obb.hx, hz: b.obb.hz, top: b.maxY }));
       near.trees = [];
       c.scene.traverse((o) => {
         if (!o.isInstancedMesh || !/^Trees_.*lod[01]$/.test(o.name)) return;
@@ -129,6 +216,7 @@ export function createFightCamera(c) {
     for (const o of near.poles) t = Math.min(t, hitCyl(a, ux, uy, uz, t, o));
     for (const o of near.cans) t = Math.min(t, hitCyl(a, ux, uy, uz, t, o));
     for (const o of c.vehs || []) t = Math.min(t, hitBox(a, ux, uy, uz, t, o));
+    for (const o of near.props) t = Math.min(t, hitBox(a, ux, uy, uz, t, o));
     for (let s = 0.4; s < t; s += 0.25) if (solid(a.x + ux * s, a.y + uy * s, a.z + uz * s, s > 1.2 ? 0.55 : 0)) return Math.max(0, s - 0.3);
     return t;
   }
@@ -227,8 +315,12 @@ export function createFightCamera(c) {
     }
     const lg = c.lingering() ? c.linger.at : null;
     if (lg && hdist(lg, q) < 13) { n += 2; cen.x += lg.x * 2; cen.z += lg.z * 2; spread = Math.max(spread, hdist(lg, q)); }
-    const off = n ? _v2.set(cen.x / n - q.x, 0, cen.z / n - q.z).multiplyScalar(lg ? 0.45 : 0.3) : _v2.set(0, 0, 0);
-    if (off.length() > 1.6) off.setLength(1.6);
+    // (down to the last one or two on their feet: the frame leans further their way, and pulls back to keep them in it)
+    const few = lastFew(q);
+    if (few.length) for (const e of few) spread = Math.max(spread, Math.min(16, hdist(e.pos, q)));
+    const lean = lg ? 0.45 : few.length ? 0.42 : 0.3;
+    const off = n ? _v2.set(cen.x / n - q.x, 0, cen.z / n - q.z).multiplyScalar(lean) : _v2.set(0, 0, 0);
+    if (off.length() > (few.length ? 2.2 : 1.6)) off.setLength(few.length ? 2.2 : 1.6);
     st.frame.x = damp(st.frame.x, off.x, 2.2, dt); st.frame.z = damp(st.frame.z, off.z, 2.2, dt);
     // (down: the view on his chest as he lies, looking down on him from further back)
     st.downK = damp(st.downK, down ? 1 : 0, down ? 4 : 2, dt);
@@ -240,7 +332,7 @@ export function createFightCamera(c) {
     // a cue showing: a little higher; a can going up over his head: higher and further back, to see where it goes
     const cue = c.threats.length > 0, canUp = !!me.holding && me.holding.def.hands === 2 && (mv === 'throw' || mv === 'canSlam');
     st.cueK = damp(st.cueK, cue ? 1 : 0, cue ? 6 : 2, dt); st.canK = damp(st.canK, canUp ? 1 : 0, canUp ? 6 : 2, dt);
-    const wantD = clamp(4.0 + (spread - 3) * 0.22, 3.8, 6.2) * cs.zoomMultiplier + 1.3 * st.downK + 0.6 * st.canK;
+    const wantD = clamp(4.0 + (spread - 3) * 0.22, 3.8, few.length ? 6.8 : 6.2) * cs.zoomMultiplier + 1.3 * st.downK + 0.6 * st.canK;
     st.dist = damp(st.dist, wantD, 1.6, dt);
     // (a crowd round him: a little higher, to see over the ones nearest the lens)
     let crowd = 0; for (const e of c.enemies) if (e.standing && hdist(e.pos, q) < 4.2) crowd++;
@@ -364,10 +456,36 @@ export function createFightCamera(c) {
       if (over > 0) { st.yaw += Math.sign(rel) * Math.min(over, 1.4 * dt * w); return; }
       if (offAxis(tgt, dt, w, 1.5)) return;
     }
+    // the last one or two on their feet out of the view: round toward him until he is well inside it (the player's own
+    // look, the mouse, always wins)
+    if (frameFoe(dt, w)) return;
     // his man straight ahead along the view (hidden behind him): round to ~40 degrees off it, on the side he is already
     if (st.idle < 1.0) return;
     const tg = me.target?.alive && c.time - me.lastAttackT < 2.5 ? me.target : null;
     if (tg) offAxis(tg, dt, w, 1.1);
+  }
+  // the men still standing in the fight (alive, awake, within 18 m), when only one or two are: the ones to keep framed
+  const _few = [];
+  function lastFew(q) {
+    _few.length = 0; let n = 0;
+    for (const e of c.enemies) { if (!e.alive || e.state === 'idle') continue; if (e.standing || e.state === 'getup') { n++; if (hdist(e.pos, q) < 18) _few.push(e); } }
+    if (n > 2) _few.length = 0;
+    return _few;
+  }
+  // where a man stands in the view (x across it, -1..1; behind the lens: off it)
+  function inView(e, out) { e.chest(out).project(cam); return out.z < 1 && Math.abs(out.x) < 0.62 && Math.abs(out.y) < 0.85; }
+  function frameFoe(dt, w) {
+    const q = P.position, few = lastFew(q);
+    // (with more of them up the view keeps its own yaw, as it always has: the edge arrows show the ones out of it)
+    let foe = null, best = Infinity;
+    for (const e of few) if (!inView(e, _t1)) { const d = hdist(e.pos, q); if (d < best) { best = d; foe = e; } }
+    if (!foe) return false;
+    const rel = angWrap(Math.atan2(foe.pos.x - q.x, foe.pos.z - q.z) - st.yaw);
+    // (not round into a wall or a tree: the way it would go is checked first)
+    const step = Math.sign(rel) * Math.min(Math.abs(rel), Math.min(1.5, 0.6 + 1.2 * Math.abs(rel)) * dt * w);
+    const vv = view(st.yaw + Math.sign(rel) * 0.25, 0.3, Math.min(st.dist, 4)); if (vv.free < MIN + 0.3) return false;
+    st.yaw += step;
+    return true;
   }
   function offAxis(e, dt, w, rate) {
     const q = P.position; if (hdist(e.pos, q) < 0.6) return false;

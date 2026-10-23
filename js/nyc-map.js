@@ -917,7 +917,8 @@ class NYCMapSystem {
       extra = [];
     }
     for (const p of extra) {
-      const sc = score(foldName(p.name));
+      // (a mission place by its second name too: 'Bryant' finds 'Juno · Bryant Park')
+      const sc = Math.max(score(foldName(p.name)), p.sub && p.sub !== 'Mission' ? score(foldName(p.sub)) - 5 : 0);
       if (sc) hits.push({ name: p.name, sub: p.sub || 'Mission', x: p.x, z: p.z, kind: 'Mission', score: sc + 30 });
     }
     for (const p of searchPlaces()) {

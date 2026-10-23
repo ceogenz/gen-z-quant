@@ -133,7 +133,7 @@ export function handheld(t, amt = 1) {
 
 export function createDirector(W) {
   const app = W.app, cs = app.cameraSystem, cam = cs.camera, cm = app.controllerManager;
-  const _look = new THREE.Vector3(), _q = new THREE.Quaternion(), _q2 = new THREE.Quaternion(), _e = new THREE.Euler(), _p = new THREE.Vector3();
+  const _look = new THREE.Vector3(), _q = new THREE.Quaternion(), _q2 = new THREE.Quaternion(), _e = new THREE.Euler(), _p = new THREE.Vector3(), _pv = new THREE.Vector3();
   const D = {
     camera: { pos: [0, 50, 0], look: [0, 0, 100], fov: 50, roll: 0, shake: null },
     active: false, blocking: false, onFrame: null, framed: false,
@@ -158,21 +158,37 @@ export function createDirector(W) {
       cs.currentPos.copy(cam.position); cs.currentLookAt.copy(_look);
     },
     // hand the camera back: over secs it eases from the last shot into the city's own (the chase camera behind the
-    // player, as fresh as after a teleport), then the city's update runs alone again
+    // player, as fresh as after a teleport), then the city's update runs alone again. It hands back a clear view: on
+    // foot with straight behind him blocked (the van he just searched, a wall, the rally's screen), he turns to the
+    // nearest way round that is clear over the first part of the blend (cs.clearTurn), so the view comes down behind him
+    // at its usual height and length, him and the way on in it; in the car the view stays behind it, in front of
+    // whatever is there (js/cameras.js keepInView, with the street's things: cs.blockers)
     release(secs = 1.2) {
       return new Promise((res) => {
         if (!D.active) return res();
         const from = { p: cam.position.clone(), q: cam.quaternion.clone(), fov: cam.fov }, prev = D.prev;
         cs.resetForTeleport(); app.selectCamera?.('chase', true);
+        const ent = cm.getActiveEntity(), turn = cs.clearTurn ? cs.clearTurn(ent) : 0;
+        let turned = 0;
+        const turnTo = (k) => { if (!turn) return; const d = turn * k - turned; turned += d; ent.heading += d; if (ent.mesh && cm.activeMode === 'person') ent.mesh.rotation.y = ent.heading; };
+        W.handback = { turn, at: performance.now() }; // (for looking at it)
         cs.update = prev;
-        if (secs <= 0) { D.active = false; return res(); }
+        if (secs <= 0) { turnTo(1); D.active = false; return res(); }
         let k = 0;
         cs.update = (dt, el) => {
+          turnTo(ease.inOut(Math.min(1, (k + dt / secs) * 1.6)));
           prev.call(cs, dt, el);
           k = Math.min(1, k + dt / secs); const e = ease.inOut(k);
           const toP = cam.position.clone(), toQ = cam.quaternion.clone(), toF = cs.getActivePreset().fov;
           cam.position.lerpVectors(from.p, toP, e); cam.quaternion.slerpQuaternions(from.q, toQ, e);
-          const f = lerp(from.fov, toF, e); if (Math.abs(cam.fov - f) > 1e-3) { cam.fov = f; cam.updateProjectionMatrix(); }
+          // (the glide's straight line from the last shot to behind him can cross what stands between: the van he just
+          // searched, a wall. The moment the line from him to the lens is cut, it cuts to the view behind him instead of
+          // gliding through it)
+          if (k < 1 && cs.segClear) {
+            const pv = _pv.copy(ent.position); pv.y += cm.activeMode === 'car' ? 1.15 : 1.45;
+            if (cs.segClear(pv, cam.position, ent) < 0.97) { k = 1; cam.position.copy(toP); cam.quaternion.copy(toQ); turnTo(1); }
+          }
+          const f = k >= 1 ? toF : lerp(from.fov, toF, e); if (Math.abs(cam.fov - f) > 1e-3) { cam.fov = f; cam.updateProjectionMatrix(); }
           if (k >= 1) { cs.update = prev; D.active = false; res(); }
         };
       });

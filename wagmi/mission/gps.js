@@ -19,6 +19,10 @@
 //   gps.user              the player's own waypoint (a click on the full map, or its search's 'Set waypoint'): purple,
 //                         its route wins over the mission's until he gets there, clicks it away, or the objective changes
 // Named mission places (the route's place, named blips) are found by the full map's search (mapSystem.searchExtra).
+// Stalls (instead of reminders on a timer): with a place to go, no headway along the route for 50 s of play, or the car
+// stuck (the pedal down, going nowhere, 4 s), real help is offered once (ui.offer): the way shown again, the car put
+// back on the road (WAGMI.recoverCar), the checkpoint restarted (a mission running). gps.stallNote = [from, text]: one
+// gentle line sent with the first offer (the contact's), then never again for that objective.
 const YELLOW = '#FFC93C', BLUE = '#6CB8FF', RED = '#EF4444', GREEN = '#4ADE80', PURPLE = '#C77DFF', HALO = 'rgba(8, 11, 15, 0.9)';
 const FOOT_LINE = 150; // m: on foot and this close, the route is the straight line to it
 
@@ -107,7 +111,9 @@ export function createGPS(W) {
     set(dest, via = null) { gps.to(dest); gps.waypoints = via; gps.blip('dest', { x: dest.x, z: dest.z, kind: 'dest', edge: true, name: dest.name }); },
     // the route's target alone (the objective changed: the player's own waypoint gives way to it)
     to(t) {
+      const same = t && gps.dest && !t.follow && !gps.dest.follow && dist(t, gps.dest) < 1;
       gps.dest = t || null; gps.route = null; gps.lastPlan = 0; gps._to = null;
+      if (!same) stall.reset(true);
       if (gps.user) { gps.user = null; ms.userWaypoint = null; gps.unblip('user'); }
       if (!t) { gps.length = 0; ms.waypoint = null; return; }
       const p = t.follow ? t.follow() : t;
@@ -140,8 +146,11 @@ export function createGPS(W) {
       // (there: the player's own waypoint goes, the objective's route comes back)
       if (gps.user && dist(p, gps.user) < 20) { gps.setUser(null); return; }
       const t = target();
-      if (!t) { gps.route = null; gps.length = 0; return; }
-      const moved = gps._to && dist(t, gps._to) > 8;
+      if (!t) { gps.route = null; gps.length = 0; stall.reset(); return; }
+      // (headway only counts toward a place that stays put: a car he's chasing comes and goes; a stuck car, any time)
+      if (!force) stall.step(!!gps.user || !!(gps.dest && (!gps.dest.follow || gps.dest.still)));
+      // (a target on the move, a car he's chasing: planned again as it goes, a few times a second at most)
+      const moved = gps._to && dist(t, gps._to) > 8 && t0 - gps.lastPlan > 350;
       if (force || moved || !gps.route || t0 - gps.lastPlan > 1000 || offRoute(p.x, p.z, gps.route) > 25) {
         gps.lastPlan = t0; gps._to = { x: t.x, z: t.z };
         const foot = cm.activeMode !== 'car';
@@ -188,12 +197,66 @@ export function createGPS(W) {
     },
     plan,
   };
+  // the stall watch (see the top): headway is the route getting shorter; the time is play time (the clock stops in the
+  // pause menu, and a cutscene starts it over)
+  const stall = (() => {
+    let best = Infinity, since = 0, stuckT = 0, lastT = 0, offered = false, noted = false;
+    const S = {
+      reset(all = false) { best = Infinity; since = now(); stuckT = 0; if (all) { offered = false; noted = false; } },
+      step(still = true) {
+        const t = now(), dt = Math.min(0.1, Math.max(0, (t - (lastT || t)) / 1000)); lastT = t;
+        if (W.cutscene || W.paused || document.body.classList.contains('wg-cine')) { since = t; stuckT = 0; return; }
+        if (!since) since = t;
+        const L = gps.length || Infinity;
+        if (!still || L < best - 25 || L < 40) { best = Math.min(best, L); since = t; }
+        const car = W.car, k = cm.keys || {}, inCar = cm.activeMode === 'car';
+        // (stuck: the car's own signal when it has one, the one its 'X · Reset car to road' prompt uses: the pedal held,
+        // the car going nowhere; else the pedal down with it stood still)
+        if (W.carStuck) stuckT = inCar ? W.carStuck() : 0;
+        else stuckT = inCar && (k.forward || k.backward) && Math.abs(car?.speed || 0) < 1.2 ? stuckT + dt : Math.max(0, stuckT - dt * 2);
+        if (offered) return;
+        if (t - since > 50000) S.offer('lost');
+        else if (stuckT > 4 && W.recoverCar) S.offer('stuck');
+      },
+      // the help itself: what fits him now
+      offer(why) {
+        const ui = W.ui; if (!ui?.offer) return;
+        offered = true;
+        const inCar = cm.activeMode === 'car', M = W.missions?.active?.(), opts = [];
+        if (why === 'lost' || !inCar) opts.push({ key: '1', label: ['Show me the way (the ', { 'yellow line': 'yellow' }, ')'], run: () => S.showWay() });
+        if (inCar && W.recoverCar) opts.push({ key: String(opts.length + 1), label: 'Put my car back on the road', run: () => { W.recoverCar?.(); S.reset(); } });
+        if (M && W.ui?.pause?.restartCurrent) opts.push({ key: String(opts.length + 1), label: 'Restart the checkpoint', run: () => W.ui.pause.restartCurrent() });
+        if (!opts.length) return;
+        ui.offer({ title: why === 'stuck' ? 'Stuck?' : 'Need a hand?', note: why === 'stuck' ? 'The car is going nowhere.' : null, options: opts });
+        if (!noted && gps.stallNote && why === 'lost') { noted = true; const [from, text] = gps.stallNote; W.sfx?.play?.('buzz', { gain: 0.14, times: 1 }); W.audio?.play?.('phoneBuzz'); ui.dm(from, text, 8); }
+      },
+      // the way, again: his own waypoint away, the route planned afresh, the objective's line up, the place's blip pulsing
+      showWay() {
+        if (gps.user) gps.setUser(null);
+        gps.update(true);
+        const r = W.ui?.recent?.();
+        if (r?.objective && W.ui) { const el = document.querySelector('#wg .wg-obj'); if (el) { el.innerHTML = r.objective; el.classList.remove('hide'); setTimeout(() => el.classList.add('hide'), 7000); } }
+        for (const [id, b] of blips) if (b.kind === 'dest' || b.kind === 'letter' || b.kind === 'waypoint') blips.set(id, { ...b, born: performance.now(), pulse: 8 });
+        W.ui?.brief?.(true);
+        S.reset();
+      },
+      get offered() { return offered; },
+    };
+    return S;
+  })();
+  gps.stall = stall; gps.stallNote = null;
   // the player's own waypoint comes from the full map (a click, or 'Set waypoint' on a search hit)
   ms.onWaypoint = (wp) => gps.setUser(wp);
-  // the full map's search finds the mission's named places: the route's place and every named blip
+  // the full map's search finds the mission's named places: the route's place and every named blip (once each: the
+  // place a letter blip stands on is the same place); a search finds them by their second name too (mapSystem)
   ms.searchExtra = () => {
     const out = [];
-    const add = (name, x, z, sub) => { if (name) { const [n, s2] = String(name).split(' · '); out.push({ name: n, sub: s2 || sub || 'Mission', x, z, kind: 'Mission' }); } };
+    const add = (name, x, z, sub) => {
+      if (!name) return;
+      const [n, s2] = String(name).split(' · ');
+      if (out.some((o) => o.name === n && Math.hypot(o.x - x, o.z - z) < 30)) return;
+      out.push({ name: n, sub: s2 || sub || 'Mission', x, z, kind: 'Mission' });
+    };
     if (gps.dest && !gps.dest.follow) add(gps.dest.name, gps.dest.x, gps.dest.z);
     for (const b of blips.values()) {
       if (b.kind === 'waypoint' || b.kind === 'enemy') continue;

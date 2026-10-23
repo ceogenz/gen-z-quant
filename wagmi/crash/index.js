@@ -105,21 +105,14 @@ export function install(W) {
     rock(nx, nz, vn);
     return vn;
   }
-  // another car: apart by the weights, then the blow (restitution 0.2, nearly none at speed; a little friction across
-  // it), each turned by its lever arm; the other knocked off its lane when it was hard
-  const contactCool = new WeakMap();
-  function meet(v) {
-    const s = Math.sin(car.heading), c = Math.cos(car.heading), mp = car.mass || 2, mv = v.bus ? 12 : massOf(v);
-    const { nx, nz, pen } = hit;
-    const R = v.wreck && v._wreck;
-    // (apart: a car still in its lane is moved by its lane, so this car takes all of it)
-    const share = R ? mv / (mp + mv) : 1;
-    car.position.x += nx * pen * share; car.position.z += nz * pen * share;
-    if (R) { R.x -= nx * pen * (1 - share); R.z -= nz * pen * (1 - share); v.x = R.x; v.z = R.z; }
-    const [ovx, ovz] = wrecks.velOf(v);
+  // the blow between this car and another going (ovx, ovz) of mass mv, along hit's normal (restitution 0.2, nearly none
+  // at speed; a little friction across it): this car's share of it (slowed or backed along it, slid across it, turned
+  // by its lever arm; head on at speed, crumpled to a stop); the blow J on this car, or null when they part anyway
+  function blow(ovx, ovz, mv) {
+    const s = Math.sin(car.heading), c = Math.cos(car.heading), mp = car.mass || 2, { nx, nz } = hit;
     const pvx = s * car.speed + car.vx, pvz = c * car.speed + car.vz;
     const rvx = pvx - ovx, rvz = pvz - ovz, vn = rvx * nx + rvz * nz;
-    if (vn >= -0.15) return;
+    if (vn >= -0.15) return null;
     const sp = -vn, e = sp > 12 ? 0.05 : 0.2, inv = 1 / mp + 1 / mv;
     const jn = (1 + e) * sp / inv;
     // (friction across the blow: the sideswipe's scrub)
@@ -135,6 +128,23 @@ export function install(W) {
     if (front < -0.6 && sp > 14) { car.speed *= clamp(6.3 / sp, 0.12, 0.45); if (sp > 20) hold(sp); }
     const { hl } = box(), B = car.body, I = mp * (hl * hl + B.hx * B.hx) / 3;
     car.angularVel = clamp((car.angularVel || 0) + ((hit.z - car.position.z) * Jx - (hit.x - car.position.x) * Jz) / I * 0.8, -3.5, 3.5);
+    return { sp, Jx, Jz };
+  }
+  // another car: apart by the weights, then the blow, each turned by its lever arm; the other knocked off its lane when
+  // it was hard
+  const contactCool = new WeakMap();
+  function meet(v) {
+    const mp = car.mass || 2, mv = v.bus ? 12 : massOf(v);
+    const { nx, nz, pen } = hit;
+    const R = v.wreck && v._wreck;
+    // (apart: a car still in its lane is moved by its lane, so this car takes all of it)
+    const share = R ? mv / (mp + mv) : 1;
+    car.position.x += nx * pen * share; car.position.z += nz * pen * share;
+    if (R) { R.x -= nx * pen * (1 - share); R.z -= nz * pen * (1 - share); v.x = R.x; v.z = R.z; }
+    const [ovx, ovz] = wrecks.velOf(v);
+    const b = blow(ovx, ovz, mv);
+    if (!b) return;
+    const { sp, Jx, Jz } = b;
     wrecks.push(v, -Jx, -Jz, hit.x, hit.z, sp > 3);
     rock(nx, nz, sp);
     // the feel, once a blow (not every step of a grind): sparks and bits where they touched, a bus's horn and brakes
@@ -148,6 +158,78 @@ export function install(W) {
       if (v.bus && sp > 3) { play('horn', { pos: [v.x, 1.5, v.z], kind: 'bus', len: 'long', vol: 0.9 }); play('airBrake', { pos: [v.x, 1, v.z], vol: 0.6 }); }
     }
   }
+  // a body that isn't one of the city's cars (b: { x, z, vx, vz, mass, paint, key, knock(Jx, Jz) }): this car takes all
+  // of the apart (it keeps to its lane, or the mission moves it), then the blow; knock: the other's share of it
+  function meetBody(b) {
+    const { nx, nz, pen } = hit;
+    car.position.x += nx * pen; car.position.z += nz * pen;
+    const r = blow(b.vx, b.vz, b.mass);
+    if (!r) return;
+    b.knock?.(-r.Jx, -r.Jz);
+    rock(nx, nz, r.sp);
+    const now = performance.now(), last = contactCool.get(b.key) || 0;
+    if ((now - last > 250 || r.sp > 4) && r.sp > 1.5) {
+      contactCool.set(b.key, now);
+      feel(r.sp, hit.x, 0.55, hit.z, nx, nz, { paint: b.paint, heavy: Math.min(1, b.mass / ((car.mass || 2) + b.mass) * 1.8) });
+      emit('hit', { kind: 'car', speed: r.sp, x: hit.x, z: hit.z, other: b.kind });
+    }
+  }
+  // the shore highways' cars (js/traffic.js createHighwayTraffic): they keep to their lanes; a blow along the lane
+  // slows (or shoves on) the one hit
+  const HW = app.highwayTraffic && app.highwayTraffic.near ? app.highwayTraffic : null;
+  const hwList = [];
+  const HB = { x: 0, z: 0, vx: 0, vz: 0, mass: 1.5, paint: null, key: null, kind: 'highway', c: null, knock: null };
+  HB.knock = (Jx, Jz) => { const c = HB.c, s = Math.sin(HB.yaw), co = Math.cos(HB.yaw); HW.knock(c, (Jx * s + Jz * co) / HB.mass); };
+  // the mission's own vehicles standing in the street (a van at the curb, a wreck, the getaway SUV, the scene's parked
+  // cars: wagmi/mission, wagmi/intro.js, found by their names): solid while they stand still a moment and are shown
+  // (one the mission drives, moving, is its own: wagmi/mission/m2-drive.js); their box from their meshes, once
+  const SOLID = /^wagmi-(suv|van|lev-car|m3-suv|parked)$/;
+  const solids = new Map(); // object -> { hw, hl, cx, cz, x, z, still, t }
+  let solidScan = 0;
+  const _bb = new THREE.Box3(), _m = new THREE.Matrix4(), _inv = new THREE.Matrix4();
+  function localBox(o) {
+    o.updateWorldMatrix(true, true); _inv.copy(o.matrixWorld).invert();
+    const bb = new THREE.Box3();
+    o.traverse((m) => {
+      if (!m.isMesh || !m.geometry) return;
+      if (!m.geometry.boundingBox) m.geometry.computeBoundingBox();
+      bb.union(_bb.copy(m.geometry.boundingBox).applyMatrix4(_m.multiplyMatrices(_inv, m.matrixWorld)));
+    });
+    if (bb.isEmpty()) return null;
+    const sc = o.getWorldScale(new THREE.Vector3());
+    return { hw: (bb.max.x - bb.min.x) / 2 * sc.x, hl: (bb.max.z - bb.min.z) / 2 * sc.z, cx: (bb.max.x + bb.min.x) / 2 * sc.x, cz: (bb.max.z + bb.min.z) / 2 * sc.z };
+  }
+  const shown = (o) => { for (let p = o; p; p = p.parent) if (!p.visible) return false; return true; };
+  function scanSolids(dt) {
+    if ((solidScan -= dt) <= 0) {
+      solidScan = 1;
+      const look = (o, depth) => { for (const k of o.children) { if (SOLID.test(k.name) && !solids.has(k)) solids.set(k, null); else if (depth < 2 && k.children.length && !k.isMesh) look(k, depth + 1); } };
+      look(app.scene, 0);
+    }
+    for (const [o, s0] of solids) {
+      if (!o.parent) { solids.delete(o); continue; }
+      let s = s0;
+      if (!s) { const b = localBox(o); if (!b) continue; s = { ...b, x: 0, z: 0, yaw: 0, still: 0, on: false }; solids.set(o, s); }
+      o.updateWorldMatrix(true, false);
+      const e = o.matrixWorld.elements, yaw = Math.atan2(e[8], e[10]), cs = Math.cos(yaw), sn = Math.sin(yaw);
+      const x = e[12] + s.cx * cs + s.cz * sn, z = e[14] - s.cx * sn + s.cz * cs;
+      const moved = Math.hypot(x - s.x, z - s.z);
+      s.still = moved < Math.max(0.02, dt * 0.4) ? s.still + dt : 0;
+      Object.assign(s, { x, z, yaw, on: shown(o) && s.still > 1.5 });
+    }
+  }
+  // every body near (x, z) a car may run into, but this one (for wagmi/game.js recoverCar: a clear spot): the city's
+  // cars and buses, the highways', the mission's standing vehicles; [x, z, yaw, half width, half length]
+  api.bodies = (x, z, r = 12) => {
+    const out = [];
+    if (wrecks) for (const v of wrecks.vehicles) {
+      if (!v.edge || Math.abs(v.x - x) > r || Math.abs(v.z - z) > r) continue;
+      const [hw, vl] = dims(v); out.push([v.x, v.z, v.wreck && v._wreck ? v._wreck.yaw : v.yaw + v.yawOffset, hw, vl]);
+    }
+    if (HW) for (const p of HW.near(x, z, r, [])) out.push([p.x, p.z, p.yaw, p.hw, p.hl]);
+    for (const s of solids.values()) if (s && s.on && Math.abs(s.x - x) < r && Math.abs(s.z - z) < r) out.push([s.x, s.z, s.yaw, s.hw, s.hl]);
+    return out;
+  };
   // the street furniture: the car as a mover (props.js)
   const PM = { x: 0, z: 0, yaw: 0, hw: 1, hl: 2, vx: 0, vz: 0, mass: 2, onSolid: null, onBreak: null };
   PM.onSolid = (nx, nz, pen, b, vi, h) => {
@@ -189,6 +271,24 @@ export function install(W) {
       const [hw, vl] = dims(v), yaw = v.wreck && v._wreck ? v._wreck.yaw : v.yaw + v.yawOffset;
       if (boxes(x, z, car.heading, B.hx, hl, v.x, v.z, yaw, hw, vl, hit)) meet(v);
     }
+    // the highways' cars (above the gap under it when it hops, as the thrusters' hop filters the city's)
+    const air = W.thrusters?.air || 0;
+    if (HW) {
+      const x = car.position.x + s * cz, z = car.position.z + c * cz;
+      for (const p of HW.near(x, z, 10, hwList)) {
+        if (air > (p.c.kind === 'suv' ? 1.76 : 1.45) * 0.9) continue;
+        if (!boxes(x, z, car.heading, B.hx, hl, p.x, p.z, p.yaw, p.hw, p.hl, hit)) continue;
+        Object.assign(HB, { x: p.x, z: p.z, yaw: p.yaw, vx: Math.sin(p.yaw) * p.c.v, vz: Math.cos(p.yaw) * p.c.v, c: p.c, key: p.c, paint: p.c.col });
+        meetBody(HB);
+      }
+    }
+    // the mission's vehicles standing in the street
+    for (const [o, sd] of solids) {
+      if (!sd || !sd.on || air > 1.4) continue;
+      const x = car.position.x + s * cz, z = car.position.z + c * cz;
+      if (Math.abs(sd.x - x) > 10 || Math.abs(sd.z - z) > 10) continue;
+      if (boxes(x, z, car.heading, B.hx, hl, sd.x, sd.z, sd.yaw, sd.hw, sd.hl, hit)) meetBody({ vx: 0, vz: 0, mass: 1e4, key: o, kind: o.name, paint: null });
+    }
     Object.assign(PM, { x: car.position.x + s * cz, z: car.position.z + c * cz, yaw: car.heading, hw: B.hx, hl, vx: s * car.speed + car.vx, vz: c * car.speed + car.vz, mass: car.mass || 2 });
     props.collide(PM);
   }
@@ -215,6 +315,7 @@ export function install(W) {
   let trail = 0;
   function frame(dt) {
     cool.sound -= dt;
+    scanSolids(dt);
     // the hardest wall hit this frame, felt; scraping along one at speed, a trail of sparks
     if (wallHit.vn > 0) {
       const w = wallHit;

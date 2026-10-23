@@ -39,7 +39,8 @@ const WHITE = '#FFFFFF', ACID = '#B6FF3B', BLUE = '#6CB8FF', YELLOW = '#FFC93C';
 
 export async function install(W) {
   // (the sandbox's mode keys 1-4 are for the developers: F gets in and out of the car)
-  addEventListener('keydown', (e) => { if (/^Digit[1-4]$/.test(e.code) && !Q.has('sandbox')) e.stopImmediatePropagation(); }, true);
+  // (not while the stall help is up: its options are on the number keys, and it keeps the city's from them itself)
+  addEventListener('keydown', (e) => { if (/^Digit[1-4]$/.test(e.code) && !Q.has('sandbox') && !document.body.classList.contains('wg-offering')) e.stopImmediatePropagation(); }, true);
   // (?m2= and ?m3= start their missions straight in, as ?nointro: mission/m2.js, m3.js)
   if (Q.has('nointro') || Q.get('m2') || Q.get('m3')) {
     document.getElementById('wg-boot')?.remove(); outBesideCar(W);

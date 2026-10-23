@@ -3,8 +3,8 @@
 Every spoken line in the game, for a voice service or actors. Generated from the game's own source by
 `node wagmi/radio/build/voices.mjs` (do not edit by hand: change the words in the game, then rebuild).
 
-**The voices in the build today are placeholders** made with the macOS speech voices (Apple's licence allows those for
-personal, non-commercial use only). They must be replaced before quantgenz.com goes public.
+**The other voices in the build today are placeholders** made with the macOS speech voices (Apple's licence allows those for
+personal, non-commercial use only). They must be replaced before quantgenz.com goes public. Quant is synthesised (`quant-A`), Juno is synthesised (`juno-C`): see below.
 
 ## How to deliver
 
@@ -18,19 +18,44 @@ personal, non-commercial use only). They must be replaced before quantgenz.com g
 - New or changed lines in the game get placeholders the next time the build runs (`--all` rebuilds every line, e.g.
   after changing a placeholder voice in `wagmi/radio/build/cast.mjs`).
 
+## Synthesised voices (Quant, Juno)
+
+Quant and Juno can be voiced by an open text-to-speech model instead of the macOS placeholders: Qwen3-TTS 12Hz (a
+voice designed from words, then cloned for every line) or Kokoro-82M, both Apache-2.0, run locally. The candidates
+the owner auditioned are `quant-A` .. `quant-F` and `juno-A` .. `juno-F` in `wagmi/radio/build/tts-voices.mjs`
+(the audition files are in `.scratch/tts/`). To give the pick to every line of theirs, in one command:
+
+```sh
+node wagmi/radio/build/voices.mjs --tts quant-C,juno-B     # the two picked names
+```
+
+- It records the pick in `wagmi/radio/build/tts/picks.json` (later builds keep using it: a changed line is synthesised
+  in the same voice), keeps a picked Qwen voice's reference clip there too (that clip IS the voice), renders the
+  speakers' lines with `wagmi/radio/build/tts.py` and rebuilds them like any other line (trim, -19 LUFS, AAC). It also
+  builds any other line that is new or changed, as a plain build does; ZK and the rest keep their voices.
+- Cutscene lines still fit their windows: Qwen takes a line again (up to 4 seeded takes) and Kokoro says it a little
+  quicker when it is long; then the build tightens its pauses and stretches its tempo (the pitch kept, never a
+  chipmunk) by at most 1.15x. The manifest's `source` says `tts:...` with the voice, and ` x1.08` when stretched.
+- Back to the placeholder for one speaker: `--tts Juno=say`. A real recording in `assets/voice/src/` still wins.
+- It needs the local renderer, not in the repo: the venv `.scratch/tts/venv` (Homebrew python3.11 with
+  mlx-audio==0.5.8, kokoro-onnx==0.6.1, soundfile) and the weights in `.scratch/downloads/voices/` (`hf/` the two
+  mlx-community Qwen3-TTS repos, `kokoro/` kokoro-v1.0.onnx and voices-v1.0.bin). Without it those lines fall back
+  to the placeholders, with a warning. Renders are cached in `.scratch/tts/render/`.
+- Credit (NOTICE): Qwen3-TTS by the Qwen team, Alibaba Cloud (Apache-2.0) or Kokoro-82M by hexgrad (Apache-2.0).
+
 ## The cast
 
-| Speaker | Who | Direction | Placeholder voice |
+| Speaker | Who | Direction | Voice in the build |
 |---|---|---|---|
-| Quant | the player: a teenager who went viral for a joke coin he made on a livestream (it pumped, it dumped); Moon is his dog | Quick, deadpan, very online, kinder than the comments think; the jokes are armour. When it is about Moon, the cool cracks. | Eddy (English (US)) |
-| Bagsy | the Degens' Midtown crew lead: shades, a duffel "bag" always slung; his bags went to zero | Cocky street voice, loud, sing-song mockery; enjoys every second; never actually angry. | Rocko (English (US)) |
-| ZK | the Degens' boss ("Zero Knowledge"): an anonymous influencer in a chrome visor, heard through a voice changer | Calm, slow, theatrical menace; a streamer who loves his own show. Never shouts. Smiles through the threats. | Daniel + voice changer |
-| Juno | Quant's friend from the group chat, an on-chain sleuth who reads wallets like gossip; mostly a voice on the phone | Quick, friendly, sharp; talks fast because she thinks fast; dry about Quant's choices but on his side. | Samantha |
-| Fomo | a Degen, always late | Breathless, panicky, running in late; a whiny pitch. | Reed (English (US)) |
-| Lev | Leverage Larry, runs the Degens in Midtown | Big, loud, panicky about his money; every sentence a pitch. | Rocko (English (US)) |
-| Gears | big, gentle, an ex-pit-crew mechanic with an EV tuning garage | Slow, warm, proud of his work. | Reed (English (US)) |
-| Fiona | Floor Price Fiona, the Degens' hype host | A hype host on a megaphone; everything is the best thing ever. | Flo (English (US)) |
-| Wick | a Degen of the hype crew at the $MOON2 rally | Loud, jumpy, a hype man turned bouncer. | Rocko (English (US)) |
+| Quant | the player: a teenager who went viral for a joke coin he made on a livestream (it pumped, it dumped); Moon is his dog | Quick, deadpan, very online, kinder than the comments think; the jokes are armour. When it is about Moon, the cool cracks. | quant-A: Qwen3-TTS (qwen-teen-tenor) |
+| Bagsy | the Degens' Midtown crew lead: shades, a duffel "bag" always slung; his bags went to zero | Cocky street voice, loud, sing-song mockery; enjoys every second; never actually angry. | Rocko (English (US)) (placeholder) |
+| ZK | the Degens' boss ("Zero Knowledge"): an anonymous influencer in a chrome visor, heard through a voice changer | Calm, slow, theatrical menace; a streamer who loves his own show. Never shouts. Smiles through the threats. | Daniel + voice changer (placeholder) |
+| Juno | Quant's friend from the group chat, an on-chain sleuth who reads wallets like gossip; mostly a voice on the phone | Quick, friendly, sharp; talks fast because she thinks fast; dry about Quant's choices but on his side. | juno-C: Qwen3-TTS (qwen-low-wry) |
+| Fomo | a Degen, always late | Breathless, panicky, running in late; a whiny pitch. | Reed (English (US)) (placeholder) |
+| Lev | Leverage Larry, runs the Degens in Midtown | Big, loud, panicky about his money; every sentence a pitch. | Rocko (English (US)) (placeholder) |
+| Gears | big, gentle, an ex-pit-crew mechanic with an EV tuning garage | Slow, warm, proud of his work. | Reed (English (US)) (placeholder) |
+| Fiona | Floor Price Fiona, the Degens' hype host | A hype host on a megaphone; everything is the best thing ever. | Flo (English (US)) (placeholder) |
+| Wick | a Degen of the hype crew at the $MOON2 rally | Loud, jumpy, a hype man turned bouncer. | Rocko (English (US)) (placeholder) |
 
 ## Opening cutscene
 
@@ -94,26 +119,29 @@ Mission 2 (wagmi/mission/m2*.js).
 | 7 | `m2-juno-the-twin-pinged-twenty` | Juno | The twin pinged twenty minutes ago. A van, idling in Times Square. Seventh and Forty-Seventh. |  |  |
 | 8 | `m2-juno-dont-run-up-to` | Juno | Don't run up to it. Follow it. It'll take us to the rest of them. |  |  |
 | 9 | `m2-quant-follow-the-van-got` | Quant | Follow the van. Got it. |  |  |
-| 10 | `m2-lev-my-car-my-beautiful` | Lev | My car! My beautiful leveraged car! |  |  |
-| 11 | `m2-lev-not-financial-advice-none` | Lev | Not financial advice! None of it! Ever! |  |  |
-| 12 | `m2-quant-that-is-my-door` | Quant | That is my door. |  |  |
-| 13 | `m2-quant-they-know-where-i` | Quant | They know where I live. |  |  |
-| 14 | `m2-lev-whos-that-liquidate-him` | Lev | Who's that? Liquidate him! |  |  |
-| 15 | `m2-lev-wait-coin-kid-in` | Lev | Wait. Coin kid? In MY yard? Liquidate him! |  |  |
-| 16 | `m2-lev-everybody-out-of-the` | Lev | Everybody out of the boxes! You're all on payroll! |  |  |
-| 17 | `m2-lev-you-cant-catch-leverage` | Lev | You can't catch leverage, kid! |  |  |
-| 18 | `m2-juno-ive-got-the-van` | Juno | I've got the van. HODL Moving Co. 'We never let go.' Cute. |  |  |
-| 19 | `m2-quant-they-took-my-dog` | Quant | They took my dog, Juno. None of this is cute. |  |  |
-| 20 | `m2-juno-its-registered-to-a` | Juno | It's registered to a Leverage Larry. Lev. He runs Midtown for the Degens. |  |  |
-| 21 | `m2-quant-leverage-larry-did-his` | Quant | Leverage Larry. Did his parents hate him? |  |  |
-| 22 | `m2-juno-he-picked-it-he` | Juno | He picked it. He has it tattooed. In Comic Sans. |  |  |
-| 23 | `m2-juno-hang-back-if-they` | Juno | Hang back. If they make you, they'll bolt. |  |  |
-| 24 | `m2-juno-thats-levs-car-hes` | Juno | That's Lev's car. He's heading for Herald Square. |  |  |
-| 25 | `m2-juno-ram-him-quant-gently` | Juno | Ram him, Quant. Gently. Ish. |  |  |
-| 26 | `m2-quant-theres-no-gentle-way` | Quant | There's no gentle way to ram a car. |  |  |
-| 27 | `m2-juno-i-saw-the-chat` | Juno | I saw the chat. They know where you live, so you're not sleeping there tonight. |  |  |
-| 28 | `m2-quant-where-am-i-sleeping` | Quant | Where am I sleeping? |  |  |
-| 29 | `m2-juno-gears-has-a-room` | Juno | Gears has a room over his garage. West Chelsea. He builds rockets for cars. He's nice. Mostly. |  |  |
+| 10 | `m2-juno-youre-late-sit-burner` | Juno | You're late. Sit. Burner, please. |  |  |
+| 11 | `m2-quant-hi-juno-great-to` | Quant | Hi, Juno. Great to see you too. |  |  |
+| 12 | `m2-juno-plugging-it-in-same` | Juno | Plugging it in. Same batch, same buyer. It has a twin. |  |  |
+| 13 | `m2-lev-my-car-my-beautiful` | Lev | My car! My beautiful leveraged car! |  |  |
+| 14 | `m2-lev-not-financial-advice-none` | Lev | Not financial advice! None of it! Ever! |  |  |
+| 15 | `m2-quant-that-is-my-door` | Quant | That is my door. |  |  |
+| 16 | `m2-quant-they-know-where-i` | Quant | They know where I live. |  |  |
+| 17 | `m2-lev-whos-that-liquidate-him` | Lev | Who's that? Liquidate him! |  |  |
+| 18 | `m2-lev-wait-coin-kid-in` | Lev | Wait. Coin kid? In MY yard? Liquidate him! |  |  |
+| 19 | `m2-lev-everybody-out-of-the` | Lev | Everybody out of the boxes! You're all on payroll! |  |  |
+| 20 | `m2-lev-you-cant-catch-leverage` | Lev | You can't catch leverage, kid! |  |  |
+| 21 | `m2-juno-ive-got-the-van` | Juno | I've got the van. HODL Moving Co. 'We never let go.' Cute. |  |  |
+| 22 | `m2-quant-they-took-my-dog` | Quant | They took my dog, Juno. None of this is cute. |  |  |
+| 23 | `m2-juno-its-registered-to-a` | Juno | It's registered to a Leverage Larry. Lev. He runs Midtown for the Degens. |  |  |
+| 24 | `m2-quant-leverage-larry-did-his` | Quant | Leverage Larry. Did his parents hate him? |  |  |
+| 25 | `m2-juno-he-picked-it-he` | Juno | He picked it. He has it tattooed. In Comic Sans. |  |  |
+| 26 | `m2-juno-hang-back-if-they` | Juno | Hang back. If they make you, they'll bolt. |  |  |
+| 27 | `m2-juno-thats-levs-car-hes` | Juno | That's Lev's car. He's heading for Herald Square. |  |  |
+| 28 | `m2-juno-ram-him-quant-gently` | Juno | Ram him, Quant. Gently. Ish. |  |  |
+| 29 | `m2-quant-theres-no-gentle-way` | Quant | There's no gentle way to ram a car. |  |  |
+| 30 | `m2-juno-i-saw-the-chat` | Juno | I saw the chat. They know where you live, so you're not sleeping there tonight. |  |  |
+| 31 | `m2-quant-where-am-i-sleeping` | Quant | Where am I sleeping? |  |  |
+| 32 | `m2-juno-gears-has-a-room` | Juno | Gears has a room over his garage. West Chelsea. He builds rockets for cars. He's nice. Mostly. |  |  |
 
 ## Mission 3
 

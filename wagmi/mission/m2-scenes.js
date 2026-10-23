@@ -1,13 +1,15 @@
 // WAGMI City: Mission 2's scenes, on the cutscene machinery (cine.js) the way Mission 1's are: a clock, the shots as
 // functions of it, the cast posed from it, cues fired as it passes them; Space held skips.
-//   burner   Bryant Park at twilight: Quant at the park's 6th Ave entrance, Juno on a video call (she won't meet him:
-//            she's on the library's wifi), the burner's twin pinging in Times Square, a cut to the van idling there
+//   meet     (burnerMeet) Bryant Park at twilight: Juno in person at one of the park's tables with her laptop; Quant hands
+//            her the burner, she plugs it in and traces its twin to a van idling in Times Square (a cut to it), ~30 s
+//   burner   (the old one, kept as a fallback) the same beats as a video call from the library's wifi
 //   crash    Greeley Square: Lev's car smoking against the plaza, Lev climbing out, dropping his phone, running off
 //   phone    Quant with Lev's phone: the Degens' group chat, a photo of his own front door
 // Each returns when it ends (or is skipped); the mission puts everyone where play goes on.
 import * as THREE from 'three/webgpu';
 import { getCast, upright, UPRIGHT_BONES } from '../intro.js';
 import { createDirector, keys, angleKeys, handheld, clamp, lerp } from './cine.js';
+import { buildJuno, buildLaptop } from './juno.js';
 
 const PI = Math.PI;
 const WHITE = '#FFFFFF', BLUE = '#6CB8FF', ACID = '#B6FF3B';
@@ -84,6 +86,7 @@ function armTo(W, side, target, pole, w = 1) {
   if (e.lengthSq() > 1e-6 && p.lengthSq() > 1e-6) { let ang = e.angleTo(p); if (V().crossVectors(e, p).dot(ax) < 0) ang = -ang; turnWorld(b1, _q.setFromAxisAngle(ax, ang)); }
   if (w < 0.999) { b1.quaternion.slerpQuaternions(q1, b1.quaternion.clone(), w); b2.quaternion.slerpQuaternions(q2, b2.quaternion.clone(), w); b1.updateMatrixWorld(true); }
 }
+const reachQ = (W, side, target, pole, w) => armTo(W, side, target, pole, w);
 // his phone held up in front of him in his right hand, its screen to his eyes (k 0..1: down by his side .. up)
 function holdPhone(W, phone, h, k) {
   const B = W.quant.bones; if (!B.head || k <= 0.001) { phone.visible = false; return; }
@@ -174,6 +177,137 @@ export function burnerScene(W, { U, say, van }) {
     cleanup() { U.call.hide(); C.phone.visible = false; },
   };
   return def;
+}
+
+/* ------------------------------------------------------------- meet -- */
+// Bryant Park, twilight: Juno for real, at one of the park's tables on the 6th Ave side with her laptop. Quant walks up,
+// hands her the burner, she plugs it in; its twin pings in Times Square (a cut to the van idling there); she tells him
+// to follow it. Paced by its lines, ~30 s (his walk up, then six lines). Called by m2.js as burnerMeet(W, { U, say, van, at }): it loads her and plays
+// itself (a promise); it leaves Quant standing by her table, facing his car, and her at her table until he's gone.
+const MEET_LINES = [
+  ['Juno', BLUE, "You're late. Sit. Burner, please."],
+  ['Quant', WHITE, 'Hi, Juno. Great to see you too.'],
+  ['Juno', BLUE, 'Plugging it in. Same batch, same buyer. It has a twin.'],
+  ['Juno', BLUE, 'The twin pinged twenty minutes ago. A van, idling in Times Square. Seventh and Forty-Seventh.'],
+  ['Juno', BLUE, "Don't run up to it. Follow it. It'll take us to the rest of them."],
+  ['Quant', WHITE, 'Follow the van. Got it.'],
+];
+export async function burnerMeet(W, { U, say, van, at = J_AT }) {
+  const C = await getCast(W), ui = W.ui, sfx = W.sfx, cm = W.app.controllerManager;
+  const J = await buildJuno(W);
+  // her table on the sidewalk below the terrace, its long side along the avenue; she sits on its park side facing the
+  // street, Quant comes up on the street side (H: her heading; he faces her)
+  const TX = at.x + 1.3, TZ = at.z - 2.2, H = -PI / 2, G = cm.getGroundHeight(TX, TZ, 'person');
+  const F = [Math.sin(H), Math.cos(H)], R = [-Math.cos(H), Math.sin(H)];
+  const p = (f, r, y) => [TX + F[0] * f + R[0] * r, G + y, TZ + F[1] * f + R[1] * r];
+  const set = new THREE.Group(); set.name = 'juno-table';
+  const metal = new THREE.MeshStandardMaterial({ color: '#2E4A36', roughness: 0.55, metalness: 0.5 });
+  const top = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.42, 0.03, 28), metal); top.position.y = 0.74; set.add(top);
+  const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.05, 0.72, 10), metal); leg.position.y = 0.37; set.add(leg);
+  const foot = new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.28, 0.03, 20), metal); foot.position.y = 0.015; set.add(foot);
+  // (the park's green folding chairs: hers, and the one he doesn't take)
+  const chair = (f, r, yaw) => { const c = new THREE.Group(); const seat = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.03, 0.4), metal); seat.position.y = 0.45; c.add(seat);
+    const back = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.42, 0.03), metal); back.position.set(0, 0.68, -0.19); back.rotation.x = -0.12; c.add(back);
+    for (const [x, z] of [[-0.19, -0.18], [0.19, -0.18], [-0.19, 0.18], [0.19, 0.18]]) { const l = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.45, 6), metal); l.position.set(x, 0.225, z); c.add(l); }
+    const [x, , z] = p(f, r, 0); c.position.set(x - TX, 0, z - TZ); c.rotation.y = yaw; set.add(c); return c; };
+  chair(-0.62, 0, H); chair(0.15, 0.75, H + PI / 2 + 0.4);
+  const lap = buildLaptop(); lap.rotation.y = H + PI; const lp = p(-0.12, 0, 0.755); lap.position.set(lp[0] - TX, 0.755, lp[2] - TZ); set.add(lap);
+  set.traverse((m) => { if (m.isMesh) { m.castShadow = true; m.receiveShadow = true; } });
+  set.position.set(TX, G, TZ); W.app.scene.add(set);
+  // where they are: her chair, his mark (the street side of the table, a little to her right), his walk in from the curb
+  const JX = p(-0.62, 0, 0), QM = p(0.78, -0.45, 0), QS = p(3.6, -2.4, 0), QH = H + PI - 0.35;
+  const T = { ring: 0, walk: 1.2, at: 4.6, line0: 5.0 };
+  let ps = null, speaking = null, hand = null, plug = null, scrMode = 'off';
+  const drift = (a, b, secs) => (t, t0) => keys([[t0, a], [t0 + secs, b]], 'linear')(t);
+  const juH = () => J.bones.head.getWorldPosition(V());
+  const def = {
+    END: Infinity,
+    shots: [
+      // over the avenue at twilight: the park's trees, her at her table under the terrace, Quant crossing to her
+      { t: 0, cam: (t, t0) => ({ pos: drift(p(6.5, -5.5, 2.6), p(5.4, -4.4, 2.1), 4.6)(t, t0), look: p(0, 0, 0.9), fov: 40, shake: 0.35 }) },
+      // two-shot, low over the table: her with the laptop, him standing
+      { line: 0, t: Infinity, cam: (t, t0) => ({ pos: drift(p(1.9, 1.7, 1.3), p(1.75, 1.55, 1.27), 5)(t, t0), look: p(0.1, -0.25, 1.05), fov: 40, shake: 0.3 }) },
+      // over her shoulder onto him
+      { line: 1, t: Infinity, cam: (t, t0) => ({ pos: drift(p(-1.35, 0.42, 1.25), p(-1.3, 0.38, 1.27), 4)(t, t0), look: [QM[0], G + 1.5, QM[2]], fov: 34, shake: 0.3 }) },
+      // over her shoulder onto the laptop's screen, the burner going in beside it
+      { line: 2, t: Infinity, cam: (t, t0) => ({ pos: drift(p(-1.15, -0.45, 1.42), p(-1.08, -0.42, 1.38), 5)(t, t0), look: p(0.05, 0.1, 0.84), fov: 34, shake: 0.25 }) },
+      // the trace on her screen, then the van in Times Square
+      { line: 3, t: Infinity, cam: (t, t0) => ({ pos: drift(p(-0.95, -0.32, 1.3), p(-0.85, -0.28, 1.24), 2.6)(t, t0), look: p(0.02, 0.05, 0.86), fov: 28, shake: 0.2 }) },
+      { line: 3.5, t: Infinity, cam: (t, t0) => ({ pos: drift([-579, 3.2, -497], [-580, 2.6, -486], 6)(t, t0), look: [VAN_START[0], 1.5, VAN_START[1]], fov: 34, shake: 0.5 }) },
+      // her, close, across the table
+      { line: 4, t: Infinity, cam: (t, t0) => { const h = juH(); return { pos: drift(p(0.8, 0.35, 0), p(0.72, 0.3, 0), 5)(t, t0).map((x, k) => (k === 1 ? h.y + 0.05 : x)), look: [h.x, h.y + 0.02, h.z], fov: 32, shake: 0.25 }; } },
+      { line: 5, t: Infinity, cam: (t, t0) => ({ pos: drift(p(2.4, 1.5, 1.55), p(2.2, 1.3, 1.5), 4)(t, t0), look: p(0.2, -0.2, 1.15), fov: 36, shake: 0.3 }) },
+    ],
+    cues: [
+      [0.3, () => { ui.title('ACT I · BAGS', 'Burner', 2.8); sfx?.play('stinger', { gain: 0.35 }); W.audio?.play?.('missionStart'); }],
+      [1.2, () => ui.place('Bryant Park', 'Midtown · WAGMI City', 3.4)],
+      [T.line0, (st) => {
+        say(MEET_LINES, st, (who, i) => {
+          const now = W.sceneClock?.t ?? 0; speaking = who;
+          for (const sh of def.shots) if (sh.line === i) sh.t = now;
+          if (i === 1) hand = now + 0.4;                       // he hands it over as he answers
+          if (i === 2) { plug = now + 0.3; scrMode = 'scan'; }
+          if (i === 3) { scrMode = 'trace'; sfx?.play('ding', { gain: 0.08 }); for (const sh of def.shots) if (sh.line === 3.5) sh.t = now + 2.6; setTimeout(() => ui.place('Times Square', '7th Ave & W 47th St', 3), 2600); }
+        }).finally(() => { const now = W.sceneClock?.t; speaking = null; if (now != null) def.END = now + 1.4; });
+      }],
+    ],
+    pose(t, dt) {
+      ps = ps || poser(W, C);
+      // Quant: in from the curb, then at the table facing her
+      const k = clamp((t - T.walk) / (T.at - T.walk));
+      const qx = lerp(QS[0], QM[0], k), qz = lerp(QS[2], QM[2], k), walkH = Math.atan2(QM[0] - QS[0], QM[2] - QS[2]);
+      const qh = t < T.at ? walkH : QH;
+      ps.at(qx, qz, qh); ps.pose(t, qh);
+      // the burner: from his hand to hers, then onto the table by the laptop, plugged in
+      const ph = C.phone; ph.visible = false;
+      if (hand != null) {
+        const u = clamp((t - hand) / 1.1), hp = W.quant.bones.wrist_R?.getWorldPosition(V()), jp = J.bones.wrist_R?.getWorldPosition(V());
+        const meetP = V(...p(0.2, -0.2, 0.98));
+        if (u < 1 && hp) { W.quant.bones && armQ(W, meetP, u); ph.visible = true; ph.position.copy(u < 0.6 ? hp : meetP); ph.rotation.set(-PI / 2, 0, H); }
+        else { const on = V(...p(-0.05, 0.32, 0.765)); ph.visible = true; ph.position.copy(on); ph.rotation.set(-PI / 2, 0, H + 0.3); void jp; }
+      }
+      // Juno: seated, typing on the laptop, her mouth with her lines; she reaches for the burner when he holds it out
+      J.root.visible = true; J.root.position.set(JX[0], G, JX[2]); J.root.rotation.y = H;
+      J.rig.pose(t); J.root.updateMatrixWorld(true);
+      const kb = V(...p(-0.2, 0, 0.8)), type = 0.012 * Math.sin(t * 19), type2 = 0.012 * Math.sin(t * 23 + 1.3);
+      const reach = hand != null ? clamp((t - hand) / 0.5) * (1 - clamp((t - hand - 1.2) / 0.5)) : 0;
+      const sh = J.bones.upperarm01_R.getWorldPosition(V()), shL = J.bones.upperarm01_L.getWorldPosition(V());
+      const Rv = V(R[0], 0, R[2]), Fv = V(F[0], 0, F[2]);
+      J.arm('L', kb.clone().addScaledVector(Rv, -0.12).add(V(0, type2, 0)), shL.clone().addScaledVector(Rv, -0.5).add(V(0, -0.5, 0)), 0.9);
+      J.arm('R', kb.clone().addScaledVector(Rv, 0.12).add(V(0, type, 0)).lerp(V(...p(0.2, -0.2, 0.98)), reach), sh.clone().addScaledVector(Rv, 0.5).add(V(0, -0.5, 0)), 0.9);
+      J.talk(t, speaking === 'Juno', W.voice?.level?.() || null);
+      lap.userData.screen(scrMode, t);
+      void Fv; void plug; void dt;
+      // the van at the curb in Times Square for the cutaway
+      if (van) { van.group.visible = true; van.group.position.set(VAN_START[0], 0, VAN_START[1]); van.group.rotation.set(0, VAN_START[2], 0); van.setDoor(0); van.update(dt, 0, 0); }
+    },
+    setup() {
+      C.qRig.set([[0, 'idle'], [T.walk, 'walk', { fade: 0.3 }], [T.at, 'idle', { fade: 0.5 }], [T.line0 + 3, ['idle/noArmL', ['talk/armL', { from: 0.6, speed: 0.7 }]], { fade: 0.5 }]]);
+      J.rig.set([[0, J.clips.includes('sit') ? 'sit' : 'idle', { speed: 0.6 }]]);
+    },
+    cleanup(st) {
+      C.phone.visible = false; lap.userData.screen('off');
+      // (where play goes on: Quant at the table, facing the avenue and his car; Juno stays at her table until he's
+      // well away, then she's packed up)
+      ps?.at(QM[0], QM[2], H + PI + PI);
+      const keep = setInterval(() => {
+        const P = W.person, car = W.car, me = W.app.controllerManager.activeMode === 'car' ? car.position : P.position;
+        const ph = W.mission?.phase;
+        if (Math.hypot(me.x - TX, me.z - TZ) > 70 || (ph && ph !== 'go' && ph !== 'start')) { clearInterval(keep); set.removeFromParent(); J.root.removeFromParent(); }
+        else { J.rig.pose(performance.now() / 1000); }
+      }, 100);
+      void st;
+    },
+  };
+  // (his arm out with the burner: his right wrist to the hand-over point by u)
+  function armQ(W2, target, u) {
+    const B = W2.quant.bones, k = Math.sin(clamp(u) * PI);
+    if (!B.upperarm01_R) return;
+    const sh = B.upperarm01_R.getWorldPosition(V());
+    reachQ(W2, 'R', target, sh.clone().add(V(0, -1, 0)).addScaledVector(V(-R[0], 0, -R[2]), 0.4), k);
+  }
+  def.setup();
+  return runScene(W, def);
 }
 
 /* ------------------------------------------------------------- crash -- */
