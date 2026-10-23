@@ -63,7 +63,7 @@ export async function install(W) {
   c.thug = { gltf, ...prepareClips(gltf) };
   // Quant's car parked in the street is solid to the fight (the city's own collision only knows the buildings): a box
   // (its half width, half length and roof) the men are kept out of and walk round, and the camera won't look through
-  const car = W.car, CAR = { hx: 0.9, hz: 2.25, h: 1.3 };
+  const car = W.car, CAR = car?.body ? { hx: car.body.hx, hz: (car.body.z1 - car.body.z0) / 2, h: car.body.top + 0.05 } : { hx: 0.9, hz: 2.25, h: 1.3 };
   const carOn = () => !!car && cm.activeMode !== 'car' && !!car.mesh?.visible;
   const _l1 = { x: 0, z: 0 }, _l2 = { x: 0, z: 0 };
   // a world point in the car's own frame (x across it, z along it), and back

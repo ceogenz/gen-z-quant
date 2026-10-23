@@ -474,6 +474,8 @@ function buildStreetDetails(scene) {
     }
   }
 
+  // (WAGMI City: the instanced meshes drawing each matrix list, for the breakables below)
+  const instOf = new Map();
   function addMatrixArrayInstanced(geo, mat, matrices, castShadow = true) {
     if (matrices.length === 0) return;
     const inst = new THREE.InstancedMesh(geo, mat, matrices.length);
@@ -486,6 +488,9 @@ function buildStreetDetails(scene) {
     }
     inst.instanceMatrix.needsUpdate = true;
     group.add(inst);
+    if (!instOf.has(matrices)) instOf.set(matrices, []);
+    instOf.get(matrices).push(inst);
+    return inst;
   }
 
   addMatrixArrayInstanced(unitCyl, poleMetalMat, poleMatrices);
@@ -1066,6 +1071,161 @@ function buildStreetDetails(scene) {
   group.add(treeField.group);
 
   // =========================================================================
+  // 7B. (WAGMI City) CURBSIDE PROPS, AND WHAT A CAR KNOCKS OVER (window.NYC.breakables, wagmi/crash)
+  // =========================================================================
+  // Along the curbs of the blocks the streetlights line (section 2): a green wire litter basket by the start of every
+  // block face, a hydrant a third of the way along the avenue faces (and halfway along the long street faces), and a
+  // pair of newspaper boxes by the end of the avenue faces; none in a tree pit, nor against a pole
+  const basketPositions = [];
+  const curbHydrants = [];
+  const paperPositions = [];
+  const treeCells = new Set();
+  for (const t of sidewalkTreePositions) treeCells.add(Math.round(t.x / 2) * 100000 + Math.round(t.z / 2));
+  const curbClear = (x, z) => {
+    const ix = Math.round(x / 2);
+    const iz = Math.round(z / 2);
+    for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) if (treeCells.has((ix + i) * 100000 + iz + j)) return false;
+    return isOnSidewalk(x, z, 0.45) && isClearOfPoles(x, z, 1.4);
+  };
+  for (const b of allBlocks) {
+    if (!b || !b.poly || b.poly.length < 3 || b.median || b.park > 0.6) continue;
+    if (b.cz < detailZMin || b.cz > detailZMax || b.cx < -920 || b.cx > 920) continue;
+    for (let i = 0; i < b.poly.length; i++) {
+      const p0 = b.poly[i];
+      const p1 = b.poly[(i + 1) % b.poly.length];
+      const dx = p1.x - p0.x;
+      const dz = p1.z - p0.z;
+      const len = Math.hypot(dx, dz);
+      if (len < 24) continue;
+      const mx = (p0.x + p1.x) * 0.5;
+      const mz = (p0.z + p1.z) * 0.5;
+      let inx = -dz / len;
+      let inz = dx / len;
+      if (blockAt(mx + inx * 1.6, mz + inz * 1.6) !== b) {
+        inx = -inx;
+        inz = -inz;
+      }
+      if (blockAt(mx + inx * 1.6, mz + inz * 1.6) !== b || blockAt(mx - inx * 2.5, mz - inz * 2.5)) continue;
+      const avenue = Math.abs(dz / len) > 0.65;
+      const at = (along, inset) => [p0.x + (dx / len) * along + inx * inset, p0.z + (dz / len) * along + inz * inset];
+      const face = Math.atan2(-inx, -inz);
+      const [bx, bz] = at(3.6, 0.7);
+      if (curbClear(bx, bz)) basketPositions.push([bx, bz, face]);
+      if (avenue || len >= 70) {
+        const [hx, hz] = at(len * (avenue ? 0.36 : 0.5), 0.55);
+        if (curbClear(hx, hz)) curbHydrants.push([hx, hz]);
+      }
+      if (avenue && len >= 40) {
+        for (const along of [len - 5.4, len - 6.0]) {
+          const [nx, nz] = at(along, 0.75);
+          if (curbClear(nx, nz)) paperPositions.push([nx, nz, face]);
+        }
+      }
+    }
+  }
+  const placeAll = (inst, list, y) => {
+    list.forEach(([x, z, yaw], i) => {
+      dummy.position.set(x, y, z);
+      dummy.rotation.set(0, yaw || 0, 0);
+      dummy.scale.set(1, 1, 1);
+      dummy.updateMatrix();
+      inst.setMatrixAt(i, dummy.matrix);
+    });
+    inst.count = list.length;
+    inst.castShadow = inst.receiveShadow = true;
+    inst.instanceMatrix.needsUpdate = true;
+    group.add(inst);
+    dummy.rotation.set(0, 0, 0);
+  };
+  const basketGeo = mergeGeometries([
+    new THREE.CylinderGeometry(0.3, 0.26, 0.86, 10, 1, true).translate(0, 0.43, 0),
+    new THREE.CircleGeometry(0.26, 10).rotateX(-Math.PI / 2).translate(0, 0.04, 0),
+    new THREE.TorusGeometry(0.3, 0.028, 4, 12).rotateX(Math.PI / 2).translate(0, 0.86, 0)
+  ].map((g) => g.toNonIndexed()));
+  const basketMat = new THREE.MeshStandardNodeMaterial({ color: 0x2c4732, roughness: 0.55, metalness: 0.5, side: THREE.DoubleSide });
+  const basketInst = new THREE.InstancedMesh(basketGeo, basketMat, Math.max(1, basketPositions.length));
+  placeAll(basketInst, basketPositions, SIDEWALK_Y);
+  // (the hydrants: the same model and paint as section 6's, so the same pipeline)
+  const curbHydrantInst = new THREE.InstancedMesh(hydrantInst.geometry, hydrantMat, Math.max(1, curbHydrants.length));
+  placeAll(curbHydrantInst, curbHydrants, 0.64);
+  // (newspaper boxes: a box on a short post, in the papers' colours)
+  const paperGeo = mergeGeometries([
+    new THREE.BoxGeometry(0.5, 0.78, 0.44).translate(0, 0.62, 0),
+    new THREE.BoxGeometry(0.5, 0.08, 0.5).translate(0, 1.05, -0.02),
+    new THREE.BoxGeometry(0.16, 0.24, 0.16).translate(0, 0.12, 0)
+  ].map((g) => g.toNonIndexed()));
+  const paperInst = new THREE.InstancedMesh(paperGeo, new THREE.MeshStandardNodeMaterial({ color: 0xffffff, roughness: 0.5, metalness: 0.25 }), Math.max(1, paperPositions.length));
+  const PAPER = [0xc8231e, 0x1d4f9c, 0xe8b417, 0x2a7a3c, 0xe9e9e4, 0x1b1b1d];
+  paperPositions.forEach(([x, z], i) => paperInst.setColorAt(i, new THREE.Color(PAPER[Math.floor(hashPos(x, 5.5, z) * PAPER.length)])));
+  placeAll(paperInst, paperPositions, SIDEWALK_Y);
+
+  // What a car runs into: each a kind, where its foot stands (x, y, z), how far round it is solid (r; w & d: a box), and
+  // the instances drawing it ([instanced mesh, index] pairs; light: its lamp's light pool site, which s.out puts out).
+  // Poles and lamps snap and fall (mast, cobra, post); the small things fly (hydrant, mailbox, basket, barricade, stack,
+  // cart); trees and the subway stairs are solid. The poles are read back off their matrix lists, which the signals (all
+  // of them first) and then the streetlights filled in step: a mast's pole, blade, walk signal, arm and lamp at its own
+  // index and its two heads at twice it; a streetlight's pole, arm and lamp after the masts'
+  const breakables = [];
+  {
+    const parts = (list, i) => (instOf.get(list) || []).map((inst) => [inst, i]);
+    const posOf = (m) => [m.elements[12], m.elements[14]];
+    const nMast = walkBoxMatrices.length;
+    const ok = yellowBoxMatrices.length === nMast * 2 && poleMatrices.length === armMatrices.length && poleMatrices.length === lampHeadMatrices.length &&
+      cobraLampSites.length === poleMatrices.length && poleMatrices.length >= nMast;
+    if (ok) {
+      for (let k = 0; k < nMast; k++) {
+        const [x, z] = posOf(poleMatrices[k]);
+        breakables.push({ kind: 'mast', x, y: 0.1, z, r: 0.2, h: 6.4, light: cobraLampSites[k], parts: [
+          ...parts(poleMatrices, k), ...parts(streetBladeMatrices, k), ...parts(walkBoxMatrices, k), ...parts(armMatrices, k), ...parts(lampHeadMatrices, k),
+          ...parts(yellowBoxMatrices, 2 * k), ...parts(yellowBoxMatrices, 2 * k + 1), ...parts(aveLensMatrices, k), ...parts(streetLensMatrices, k)] });
+      }
+      for (let k = nMast; k < poleMatrices.length; k++) {
+        const [x, z] = posOf(poleMatrices[k]);
+        breakables.push({ kind: 'cobra', x, y: 0.1, z, r: 0.18, h: 8.4, light: cobraLampSites[k],
+          parts: [...parts(poleMatrices, k), ...parts(armMatrices, k), ...parts(lampHeadMatrices, k)] });
+      }
+    } else console.warn('[streetDetails] the poles\' lists are not as the breakables expect: no breakable poles');
+    pedPostMatrices.forEach((m, k) => {
+      const [x, z] = posOf(m);
+      const site = streetPointSites[k];
+      breakables.push({ kind: 'post', x, y: 0.18, z, r: 0.16, h: 4.1, light: site && Math.hypot(site.x - x, site.z - z) < 0.1 ? site : null, parts: parts(pedPostMatrices, k) });
+    });
+    hydrantPositions.forEach(([x, z], i) => breakables.push({ kind: 'hydrant', x, y: 0.22, z, r: 0.26, parts: [[hydrantInst, i]] }));
+    mailboxPositions.forEach(([x, z], i) => breakables.push({ kind: 'mailbox', x, y: 0.22, z, r: 0.42, parts: [[mailboxInst, i]] }));
+    basketPositions.forEach(([x, z], i) => breakables.push({ kind: 'basket', x, y: SIDEWALK_Y, z, r: 0.32, parts: [[basketInst, i]] }));
+    curbHydrants.forEach(([x, z], i) => breakables.push({ kind: 'hydrant', x, y: 0.22, z, r: 0.26, parts: [[curbHydrantInst, i]] }));
+    paperPositions.forEach(([x, z], i) => breakables.push({ kind: 'paperbox', x, y: SIDEWALK_Y, z, r: 0.34, parts: [[paperInst, i]] }));
+    // (a steam stack, and each side's sawhorse round it, told apart by which of their x or z is the side's)
+    const near = (list, x, z, test) => { const out = []; list.forEach((m, i) => { const [mx, mz] = posOf(m); if (test(mx - x, mz - z)) out.push(i); }); return out; };
+    for (const { x, z } of steamLocations) {
+      const at = (list, test) => near(list, x, z, test).flatMap((i) => parts(list, i));
+      breakables.push({ kind: 'stack', x, y: 0, z, r: 0.38, parts: [...at(orangeMatrices, (dx, dz) => Math.hypot(dx, dz) < 0.05), ...at(whiteMatrices, (dx, dz) => Math.hypot(dx, dz) < 0.05)] });
+      for (const [ox, oz] of [[0, 0.92], [0, -0.92], [0.92, 0], [-0.92, 0]]) {
+        const test = (dx, dz) => (ox ? Math.abs(dx - ox) < 0.02 && Math.abs(dz) < 0.8 : Math.abs(dz - oz) < 0.02 && Math.abs(dx) < 0.8);
+        breakables.push({ kind: 'barricade', x: x + ox, y: 0, z: z + oz, r: 0.5, parts: [...at(barricadeOrangeMatrices, test), ...at(barricadeWhiteMatrices, test)] });
+      }
+    }
+    cartBoxMatrices.forEach((m, i) => {
+      const [x, z] = posOf(m);
+      breakables.push({ kind: 'cart', x, y: 0.22, z, r: 1.0, parts: [...parts(cartBoxMatrices, i), ...parts(umbrellaMatrices, i)] });
+    });
+    for (const t of treePositions) {
+      breakables.push({ kind: 'tree', x: t.x, y: t.y, z: t.z, r: ([0.3, 0.19, 0.28][t.species] || 0.25) * (t.scale || 1) * 1.15 + 0.05, solid: true });
+    }
+    subwayRailMatrices.forEach((m) => {
+      const [x, z] = posOf(m);
+      breakables.push({ kind: 'subway', x, y: 0.22, z, r: 3.2, w: 2.1, d: 6.2, solid: true });
+    });
+    // the plazas' and parks' furniture (city-grid.js): the benches fly (yaw: a box turned with them), the lampposts fall,
+    // their light pools put out (hide: instances gone while it is down); the granite planters and benches are solid
+    const PB = window.NYC.plazaBenches, PL = window.NYC.parkLamps;
+    if (PB) PB.matrices.forEach((m, i) => { const e = m.elements; breakables.push({ kind: 'bench', x: e[12], y: e[13], z: e[14], r: 0.3, w: 1.9, d: 0.56, yaw: Math.atan2(e[8], e[10]), parts: [[PB.inst, i]] }); });
+    if (PL) PL.matrices.forEach((m, i) => { const e = m.elements; breakables.push({ kind: 'lamp', x: e[12], y: e[13], z: e[14], r: 0.2, h: 4.4, parts: [[PL.pole, i], [PL.globe, i]], hide: [[PL.pool, i]] }); });
+    for (const s of window.NYC.plazaSolids || []) breakables.push({ ...s, y: 0.24, r: Math.hypot(s.w, s.d) / 2, solid: true });
+  }
+  console.info(`[streetDetails] ${basketPositions.length} litter baskets, ${curbHydrants.length} more hydrants, ${paperPositions.length} newspaper boxes, ${breakables.length} breakables`);
+
+  // =========================================================================
   // 8. CLUSTERED STREETLIGHTS & STREET FURNITURE LIGHT POOLS
   // =========================================================================
   for (const s of window.NYC.parkLampSites || []) {
@@ -1136,6 +1296,7 @@ function buildStreetDetails(scene) {
     let cobraCount = 0;
     for (let i = 0; i < cobraLampSites.length; i++) {
       const s = cobraLampSites[i];
+      if (s.out) continue; // (WAGMI City: knocked down, wagmi/crash)
       const dx = s.x - cx;
       const dz = s.z - cz;
       const d2 = dx * dx + dz * dz + cy * cy;
@@ -1171,6 +1332,7 @@ function buildStreetDetails(scene) {
     let ptCount = 0;
     for (let i = 0; i < streetPointSites.length; i++) {
       const s = streetPointSites[i];
+      if (s.out) continue; // (WAGMI City: knocked down, wagmi/crash)
       const dx = s.x - cx;
       const dz = s.z - cz;
       const d2 = dx * dx + dz * dz + cy * cy;
@@ -1205,6 +1367,8 @@ function buildStreetDetails(scene) {
   }
 
   scene.add(group);
+  window.NYC.streetFootprints = footprints; // (WAGMI City: the street crowd steps round them, wagmi/street)
+  window.NYC.breakables = breakables; // (WAGMI City: what a car knocks over, wagmi/crash)
   return { group, footprints, signalClock, update };
 }
 

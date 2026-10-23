@@ -122,7 +122,7 @@
        own camera and HUD never show first; wagmi/intro.js takes it down, and it goes by itself 25 s after the city is up) -->
   <div id="wg-boot" aria-hidden="true"><div class="wg-boot-logo">WAGMI <b>CITY</b></div><div class="wg-boot-rule"></div><div class="wg-boot-tag">We're all gonna make it</div></div>
   <script>
-    (() => { if (/[?&](nointro|m1|nogate|fight)\b/.test(location.search)) { document.getElementById('wg-boot').remove(); return; }
+    (() => { if (/[?&](nointro|nogate|fight)\b/.test(location.search)) { document.getElementById('wg-boot').remove(); return; }
       const t = setInterval(() => { if (window.__NYC_APP && window.__NYC_APP.ready) { clearInterval(t); setTimeout(() => document.getElementById('wg-boot')?.remove(), 25000); } }, 500); })();
   </script>
 

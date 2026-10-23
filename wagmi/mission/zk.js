@@ -159,7 +159,8 @@ export function createZK(W, gltf) {
     const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
   }
   const frameMat = new THREE.MeshStandardMaterial({ color: '#0C0C0F', roughness: 0.4, metalness: 0.6 });
-  [[-1.32, 1.95, -1.75, 0.45, '$QUANT · 1D'], [-1.5, 1.2, -1.6, 0.5, 'BAGS · ALL TIME'], [1.32, 1.95, -1.75, -0.45, 'MY COMMUNITY'], [1.5, 1.2, -1.6, -0.5, '$QUANT · 1H']].forEach(([x, y, z, ry, title], i) => {
+  // (the top two kept below the call's labels in the corners of every shot)
+  [[-1.32, 1.5, -1.75, 0.45, '$QUANT · 1D'], [-1.5, 0.85, -1.6, 0.5, 'BAGS · ALL TIME'], [1.32, 1.5, -1.75, -0.45, 'MY COMMUNITY'], [1.5, 0.85, -1.6, -0.5, '$QUANT · 1H']].forEach(([x, y, z, ry, title], i) => {
     const f = box(0.98, 0.6, 0.04, frameMat, x, y, z); f.rotation.y = ry;
     const scr = new THREE.Mesh(new THREE.PlaneGeometry(0.92, 0.54), new THREE.MeshBasicMaterial({ map: chart(17 + i * 71, title), color: new THREE.Color(1.5, 1.5, 1.5) }));
     scr.position.set(0, 0, 0.022); f.add(scr);
@@ -215,12 +216,13 @@ export function createZK(W, gltf) {
     for (const b of spine) turn(b, X, (-0.03 + 0.14 * lean + 0.012 * Math.sin(t * 1.7)) / spine.length);
     if (bones.neck) turn(bones.neck, X, 0.05 * lean);
     if (bones.head) { turn(bones.head, Z, tilt); turn(bones.head, X, -0.06 + 0.06 * lean); }
-    // the hands: steepled in front of his chest; the right one up, palm to the lens, for the demand
-    const ch = wp2(bones.spine1).add(V(0, -0.04, 0.27));
-    if (bones.upperArmL) reach(bones.upperArmL, bones.forearmL, bones.handL, ch.clone().add(V(0.03, 0, 0)), ch.clone().add(V(0.7, -0.6, -0.2)), 1);
+    // the hands: steepled in front of his chest, up under his chin (where the lens sees them); the right one up, palm to
+    // the lens, for the demand
+    const ch = wp2(bones.spine2).add(V(0, 0.08, 0.3));
+    if (bones.upperArmL) reach(bones.upperArmL, bones.forearmL, bones.handL, ch.clone().add(V(0.085, 0, 0)), ch.clone().add(V(0.7, -0.6, -0.2)), 1);
     if (bones.upperArmR) {
-      const up = wp2(bones.spine2).add(V(-0.21, 0.16, 0.44));
-      reach(bones.upperArmR, bones.forearmR, bones.handR, ch.clone().add(V(-0.03, 0, 0)).lerp(up, palm), ch.clone().add(V(-0.7, -0.6, -0.2)), 1);
+      const up = wp2(bones.spine2).add(V(-0.21, 0.24, 0.44));
+      reach(bones.upperArmR, bones.forearmR, bones.handR, ch.clone().add(V(-0.085, 0, 0)).lerp(up, palm), ch.clone().add(V(-0.7, -0.6, -0.2)), 1);
     }
     // the light along the ring's edge slowly breathing; the screens flicker now and then
     ring.material.color.setScalar(2.3 + 0.15 * Math.sin(t * 2.1));

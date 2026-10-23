@@ -1449,6 +1449,17 @@ function buildCityGrid(scene) {
   // Ground footprints that traffic and pedestrians must keep clear of (medians, plazas, monuments, parks)
   const footprints = [];
   const addFootprint = (x, z, w, d) => footprints.push({ minX: x - w / 2, maxX: x + w / 2, minZ: z - d / 2, maxZ: z + d / 2 });
+  // Raised ground: the walkable tops of the parks, plazas & terraces, for controllers.js getGroundHeight (which knows
+  // only the road and the sidewalks otherwise): { minX, maxX, minZ, maxZ, top } with a `poly` [{x, z}] or a circle
+  // (cx, cz, r) inside those bounds; landmarks.js adds Bryant Park's terrace
+  const groundPatches = (window.NYC.groundPatches = window.NYC.groundPatches || []);
+  const addGround = (top, pts) => {
+    if (!pts || pts.length < 3) return;
+    let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
+    for (const p of pts) { minX = Math.min(minX, p.x); maxX = Math.max(maxX, p.x); minZ = Math.min(minZ, p.z); maxZ = Math.max(maxZ, p.z); }
+    groundPatches.push({ minX, maxX, minZ, maxZ, top, poly: pts });
+  };
+  const addGroundCircle = (top, cx, cz, r) => groundPatches.push({ minX: cx - r, maxX: cx + r, minZ: cz - r, maxZ: cz + r, top, cx, cz, r });
 
   // =========================================================================
   // 1. NEW YORK HARBOR, HUDSON RIVER, EAST RIVER & HARLEM RIVER WATER PLANE
@@ -1510,6 +1521,7 @@ function buildCityGrid(scene) {
   const SW_TOP = 0.22;
   for (const b of BLOCKS) {
     if (b.park > 0.6 && !b.median && b.parkName !== 'Bryant Park') continue; // parks build their own perimeter sidewalk (sections 7, 7B)
+    if (b.park > 0.6 && !b.median) addGround(SW_TOP, b.poly); // (Bryant Park's sidewalk: blockAt's parks aren't sidewalk)
     if (b.rect) {
       const slab = { cx: (b.minX + b.maxX) * 0.5, cz: (b.minZ + b.maxZ) * 0.5, w: b.maxX - b.minX, d: b.maxZ - b.minZ, block: b };
       blockSidewalks.push(slab);
@@ -1588,9 +1600,11 @@ function buildCityGrid(scene) {
   const parkTreeSites = []; // { x, y, z, scale, species } park & plaza trees planted by street-details.js (section 7)
   const PLAZA_Y = 0.24;
   const pavedRects = []; // plaza & park slab bounds, exported so street trees (street-details.js) stay off them
+  const plazaSolids = (window.NYC.plazaSolids = []); // (WAGMI City: the granite a car stops dead at, wagmi/crash) { kind, x, z, w, d }
 
   function addPavedPlaza(pts, style, topY = PLAZA_Y) {
     group.add(createExtrudedPolygonMesh(pts, 0.0, topY - 0.04, curbMat, true, false));
+    addGround(topY, pts);
     const top = createExtrudedPolygonMesh(offsetConvexPolygon(pts, -0.3), 0.0, topY, pavingMat, true, false);
     setPavingStyle(top.geometry, style);
     group.add(top);
@@ -1609,6 +1623,7 @@ function buildCityGrid(scene) {
   }
   function addPlanter(x, z, w, d, baseY = PLAZA_Y) {
     addBox(graniteMat, x, baseY, z, w, 0.55, d);
+    plazaSolids.push({ kind: 'planter', x, z, w, d });
     addBox(medianHedgeMat, x, baseY + 0.55, z, w - 0.35, 0.3, d - 0.35, 0, false);
   }
   function addPlanterTree(x, z, species = 1, scale = 0.85) {
@@ -1690,7 +1705,7 @@ function buildCityGrid(scene) {
     for (let z = pc.zN + 6; z <= pc.zS - 6; z += 12) {
       for (const [dx, dz] of [[-0.22, 0], [0.22, -6]]) {
         const x = bx.cx + (bx.maxX - bx.minX) * dx;
-        if (insidePiece(pc, x, z + dz, 2)) addBox(graniteMat, x, PLAZA_Y, z + dz, 1.25, 0.46, 8.0);
+        if (insidePiece(pc, x, z + dz, 2)) { addBox(graniteMat, x, PLAZA_Y, z + dz, 1.25, 0.46, 8.0); plazaSolids.push({ kind: 'granite', x, z: z + dz, w: 1.25, d: 8.0 }); }
       }
     }
     for (const z of [pc.zN + 2.2, pc.zS - 2.2]) if (insidePiece(pc, bx.cx, z, 0.8)) addPlanter(bx.cx, z, Math.min(5.5, (bx.maxX - bx.minX) * 0.5), 1.6);
@@ -1718,6 +1733,9 @@ function buildCityGrid(scene) {
     for (let s = 0; s < tkSteps; s++) {
       addBox(tktsStepMat, tkX, PLAZA_Y, tkFrontZ - (s + 0.5) * tkTread, tkW, (s + 1) * tkRiser, tkTread);
     }
+    // (people climb them, a car doesn't: a stair the ground follows, a wall to cars)
+    groundPatches.push({ minX: tkX - tkW * 0.5, maxX: tkX + tkW * 0.5, minZ: tkFrontZ - tkRun, maxZ: tkFrontZ, top: PLAZA_Y + tkRise, wall: true,
+      stair: { ax: tkX, az: tkFrontZ, ux: 0, uz: -1, tread: tkTread, riser: tkRiser, n: tkSteps, base: PLAZA_Y } });
     // Glazed ticket booth face under the top of the bleachers (47th St side) & a steel canopy edge
     addBox(tktsGlassMat, tkX, PLAZA_Y, tkFrontZ - tkRun - 0.15, tkW - 0.4, tkRise - 0.25, 0.3);
     addBox(steelMat, tkX, PLAZA_Y + tkRise - 0.25, tkFrontZ - tkRun - 0.2, tkW + 0.2, 0.25, 0.5);
@@ -1736,6 +1754,7 @@ function buildCityGrid(scene) {
     }
     // Father Duffy statue: bronze chaplain before a granite Celtic cross at the south end of the square
     addBox(graniteMat, tkX, PLAZA_Y, tkFrontZ + 4.4, 1.2, 1.35, 1.2);
+    plazaSolids.push({ kind: 'granite', x: tkX, z: tkFrontZ + 4.4, w: 1.2, d: 1.2 });
     const duffyFigure = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.36, 1.85, 8), bronzeMat);
     duffyFigure.position.set(tkX, PLAZA_Y + 1.35 + 0.925, tkFrontZ + 4.6);
     duffyFigure.castShadow = true;
@@ -1803,6 +1822,7 @@ function buildCityGrid(scene) {
     group.add(createExtrudedPolygonMesh(cpBlock.poly, 0.0, 0.18, curbMat, true, true));
     const sw = offsetPolygonInward(cpBlock.poly, 0.25);
     if (sw) group.add(createExtrudedPolygonMesh(sw, 0.03, 0.19, sidewalkMat));
+    addGround(0.22, cpBlock.poly);
     addFootprint((cpBlock.minX + cpBlock.maxX) * 0.5, (cpBlock.minZ + cpBlock.maxZ) * 0.5, cpBlock.maxX - cpBlock.minX, cpBlock.maxZ - cpBlock.minZ);
   }
   // Low coursed-schist perimeter wall (~0.8 m above the sidewalk) with the lawn a little inside it
@@ -1824,11 +1844,14 @@ function buildCityGrid(scene) {
     if (w.name === 'Jacqueline Kennedy Onassis Reservoir') {
       const track = offsetPolygon(pts, -6);
       if (track) group.add(createExtrudedPolygonMesh(track, 1.18, 0.38, cpPathMat, true, false));
+      if (track) window.NYC.cpTrack = track; // (WAGMI City: its top is ground, controllers.js getGroundHeight)
       group.add(createFlatPolygonMesh(pts, 1.58, waterMat, true));
     } else {
       group.add(createFlatPolygonMesh(pts, 1.24, waterMat, true));
     }
   }
+
+  window.NYC.cpWater = cpWaterPolys; // (WAGMI City: nobody walks or drives into it, controllers.js inParkWater)
 
   // The loop drives (East, West, Center & Terrace Drives, car-free) and the four transverse roads crossing the park
   const cpDrives = [];
@@ -1950,6 +1973,7 @@ function buildCityGrid(scene) {
   const gapPlaza = new THREE.Mesh(new THREE.CylinderGeometry(16, 17, 0.45, 24), marbleArchMat);
   gapPlaza.position.set(gap.x, 0.25, gap.z);
   group.add(gapPlaza);
+  addGroundCircle(0.475, gap.x, gap.z, 16.5);
   addFootprint(gap.x, gap.z, 34, 34);
   const shermanGold = new THREE.Mesh(
     new THREE.BoxGeometry(2.4, 4.2, 4.4),
@@ -1962,6 +1986,7 @@ function buildCityGrid(scene) {
   const columbusCircle = new THREE.Mesh(new THREE.CylinderGeometry(15, 16, 0.5, 24), marbleArchMat);
   columbusCircle.position.set(colC.x, 0.25, colC.z);
   group.add(columbusCircle);
+  addGroundCircle(0.5, colC.x, colC.z, 15.5);
   addFootprint(colC.x, colC.z, 32, 32);
   const columbusColumn = new THREE.Mesh(new THREE.CylinderGeometry(1.1, 1.5, 18, 12), marbleArchMat);
   columbusColumn.position.set(colC.x, 9.5, colC.z);
@@ -2063,6 +2088,7 @@ function buildCityGrid(scene) {
       if (poly.length < 3 || Math.abs(polygonArea(poly)) < 30) continue;
       const bed = poly.map((p) => ({ x: p.x + hx, z: p.z + hz }));
       group.add(createExtrudedPolygonMesh(bed, 0.2, BED_Y - 0.21, graniteMat, true, false));
+      addGround(BED_Y, bed);
       parkLawnGeos.push(createExtrudedPolygonMesh(offsetConvexPolygon(bed, -0.3), 0.3, BED_Y - 0.3, cpLawnMat).geometry);
       const hoop = offsetConvexPolygon(bed, -0.18);
       parkFenceGeos.push(buildFenceStripGeometry(hoop.map((p, k) => {
@@ -2257,6 +2283,7 @@ function buildCityGrid(scene) {
   for (const b of genericParks) {
     const slab = offsetPolygonInward(b.poly, 0.1) || b.poly;
     group.add(createExtrudedPolygonMesh(b.poly, 0.0, PARK_Y - 0.04, curbMat, true, false));
+    addGround(PARK_Y, b.poly);
     const top = createExtrudedPolygonMesh(slab, 0.0, PARK_Y, pavingMat, true, false);
     setPavingStyle(top.geometry, 0);
     group.add(top);
@@ -2265,6 +2292,7 @@ function buildCityGrid(scene) {
     const bed = offsetPolygonInward(b.poly, Math.min(5, Math.min(b.maxX - b.minX, b.maxZ - b.minZ) * 0.2));
     if (!bed) continue;
     group.add(createExtrudedPolygonMesh(bed, 0.2, BED_Y - 0.21, graniteMat, true, false));
+    addGround(BED_Y, bed);
     const lawnTop = offsetPolygonInward(bed, 0.3);
     if (lawnTop) parkLawnGeos.push(createExtrudedPolygonMesh(lawnTop, 0.3, BED_Y - 0.3, cpLawnMat).geometry);
     // trees on a jittered grid inside the bed
@@ -2436,6 +2464,7 @@ function buildCityGrid(scene) {
     benchInst.receiveShadow = true;
     benchInst.computeBoundingSphere();
     group.add(benchInst);
+    window.NYC.plazaBenches = { inst: benchInst, matrices: benchMatrices }; // (WAGMI City: a car knocks them flying, wagmi/crash)
   }
   if (lampMatrices.length) {
     const poleGeo = mergeGeometries([
@@ -2467,6 +2496,7 @@ function buildCityGrid(scene) {
     poolInst.instanceMatrix.needsUpdate = true;
     poolInst.computeBoundingSphere();
     group.add(poolInst);
+    window.NYC.parkLamps = { pole: poleInst, globe: globeInst, pool: poolInst, matrices: lampMatrices }; // (WAGMI City: a car knocks them down, wagmi/crash)
   }
 
   // Park & plaza tree and lamp sites, read by street-details.js after the city grid is built

@@ -443,7 +443,7 @@ export function createFightCamera(c) {
     st.punchT += dt;
     const pk = st.punchT < 0.12 ? smooth(st.punchT / 0.12) : 1 - smooth((st.punchT - 0.12) / 0.4);
     if (pk > 0.001) cam.position.addScaledVector(cam.getWorldDirection(_v), 0.32 * st.punchK * pk);
-    const base = cs.getActivePreset().fov, fov = base - 4 * st.punchK * pk;
+    const base = cs.lensFov || cs.getActivePreset().fov, fov = base - 4 * st.punchK * pk;
     if (Math.abs(cam.fov - fov) > 0.01) { cam.fov = fov; cam.updateProjectionMatrix(); }
     if (Math.abs(st.roll) > 1e-4 && (st.w > 0.003 || st.cine)) cam.rotateZ(st.roll);
   }

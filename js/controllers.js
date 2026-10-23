@@ -31,6 +31,18 @@ const { PersonCrowd, PersonRig } = window.NYC;
 const { HEADLIGHTS, createVehicleHeadlight, placeVehicleHeadlight } = window.NYC;
 // Walking surface for the player's pedestrian (its rig samples it around its feet)
 const personGround = (controllers, x, z) => controllers.getGroundHeight(x, z, 'person');
+// (x, z) inside a ring of { x, z } points (its bounds kept on it)
+function inRing(pts, x, z) {
+  let b = pts._b;
+  if (!b) { b = pts._b = { minX: Infinity, maxX: -Infinity, minZ: Infinity, maxZ: -Infinity }; for (const p of pts) { b.minX = Math.min(b.minX, p.x); b.maxX = Math.max(b.maxX, p.x); b.minZ = Math.min(b.minZ, p.z); b.maxZ = Math.max(b.maxZ, p.z); } }
+  if (x < b.minX || x > b.maxX || z < b.minZ || z > b.maxZ) return false;
+  let inside = false;
+  for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+    const a = pts[i], c = pts[j];
+    if ((a.z > z) !== (c.z > z) && x < ((c.x - a.x) * (z - a.z)) / (c.z - a.z) + a.x) inside = !inside;
+  }
+  return inside;
+}
 
 function createTaxiDoorDecalTexture() {
   const c = document.createElement('canvas');
@@ -708,20 +720,78 @@ class ThirdPersonControllerManager {
   }
 
   getGroundHeight(x, z, mode = 'person') {
-    // Inside Central Park (5th Ave to Central Park West, 59th St to 110th St)
+    // Inside Central Park (5th Ave to Central Park West, 59th St to 110th St); the Reservoir's running track stands
+    // above the lawns (WAGMI City: window.NYC.cpTrack, city-grid.js)
     const cp = CENTRAL_PARK_BOUNDS;
     if (x > cp.minX && x < cp.maxX && z > cp.minZ && z < cp.maxZ) {
-      return 1.24;
+      return window.NYC.cpTrack && inRing(window.NYC.cpTrack, x, z) ? 1.56 : 1.24;
     }
-    // Inside Bryant Park's Great Lawn (west of the New York Public Library, 40th-42nd St)
-    const lawn = window.NYC.bryantParkLawn;
-    if (lawn && x > lawn.minX && x < lawn.maxX && z > lawn.minZ && z < lawn.maxZ) {
-      return lawn.top;
+    // The parks' paving & lawns, the plazas, Bryant Park's terrace (the highest under the point): everyone stands on
+    // them, wheels too (a terrace a car can't climb is a wall to it, see nearColliders)
+    const top = this.groundPatchTop(x, z);
+    if (top !== null) return top;
+    // The sidewalks, for wheels too: a car driven up the curb rides on them (updateCar)
+    return this.isPointOnSidewalk(x, z) ? ISLAND_BOUNDS.sidewalkHeight : 0.0;
+  }
+
+  // (WAGMI City) In Central Park's water: the Lake, the Reservoir, the ponds (window.NYC.cpWater, city-grid.js)
+  inParkWater(x, z) {
+    const cp = CENTRAL_PARK_BOUNDS;
+    if (!(x > cp.minX && x < cp.maxX && z > cp.minZ && z < cp.maxZ)) return false;
+    for (const w of window.NYC.cpWater || []) if (inRing(w, x, z)) return true;
+    return false;
+  }
+
+  // The top of the raised ground under (x, z) (window.NYC.groundPatches, city-grid.js & landmarks.js), or null. A patch
+  // with an `edge` rises from `base` over that many metres in from its sides (steps up a terrace)
+  groundPatchTop(x, z) {
+    const P = window.NYC.groundPatches;
+    if (!P || !P.length) return null;
+    const CELL = 32;
+    const key = (ix, iz) => (ix + 4096) * 8192 + (iz + 4096);
+    if (this._patchCount !== P.length) {
+      this._patchCount = P.length;
+      this._patchCells = new Map();
+      for (const p of P) {
+        for (let ix = Math.floor(p.minX / CELL); ix <= Math.floor(p.maxX / CELL); ix++) {
+          for (let iz = Math.floor(p.minZ / CELL); iz <= Math.floor(p.maxZ / CELL); iz++) {
+            const k = key(ix, iz);
+            let list = this._patchCells.get(k);
+            if (!list) this._patchCells.set(k, (list = []));
+            list.push(p);
+          }
+        }
+      }
     }
-    if (mode === 'person') {
-      return this.isPointOnSidewalk(x, z) ? ISLAND_BOUNDS.sidewalkHeight : 0.0;
+    const list = this._patchCells.get(key(Math.floor(x / CELL), Math.floor(z / CELL)));
+    if (!list) return null;
+    let top = null;
+    for (const p of list) {
+      if (x < p.minX || x > p.maxX || z < p.minZ || z > p.maxZ) continue;
+      if (p.r) {
+        if ((x - p.cx) * (x - p.cx) + (z - p.cz) * (z - p.cz) > p.r * p.r) continue;
+      } else if (p.poly) {
+        let inside = false;
+        for (let i = 0, j = p.poly.length - 1; i < p.poly.length; j = i++) {
+          const a = p.poly[i], b = p.poly[j];
+          if ((a.z > z) !== (b.z > z) && x < ((b.x - a.x) * (z - a.z)) / (b.z - a.z) + a.x) inside = !inside;
+        }
+        if (!inside) continue;
+      }
+      let h = p.top;
+      if (p.edge) {
+        const d = Math.min(x - p.minX, p.maxX - x, z - p.minZ, p.maxZ - z) / p.edge;
+        if (d < 1) h = p.base + (p.top - p.base) * d * d * (3 - 2 * d);
+      }
+      if (p.stair) {
+        // a flight of steps from (ax, az) up along (ux, uz): n treads, each a riser higher than the one before
+        const s = p.stair, k = Math.floor(((x - s.ax) * s.ux + (z - s.az) * s.uz) / s.tread);
+        if (k < 0) continue;
+        h = s.base + Math.min(s.n, k + 1) * s.riser;
+      }
+      if (top === null || h > top) top = h;
     }
-    return 0.0;
+    return top;
   }
 
   // The colliders whose bounds come within `r` of (x, z), in their original order. They never move, so they are
@@ -731,7 +801,10 @@ class ThirdPersonControllerManager {
     const key = (ix, iz) => (ix + 4096) * 8192 + (iz + 4096);
     if (!this._colliderCells) {
       this._colliderCells = new Map();
-      this.colliders.forEach((c, i) => {
+      // (and the raised terraces a car can't climb, to cars only: city-grid.js groundPatches with `wall`)
+      const walls = (window.NYC.groundPatches || []).filter((p) => p.wall)
+        .map((p) => ({ minX: p.minX, maxX: p.maxX, minZ: p.minZ, maxZ: p.maxZ, maxY: p.top, carOnly: true }));
+      this.colliders.concat(walls).forEach((c, i) => {
         c._order = i;
         for (let ix = Math.floor(c.minX / CELL); ix <= Math.floor(c.maxX / CELL); ix++) {
           for (let iz = Math.floor(c.minZ / CELL); iz <= Math.floor(c.maxZ / CELL); iz++) {
@@ -784,8 +857,17 @@ class ThirdPersonControllerManager {
 
     const sinH = carEntity ? Math.sin(carEntity.heading) : 0;
     const cosH = carEntity ? Math.cos(carEntity.heading) : 1;
-    const extX = carEntity ? (Math.abs(cosH) * 0.86 + Math.abs(sinH) * 2.18) : radius;
-    const extZ = carEntity ? (Math.abs(sinH) * 0.86 + Math.abs(cosH) * 2.18) : radius;
+    // (the car's half width & length against the walls: its own body's box when it has one (Quant's car, wagmi/game.js
+    // car.body), else a taxi's)
+    const body = carEntity && carEntity.body;
+    const CAR_W = body ? body.hx : 0.95, CAR_L = body ? (body.z1 - body.z0) * 0.5 : 2.24;
+    const extX = carEntity ? (Math.abs(cosH) * CAR_W + Math.abs(sinH) * CAR_L) : radius;
+    const extZ = carEntity ? (Math.abs(sinH) * CAR_W + Math.abs(cosH) * CAR_L) : radius;
+    // (round the body's own middle, a little ahead of the car's point when its nose is longer than its tail: moved
+    // there for the walls, and back after)
+    const CZ = body ? (body.z1 + body.z0) * 0.5 : 0;
+    pos.x += sinH * CZ;
+    pos.z += cosH * CZ;
 
     const reach = Math.max(extX, extZ) + 6;
     let gx = pos.x;
@@ -793,7 +875,7 @@ class ThirdPersonControllerManager {
     let near = this.nearColliders(gx, gz, reach);
     for (let i = 0; i < near.length; i++) {
       const c = near[i];
-      if (yHeight > c.maxY + 1.5) continue;
+      if (yHeight > c.maxY + 1.5 || (c.carOnly && !carEntity)) continue;
 
       if (
         pos.x + extX > c.minX &&
@@ -812,8 +894,8 @@ class ThirdPersonControllerManager {
           const lz = dx * o.sn + dz * o.cs;
           const ls = sinH * o.cs - cosH * o.sn; // heading in the box's frame
           const lc = sinH * o.sn + cosH * o.cs;
-          const ex = carEntity ? (Math.abs(lc) * 0.86 + Math.abs(ls) * 2.18) : radius;
-          const ez = carEntity ? (Math.abs(ls) * 0.86 + Math.abs(lc) * 2.18) : radius;
+          const ex = carEntity ? (Math.abs(lc) * CAR_W + Math.abs(ls) * CAR_L) : radius;
+          const ez = carEntity ? (Math.abs(ls) * CAR_W + Math.abs(lc) * CAR_L) : radius;
           if (lx + ex <= -o.hx || lx - ex >= o.hx || lz + ez <= -o.hz || lz - ez >= o.hz) continue;
           const oL = lx + ex + o.hx;
           const oR = o.hx - (lx - ex);
@@ -872,6 +954,8 @@ class ThirdPersonControllerManager {
             carEntity.pitchVel = (carEntity.pitchVel || 0) + (sinH * nx + cosH * nz) * Math.min(14.0, vn) * 0.16;
             carEntity.rollVel = (carEntity.rollVel || 0) - sideDot * Math.min(14.0, vn) * 0.22;
             carEntity.heaveVel = (carEntity.heaveVel || 0) + Math.min(1.4, vn * 0.11);
+            // (WAGMI City: the crash's feel, wagmi/crash: how hard it hit, the wall's normal, how square on, where)
+            if (carEntity.crash) carEntity.crash.wall(vn, nx, nz, headOn, pos.x - nx * extX * 0.92, pos.z - nz * extZ * 0.92);
             if (vn > 2.2) {
               carEntity.lastCollisionSpark = {
                 x: pos.x - nx * extX * 0.92,
@@ -897,6 +981,8 @@ class ThirdPersonControllerManager {
         }
       }
     }
+    pos.x -= sinH * CZ;
+    pos.z -= cosH * CZ;
   }
 
   // Pose the skinned characters once every entity has moved: the pedestrian's rig walks (or runs, turns, jumps) it to
@@ -994,9 +1080,18 @@ class ThirdPersonControllerManager {
 
     p.speed += (targetSpeed - p.speed) * Math.min(1, dt * 10);
 
+    const wasX = p.position.x, wasZ = p.position.z;
     p.position.x += Math.sin(p.heading) * p.speed * dt;
     p.position.z += Math.cos(p.heading) * p.speed * dt;
     this.resolveHorizontalCollision(p.position, 0.48, p.position.y + 1.0);
+    // (WAGMI City: what else is solid to him, his parked car)
+    if (p.collide) p.collide(p.position, 0.48);
+    // (WAGMI City: Central Park's water is the edge of the path: along it, never into it)
+    if (this.inParkWater(p.position.x, p.position.z)) {
+      if (!this.inParkWater(p.position.x, wasZ)) p.position.z = wasZ;
+      else if (!this.inParkWater(wasX, p.position.z)) p.position.x = wasX;
+      else { p.position.x = wasX; p.position.z = wasZ; }
+    }
 
     const groundY = this.getGroundHeight(p.position.x, p.position.z, 'person');
     if (this.keys.up && p.position.y <= groundY + 0.02) {
@@ -1047,13 +1142,32 @@ class ThirdPersonControllerManager {
 
     const prevX = c.position.x;
     const prevZ = c.position.z;
-    c.position.x += (Math.sin(c.heading) * c.speed + c.vx) * dt;
-    c.position.z += (Math.cos(c.heading) * c.speed + c.vz) * dt;
+    // In steps of at most half a metre, colliding after each, so a fast car never passes through anything thin (WAGMI
+    // City: c.crash.step, what else it runs into: the traffic, the street furniture, the trees, wagmi/crash)
+    const steps = Math.min(8, Math.max(1, Math.ceil((Math.abs(c.speed) + Math.hypot(c.vx, c.vz)) * dt / 0.5)));
+    for (let k = 0; k < steps; k++) {
+      c.position.x += (Math.sin(c.heading) * c.speed + c.vx) * dt / steps;
+      c.position.z += (Math.cos(c.heading) * c.speed + c.vz) * dt / steps;
+      this.resolveHorizontalCollision(c.position, 1.35, 1.0, c);
+      if (c.crash) c.crash.step(dt / steps);
+    }
+    // (WAGMI City: nor does it drive into Central Park's water: stopped at its edge)
+    if (this.inParkWater(c.position.x, c.position.z)) { c.position.x = prevX; c.position.z = prevZ; c.speed *= -0.15; c.vx = c.vz = 0; }
     c.vx *= tireGripDamp;
     c.vz *= tireGripDamp;
 
-    this.resolveHorizontalCollision(c.position, 1.35, 1.0, c);
-    c.position.y = this.getGroundHeight(c.position.x, c.position.z, 'car');
+    // On the ground under its axles (the road, up the curb onto a sidewalk, a park's paving): up a step with a jolt
+    // through the springs, down one falling to it
+    const fx = Math.sin(c.heading) * (c.axle || 1.45), fz = Math.cos(c.heading) * (c.axle || 1.45);
+    const gy = (this.getGroundHeight(c.position.x + fx, c.position.z + fz, 'car') + this.getGroundHeight(c.position.x - fx, c.position.z - fz, 'car')) * 0.5;
+    if (gy >= c.position.y || !(c.position.y - gy < 1.5)) {
+      if (gy - c.position.y > 0.03 && gy - c.position.y < 1.5) c.heaveVel -= (gy - c.position.y) * Math.min(10, 3 + Math.abs(c.speed) * 0.4);
+      c.position.y = gy;
+      c.fallVel = 0;
+    } else {
+      c.fallVel = (c.fallVel || 0) + 9.8 * dt;
+      c.position.y = Math.max(gy, c.position.y - c.fallVel * dt);
+    }
 
     // 3-DOF Spring-Damper Chassis Suspension (Pitch, Roll & Vertical Heave)
     const targetPitch = -throttle * 0.026;

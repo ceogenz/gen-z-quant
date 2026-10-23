@@ -9,9 +9,11 @@ export function createAudio() {
   function init() {
     if (ctx) return ctx;
     const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return null;
-    ctx = new AC();
+    // (the game's one mixer when it is there: its context, into its sfx bus)
+    const A = window.WAGMI?.audio;
+    ctx = A?.ctx || new AC();
     comp = ctx.createDynamicsCompressor(); comp.threshold.value = -16; comp.ratio.value = 4; comp.attack.value = 0.004; comp.release.value = 0.2;
-    master = ctx.createGain(); master.gain.value = 0.9; master.connect(comp); comp.connect(ctx.destination);
+    master = ctx.createGain(); master.gain.value = 0.9; master.connect(comp); comp.connect(A?.ctx === ctx && A.bus?.sfx ? A.bus.sfx : ctx.destination);
     // a plate-ish reverb: decaying stereo noise
     verb = ctx.createConvolver();
     const len = Math.floor(ctx.sampleRate * 2.4), ir = ctx.createBuffer(2, len, ctx.sampleRate);
@@ -210,6 +212,8 @@ export function createAudio() {
     play(name, o) { if (!init() || !S[name]) return; try { S[name](o); } catch (e) { console.warn('[audio]', name, e); } },
     // the city: a low roar of traffic, a hiss of tyres, now and then a far horn and a siren
     city() {
+      // (the game's mixer plays the city's own bed all the time, wherever the camera is: no second one)
+      if (init() && window.WAGMI?.audio?.ctx === ctx) { window.WAGMI.audio.force?.('siren'); return { out: null, fadeTo() {}, stop() {} }; }
       return layer((out) => {
         const a = noise(brownBuf), la = filt('lowpass', 380), ga = ctx.createGain(); ga.gain.value = 0.55; a.connect(la); la.connect(ga); ga.connect(out);
         const b = noise(), fb = filt('bandpass', 1400, 0.4), gb = ctx.createGain(); gb.gain.value = 0.06; b.connect(fb); fb.connect(gb); gb.connect(out);

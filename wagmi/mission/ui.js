@@ -4,7 +4,10 @@
 //   cine(on)                    letterbox bars in, the city's HUD out (and back)
 //   gameTitle(on) · title(act, name) · place(name, sub) · caption(name, role, colour)
 //   sub(speaker, text, colour) / sub(null)       subtitles (the objective line; above the bar in a cutscene)
-//   objective(parts) / objective(null)           parts: ['Get in your ', { car: 'blue' }, '.']
+//   objective(parts) / objective(null)           parts: ['Get in your ', { car: 'blue' }, '.']; kept in the tracker
+//                                                (over the radar) until the next one. The route with it: gps.objective
+//   brief(on) · recent()                         [B]: the tracker opened on the last lines; what the pause menu shows
+//   pause                                        the pause menu (mission/pause.js: Esc or P), installed with the UI
 //   help(text, secs)                             top-left; [F] draws a key cap
 //   skip(k)                                      'Hold SPACE to skip' with its ring (k 0..1, null hides)
 //   phone.show(screen, data) / phone.hide()      feed, incoming, video, ended, moontag
@@ -14,6 +17,7 @@
 //   bootOff()                                    the boot veil (index.html: the key art until the gate is up) away
 //   story(on)                                    story mode: the sandbox's toolbar, telemetry, credit pill put away
 //   zk(on, name) · zkTalk(level)                 the video call's frame over ZK's room (mission/zk.js draws the room)
+import { createPause } from './pause.js';
 export const COLORS = { yellow: '#FFC93C', green: '#4ADE80', red: '#EF4444', blue: '#6CB8FF', acid: '#B6FF3B', white: '#FFFFFF' };
 const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -61,7 +65,8 @@ body.wg-cine .wg-place { bottom: calc(var(--bar) + 3.2vh); }
 /* (wrapped at about half the screen: a long line never reaches the speed panel or the radar) */
 .wg-line { position: absolute; left: 50%; bottom: 158px; transform: translateX(-50%); width: min(max(52vw, 320px), 820px, calc(100vw - 32px)); text-align: center; z-index: 4; }
 body.wg-cine .wg-line { bottom: calc(var(--bar) + 2.4vh); }
-body.wg-story:not(.wg-cine) .wg-line { bottom: 64px; }
+/* (down between the radar and the speed panel, each 308 px out from its edge at most: kept 24 px clear of both) */
+body.wg-story:not(.wg-cine) .wg-line { bottom: 64px; width: clamp(280px, calc(100vw - 664px), 820px); }
 /* story mode: the sandbox's controls and telemetry away (the Map stays; the credit link stays) */
 body.wg-story .time-switch, body.wg-story #btn-teleport, body.wg-story #hud-toolbar .toolbar-divider, body.wg-story .brand-subtitle,
 body.wg-story #camera-switch, body.wg-story #hud-controls-hint { display: none !important; }
@@ -69,6 +74,8 @@ body.wg-story.wg-onfoot .hud-bottom-right { display: none !important; }
 /* (the credit pill too: the credit is on the start gate; the help box takes the corner, GTA's place for it) */
 body.wg-story .hud-top-left { display: none !important; }
 body.wg-story .wg-help { top: 20px; }
+/* (a phone: under the toolbar, not over its Map and Pause) */
+@media (max-width: 640px) { body.wg-story .wg-help { top: 80px; max-width: calc(100vw - 32px); left: 16px; } }
 /* ZK's video call, full frame between the bars */
 /* (the room itself is drawn in 3D in place of the city's frame: mission/zk.js; this is the call's frame over it, cut
    in and out hard; nothing in the bottom 100 px, where the subtitles are) */
@@ -77,12 +84,13 @@ body.wg-story .wg-help { top: 20px; }
 .wg-zk .scan { position: absolute; inset: 0; background: repeating-linear-gradient(0deg, rgba(255,255,255,.03) 0 1px, transparent 1px 4px); }
 /* (no filters or blend modes on the full-frame insert: the city keeps drawing under it) */
 .wg-zk .vig { position: absolute; inset: 0; background: radial-gradient(80% 70% at 50% 45%, transparent 55%, rgba(0,0,0,.7)); }
-.wg-zk .hd { position: absolute; left: 5vw; top: calc(var(--bar) + 3vh); font: 800 clamp(16px, 1.8vw, 24px)/1 'Barlow Condensed'; letter-spacing: 4px; color: #fff; }
+/* (the caller's name on a panel of its own: the screens in his room run behind it) */
+.wg-zk .hd { position: absolute; left: 5vw; top: calc(var(--bar) + 3vh); padding: 10px 14px 11px; background: rgba(8,10,14,0.62); border-radius: 10px; font: 800 clamp(16px, 1.8vw, 24px)/1 'Barlow Condensed'; letter-spacing: 4px; color: #fff; }
 .wg-zk .hd small { display: block; margin-top: 6px; font: 600 clamp(11px, 1.1vw, 14px)/1 'Barlow Condensed'; letter-spacing: 2px; color: rgba(255,255,255,.55); }
+.wg-zk .hd small.vc { margin-top: 5px; font-weight: 700; letter-spacing: 4px; color: #B6FF3B; opacity: .85; }
 .wg-zk .rec { position: absolute; right: 5vw; top: calc(var(--bar) + 3vh); font: 700 clamp(12px, 1.2vw, 15px)/1 'Barlow Condensed'; letter-spacing: 3px; color: #B6FF3B; }
 .wg-zk .wave { position: absolute; right: 5vw; top: calc(var(--bar) + 3vh + 26px); height: 26px; display: flex; gap: 3px; align-items: center; }
 .wg-zk .wave i { display: block; width: 3px; border-radius: 2px; background: #B6FF3B; height: 26px; transform: scaleY(.1); transition: transform .08s; will-change: transform; }
-.wg-zk .vc { position: absolute; left: 5vw; top: calc(var(--bar) + 3vh + 40px); font: 700 clamp(11px, 1.1vw, 14px)/1 'Barlow Condensed'; letter-spacing: 4px; color: #B6FF3B; opacity: .85; }
 .wg-zk .frm { position: absolute; left: 3vw; right: 3vw; top: calc(var(--bar) + 1.6vh); bottom: calc(var(--bar) + 1.6vh); border: 1px solid rgba(255,255,255,.12); border-radius: 6px; }
 .wg-sub, .wg-obj { font: 600 24px/1.25 'Barlow Condensed'; transition: opacity .25s; }
 .wg-obj { font-size: 26px; }
@@ -194,6 +202,22 @@ body.wg-rekt #canvas-container { filter: grayscale(.85) contrast(1.05); transiti
 @media (max-width: 560px) { .wg-gate .go { font-size: 4.3vw; padding: 8px 12px; top: 60%; } .wg-gate .fine { letter-spacing: 1px; } }
 .wg-gate .fine { position: absolute; bottom: calc(var(--bar) + 2.6vh); left: 16px; right: 16px; text-align: center; font: 600 clamp(12px, 1.2vw, 15px)/1.5 'Barlow Condensed'; letter-spacing: 2px; color: rgba(255,255,255,.72); text-shadow: 0 1px 4px rgba(0,0,0,.8); }
 @keyframes wgBlink { 0%,100% { opacity: .6; } 50% { opacity: 1; } }
+
+/* the objective tracker: over the street signs and the radar (the city's HUD column, so it goes with it in a cutscene);
+   [B] opens it into the brief: the objective, the last lines said, the last help */
+.wg-track { order: -1; max-width: 288px; padding: 8px 12px 9px; background: rgba(8,10,14,0.62); border-radius: 10px; font-family: 'Barlow Condensed', system-ui, sans-serif; color: #fff; cursor: pointer; transition: opacity .3s; }
+.wg-track.off { display: none; }
+.wg-track .k { display: flex; justify-content: space-between; align-items: center; gap: 12px; font: 700 11px/1 'Barlow Condensed'; letter-spacing: 2.5px; text-transform: uppercase; color: #FFC93C; }
+.wg-track .k kbd { font: 700 11px/16px 'Barlow Condensed'; min-width: 18px; padding: 0 5px; border: 1px solid rgba(255,255,255,.4); border-radius: 4px; color: rgba(255,255,255,.75); text-align: center; letter-spacing: 0; }
+.wg-track .o { margin-top: 5px; font: 600 18px/1.2 'Barlow Condensed'; text-shadow: 0 1px 2px rgba(0,0,0,.85); }
+.wg-track .o.none { color: rgba(255,255,255,.6); }
+.wg-track .log { display: none; margin-top: 8px; padding-top: 7px; border-top: 1px solid rgba(255,255,255,.14); }
+.wg-track.open .log { display: block; }
+.wg-track .log .h { font: 700 11px/1 'Barlow Condensed'; letter-spacing: 2.5px; text-transform: uppercase; color: rgba(255,255,255,.55); margin: 2px 0 5px; }
+.wg-track .log .l { font: 600 15px/1.25 'Barlow Condensed'; margin-bottom: 4px; }
+.wg-track .log .l b { font-weight: 700; letter-spacing: .5px; margin-right: 6px; }
+.wg-track .log .hp { font: 600 15px/1.25 'Barlow Condensed'; color: rgba(255,255,255,.85); }
+.wg-track .log kbd, .wg-track .o kbd { display: inline-block; min-width: 18px; padding: 0 5px; margin: 0 2px; border: 1px solid rgba(255,255,255,.55); border-radius: 4px; background: rgba(255,255,255,.12); font: 700 13px/17px 'Barlow Condensed'; text-align: center; }
 `;
 
 export function createUI() {
@@ -201,7 +225,7 @@ export function createUI() {
   const root = document.createElement('div'); root.id = 'wg'; document.body.appendChild(root);
   const el = (cls, html = '', parent = root) => { const d = document.createElement('div'); d.className = cls; d.innerHTML = html; parent.appendChild(d); return d; };
   const zkEl = el('wg-zk', `<div class="scan"></div><div class="vig"></div><div class="frm"></div>
-    <div class="hd"><span class="nm">UNKNOWN</span><small>VIDEO CALL · <span class="clock">00:07</span></small></div><div class="rec">● LIVE</div><div class="wave">${'<i></i>'.repeat(16)}</div><div class="vc">VOICE CHANGER ON</div>`);
+    <div class="hd"><span class="nm">UNKNOWN</span><small>VIDEO CALL · <span class="clock">00:07</span></small><small class="vc">VOICE CHANGER ON</small></div><div class="rec">● LIVE</div><div class="wave">${'<i></i>'.repeat(16)}</div>`);
   const barT = el('wg-bar top'), barB = el('wg-bar bot');
   const fadeEl = el('wg-fade');
   const gTitle = el('wg-gtitle', `<div class="logo">WAGMI <b>CITY</b></div><div class="rule"></div><div class="tag">We're all gonna make it</div>`);
@@ -228,6 +252,27 @@ export function createUI() {
     if (typeof p === 'string') return keycaps(p);
     const [k, c] = Object.entries(p)[0]; return `<span style="color:${COLORS[c] || c}">${keycaps(k)}</span>`;
   }).join('');
+
+  // the tracker: the objective kept on screen (the line above goes after a few seconds, this one doesn't), and what
+  // was said and asked of him lately, for the brief ([B]) and the pause menu
+  const trackEl = document.createElement('div'); trackEl.className = 'wg-track off';
+  trackEl.innerHTML = `<div class="k"><span>Objective</span><kbd>B</kbd></div><div class="o"></div><div class="log"></div>`;
+  (document.querySelector('.hud-bottom-left') || root).prepend(trackEl);
+  const trackO = trackEl.querySelector('.o'), trackLog = trackEl.querySelector('.log');
+  const said = [], helped = [];
+  let trackHtml = null, trackText = '', briefT = 0;
+  const plain = (parts) => (Array.isArray(parts) ? parts : [parts]).map((p) => (typeof p === 'string' ? p : Object.keys(p)[0])).join('');
+  function track(parts) {
+    trackHtml = parts ? rich(parts) : null; trackText = parts ? plain(parts) : '';
+    trackO.innerHTML = trackHtml || 'No objective right now.'; trackO.classList.toggle('none', !trackHtml);
+    trackEl.classList.toggle('off', !trackHtml && !trackEl.classList.contains('open'));
+  }
+  function drawLog() {
+    const lines = said.slice(-5).map(([w, c, t]) => `<div class="l">${w ? `<b style="color:${c}">${esc(w.toUpperCase())}</b>` : ''}${esc(t)}</div>`).join('');
+    const help = helped.slice(-1).map((h) => `<div class="hp">${h}</div>`).join('');
+    trackLog.innerHTML = (lines ? `<div class="h">Lately</div>${lines}` : '') + (help ? `<div class="h" style="margin-top:8px">Help</div>${help}` : '') || '<div class="hp">Nothing said yet.</div>';
+  }
+  trackEl.addEventListener('click', () => ui.brief());
 
   let objHtml = null, subOn = false;
   const ui = {
@@ -258,19 +303,35 @@ export function createUI() {
     },
     // the objective line: a subtitle takes it while someone speaks, the objective waits for the gap
     sub(speaker, text, color = '#FFFFFF') {
+      // (the line's recorded voice, if it has one: wagmi/radio/voices.js plays it once per showing)
+      window.WAGMI?.voice?.sub?.(speaker, text);
       if (!text) { subOn = false; subEl.classList.add('hide'); if (objHtml) objEl.classList.remove('hide'); return; }
       subEl.innerHTML = (speaker ? `<b style="color:${color}">${esc(speaker.toUpperCase())}</b>` : '') + esc(text);
       subOn = true; subEl.classList.remove('hide'); objEl.classList.add('hide');
+      const last = said[said.length - 1];
+      if (!last || last[2] !== text) { said.push([speaker, color, text]); if (said.length > 12) said.shift(); }
     },
-    objective(parts, secs = 7) {
+    // the objective: the line for a few seconds, the tracker until the next one (track: false leaves the tracker be)
+    objective(parts, secs = 7, { track: keep = true } = {}) {
+      if (keep) track(parts || null);
       if (!parts) { objHtml = null; objEl.classList.add('hide'); return; }
       objHtml = rich(parts); objEl.innerHTML = objHtml;
       if (!subOn) objEl.classList.remove('hide');
       later('obj', secs * 1000, () => { objEl.classList.add('hide'); objHtml = null; });
     },
+    // the brief: the tracker opened on the last lines and help (on: true / false, or a toggle); shut again after 10 s
+    brief(on) {
+      const open = on == null ? !trackEl.classList.contains('open') : !!on;
+      if (open) drawLog();
+      trackEl.classList.toggle('open', open); trackEl.classList.toggle('off', !open && !trackHtml);
+      clearTimeout(briefT); if (open) briefT = setTimeout(() => ui.brief(false), 10000);
+    },
+    // what the pause menu shows: the objective (html and plain), the last lines [speaker, colour, text], the last help
+    recent() { return { objective: trackHtml, text: trackText, lines: said.slice(-6), help: helped.slice(-2) }; },
     help(text, secs = 7) {
       if (!text) { helpEl.classList.remove('on'); return; }
       helpEl.innerHTML = rich(text); helpEl.classList.add('on');
+      if (helped[helped.length - 1] !== helpEl.innerHTML) { helped.push(helpEl.innerHTML); if (helped.length > 6) helped.shift(); }
       later('help', secs * 1000, () => helpEl.classList.remove('on'));
     },
     skip(k) {
@@ -425,5 +486,7 @@ export function createUI() {
     talk(level) { setWave(level); const c = content.querySelector('.clock'); if (c) { const s = Math.floor((performance.now() - waveT) / 1000); c.textContent = `00:${String(s).padStart(2, '0')}`; } },
     hide() { phoneEl.classList.remove('on'); blurEl.classList.remove('on'); },
   };
+  // the pause menu (Esc or P), with the brief's key (B)
+  try { ui.pause = createPause(ui); } catch (err) { console.warn('[wagmi] pause', err); }
   return ui;
 }

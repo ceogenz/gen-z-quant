@@ -1877,7 +1877,9 @@ function buildCityBlocks(scene) {
     blockDetail.footprints.sort((a, b) => a.h - b.h);
     if (xf) placeInFrame(blockDetail, bucketMarks);
     if (blockDetail.maxH > 0) {
-      pushCollider(minX + 0.5, maxX - 0.5, minZ + 0.5, maxZ - 0.5, Math.min(BLOCK_COLLIDER_TOP, blockDetail.maxH));
+      // (on the property line, where the street walls stand: half a metre inside it let a walker's body sink into
+      // the facade)
+      pushCollider(minX, maxX, minZ, maxZ, Math.min(BLOCK_COLLIDER_TOP, blockDetail.maxH));
     }
 
     quadtree.insert(blockDetail);

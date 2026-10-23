@@ -19,6 +19,50 @@ const CAMERA_PRESETS = [
   { id: 'drone',       name: 'Auto-Director Aerial',     short: 'Director',    category: 'scenic', fov: 50 }
 ];
 
+// The follow cameras' lens keeps LENS_PAD m off the buildings (the near plane, 0.35 m out, stays clear of a wall)
+const LENS_PAD = 0.3;
+// How far a line from p (unit direction ux, uy, uz) runs, up to len, before it comes within LENS_PAD of one of the
+// boxes: the controllers' colliders, boxes from the ground up to maxY, some turned (obb). A box the line starts within
+// the pad of counts at its own size, one it starts inside not at all.
+function rayClear(p, ux, uy, uz, len, boxes) {
+  let t = len;
+  for (const c of boxes) {
+    if (c.carOnly || p.y - LENS_PAD > c.maxY && uy >= 0) continue;
+    let ox = p.x, oz = p.z, dx = ux, dz = uz, x0 = c.minX, x1 = c.maxX, z0 = c.minZ, z1 = c.maxZ;
+    if (c.obb) {
+      const o = c.obb;
+      const rx = p.x - o.cx;
+      const rz = p.z - o.cz;
+      ox = rx * o.cs - rz * o.sn;
+      oz = rx * o.sn + rz * o.cs;
+      dx = ux * o.cs - uz * o.sn;
+      dz = ux * o.sn + uz * o.cs;
+      x0 = -o.hx; x1 = o.hx; z0 = -o.hz; z1 = o.hz;
+    }
+    const within = (m) => ox > x0 - m && ox < x1 + m && oz > z0 - m && oz < z1 + m && p.y < c.maxY + m;
+    if (within(0)) continue;
+    const pad = within(LENS_PAD) ? 0 : LENS_PAD;
+    let t0 = 0;
+    let t1 = t;
+    for (const [o, d, lo, hi] of [[ox, dx, x0 - pad, x1 + pad], [p.y, uy, -1e4, c.maxY + pad], [oz, dz, z0 - pad, z1 + pad]]) {
+      if (Math.abs(d) < 1e-9) {
+        if (o < lo || o > hi) { t0 = Infinity; break; }
+        continue;
+      }
+      let a = (lo - o) / d;
+      let b = (hi - o) / d;
+      if (a > b) [a, b] = [b, a];
+      if (a > t0) t0 = a;
+      if (b < t1) t1 = b;
+      if (t0 > t1) break;
+    }
+    if (t0 <= t1 && t0 < t) t = t0;
+  }
+  return t;
+}
+// Ways round the player a blocked follow camera may swing to (rad off straight behind him)
+const SWINGS = [0.45, -0.45, 0.9, -0.9, 1.35, -1.35, 1.8, -1.8, 2.3, -2.3];
+
 class CameraSystem {
   constructor(domElement, controllerManager) {
     this.domElement = domElement;
@@ -48,8 +92,17 @@ class CameraSystem {
     this.followLookOffset = new THREE.Vector3();
     this.followBaseY = 0;
     this.smoothedSpeed = 0;
+    // A car's own lens (entity.chase, see update()): on, how far its speed has widened it, and the fov it makes (null:
+    // the preset's), for whatever else sets the fov over the camera's (wagmi/combat/camera.js)
+    this._lens = false;
+    this._kick = 0;
+    this.lensFov = null;
     this._desiredPos = new THREE.Vector3();
     this._desiredLook = new THREE.Vector3();
+    // Clear view of the player (keepInView): the lens's boom, swing round him and lift, and where it looks
+    this._view = null;
+    this._pivot = new THREE.Vector3();
+    this._look = new THREE.Vector3();
 
     this.bindPointerControls();
   }
@@ -140,6 +193,7 @@ class CameraSystem {
     this.followOffset.set(0, 0, 0);
     this.followLookOffset.set(0, 0, 0);
     this.followBaseY = 0;
+    this._view = null;
     this.setCameraPreset('chase', true);
   }
 
@@ -172,12 +226,33 @@ class CameraSystem {
     const speedLag = this.smoothedSpeed * 0.1;
 
     const totalYaw = entity.heading + this.orbitYawOffset;
+    // (out of a car that sets its own lens: the preset's back)
+    if (this._lens && !(this.activePresetId === 'chase' && entity.chase)) {
+      this._lens = false;
+      this._kick = 0;
+      this.lensFov = null;
+      this.camera.fov = this.getActivePreset().fov;
+      this.camera.updateProjectionMatrix();
+    }
 
     switch (this.activePresetId) {
       case 'chase': {
-        const dist = entity.chaseDistance * this.zoomMultiplier * (1 + Math.min(0.25, this.smoothedSpeed * 0.01));
+        // (WAGMI City: a car that frames itself, entity.chase: its own lens, a short pull back with speed instead of the
+        // long one, and the lens widening with speed and more on the boost, so the car stays big and speed still reads)
+        const ch = entity.chase;
+        const dist = ch
+          ? entity.chaseDistance * this.zoomMultiplier + ch.pull * this.smoothedSpeed
+          : entity.chaseDistance * this.zoomMultiplier * (1 + Math.min(0.25, this.smoothedSpeed * 0.01));
         const height = entity.chaseHeight * this.zoomMultiplier + Math.sin(this.orbitPitchOffset) * dist * 0.85;
-        const horizDist = Math.cos(this.orbitPitchOffset) * dist + speedLag;
+        const horizDist = Math.cos(this.orbitPitchOffset) * dist + (ch ? 0 : speedLag);
+        if (ch) {
+          const kick = ch.kick * Math.min(1, this.smoothedSpeed / ch.vmax) + (entity.boosting ? ch.boostKick : 0);
+          this._kick += (kick - this._kick) * (1 - Math.exp(-dt * (kick > this._kick ? 3.0 : 1.4)));
+          this.lensFov = ch.fov + this._kick;
+          this.camera.fov = this.lensFov;
+          this.camera.updateProjectionMatrix();
+          this._lens = true;
+        }
 
         desiredPos.set(
           entity.position.x - Math.sin(totalYaw) * horizDist,
@@ -185,11 +260,13 @@ class CameraSystem {
           entity.position.z - Math.cos(totalYaw) * horizDist
         );
 
+        // (WAGMI City: ahead the way the camera faces round him, not the way he faces: dragged round to his front or
+        // side, he stays in the middle of the frame)
         const lookUpBias = entity.type === 'helicopter' ? 0.2 : (entity.type === 'car' ? 0.52 : 1.55);
         desiredLook.set(
-          entity.position.x + Math.sin(entity.heading) * 5.2,
+          entity.position.x + Math.sin(totalYaw) * 5.2,
           entity.position.y + entity.cameraTargetOffset.y + lookUpBias,
-          entity.position.z + Math.cos(entity.heading) * 5.2
+          entity.position.z + Math.cos(totalYaw) * 5.2
         );
         break;
       }
@@ -344,7 +421,77 @@ class CameraSystem {
     }
 
     this.camera.position.copy(this.currentPos);
-    this.camera.lookAt(this.currentLookAt);
+    this._look.copy(this.currentLookAt);
+    if ((this.activePresetId === 'chase' || this.activePresetId === 'action') && this.followEntity === entity) this.keepInView(entity, dt);
+    else this._view = null;
+    this.camera.lookAt(this._look);
+  }
+
+  // The follow cameras never look at the player through a building nor sit inside one. The boom from his chest (the
+  // car's roof) out to the lens is cut short where it would come within LENS_PAD of a building's collision box: in at
+  // once, eased back out after. Cut down to next to nothing (backed against a wall, turning round in a corner), it
+  // swings round him to the clearest way within reach, no faster than ~140 degrees a second, and back once straight
+  // behind him is clear again; with no clear way at all it rises over him, looking down. (Only the camera moves: the
+  // follow and orbit state are left as they are.)
+  keepInView(entity, dt) {
+    const car = entity.type === 'car';
+    const P = this._pivot.set(entity.position.x, entity.position.y + (car ? 1.15 : entity.type === 'helicopter' ? 1.0 : 1.45), entity.position.z);
+    const cam = this.camera.position;
+    const hx = cam.x - P.x;
+    const hy = cam.y - P.y;
+    const hz = cam.z - P.z;
+    const L = Math.hypot(hx, hy, hz);
+    if (L < 0.05) return;
+    const v = this._view || (this._view = { boom: L, swing: 0, want: 0, lift: 0 });
+    const minBoom = car ? 3.2 : 1.8;
+    const near = this.controllerManager.nearColliders(P.x, P.z, L + 1);
+    // the boom turned `yaw` about him (at the same height), and how far it is clear
+    const dirAt = (yaw, out) => {
+      const c = Math.cos(yaw);
+      const s = Math.sin(yaw);
+      out.x = (hx * c + hz * s) / L;
+      out.y = hy / L;
+      out.z = (-hx * s + hz * c) / L;
+      return out;
+    };
+    const d = this._desiredLook; // (free by now: a scratch vector)
+    const clearAt = (yaw) => { dirAt(yaw, d); return rayClear(P, d.x, d.y, d.z, L, near); };
+
+    let free = clearAt(v.swing);
+    let best = free; // (the clearest way there is: with none, it may rise right over him)
+    if (v.swing === 0 ? free >= minBoom : clearAt(0) >= Math.min(L, minBoom + 0.6)) v.want = 0;
+    else if (free < minBoom && (!car || Math.abs(entity.speed) < 4)) { // (driving, it only pulls in: no swinging round)
+      let top = -Infinity;
+      for (const yaw of SWINGS) {
+        const clear = Math.min(clearAt(yaw), L);
+        const score = clear - 0.35 * Math.abs(yaw - v.swing);
+        if (clear > best) best = clear;
+        if (score > top) { top = score; v.want = yaw; }
+      }
+    }
+    if (v.want !== v.swing) {
+      v.swing += Math.max(-2.4 * dt, Math.min(2.4 * dt, v.want - v.swing));
+      if (Math.abs(v.swing) < 1e-3) v.swing = 0;
+      free = clearAt(v.swing);
+    }
+    const reach = Math.min(free, L);
+    v.boom = reach < v.boom ? reach : v.boom + (reach - v.boom) * (1 - Math.exp(-dt * 2.5));
+    // (over his head while it swings round; right up over him only when there is no clear way round at all)
+    const lift = v.boom < minBoom ? Math.min(best < minBoom ? 2.4 : 0.9, (minBoom - v.boom) * 1.25) : 0;
+    v.lift += (lift - v.lift) * (1 - Math.exp(-dt * (lift > v.lift ? 6 : 2)));
+
+    dirAt(v.swing, d);
+    cam.set(P.x + d.x * v.boom, P.y + d.y * v.boom + v.lift, P.z + d.z * v.boom);
+    // ...looking more at him the further round and up it has gone (risen over him: down at his feet); on foot, and pulled
+    // in close, more at him than past him too (else his head drops out of the bottom of the frame)
+    const turn = Math.max(Math.min(1, Math.abs(v.swing) / 1.2) * 0.85, car ? 0 : Math.min(0.75, Math.max(0, 1 - v.boom / L) * 1.3));
+    if (turn > 0) this._look.lerp(P, turn);
+    const up = Math.min(1, v.lift / 1.6);
+    if (up > 0) {
+      const fx = Math.sin(entity.heading);
+      const fz = Math.cos(entity.heading);
+      this._look.lerp(d.set(P.x + fx * 0.8, entity.position.y + 0.2, P.z + fz * 0.8), up * 0.85);
+    }
   }
 }
 

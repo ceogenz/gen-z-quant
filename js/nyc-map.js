@@ -346,6 +346,148 @@ for (const r of ROADS) {
 }
 const ROAD_NAME_COUNT = new Set(ROAD_LABELS.map((l) => l.text)).size;
 
+// A click on the full map sets a waypoint (GTA has no teleport); ?debug brings the sandbox's click-to-teleport back
+const DEBUG_TELEPORT = /[?&]debug\b/.test(location.search);
+
+// The search's names, folded: lower case, no punctuation, 'street' st, 'avenue' ave, 'square' sq, 'ninth' 9th
+const ORDINALS = { first: '1st', second: '2nd', third: '3rd', fourth: '4th', fifth: '5th', sixth: '6th', seventh: '7th', eighth: '8th', ninth: '9th', tenth: '10th', eleventh: '11th', twelfth: '12th' };
+function foldName(s) {
+  return String(s || '').toLowerCase().replace(/&/g, ' and ').replace(/['’.]/g, '').replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\bstreet\b/g, 'st').replace(/\bavenue\b/g, 'ave').replace(/\bsquare\b/g, 'sq')
+    .replace(/\b(first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth|eleventh|twelfth)\b/g, (w) => ORDINALS[w]).trim();
+}
+// Named places for the search (built the first time it is asked): the landmarks, the squares, the parks (the biggest
+// of each name, at the middle of its biggest ring) and the piers
+let SEARCH_PLACES = null;
+function searchPlaces() {
+  if (SEARCH_PLACES) return SEARCH_PLACES;
+  const out = [];
+  const seen = new Set();
+  const add = (name, x, z, kind, alias = '') => {
+    const key = foldName(name);
+    if (!name || !key || seen.has(key) || !Number.isFinite(x) || !Number.isFinite(z)) return;
+    seen.add(key);
+    out.push({ name, x, z, kind, key, alias: alias ? foldName(alias) : '' });
+  };
+  for (const l of NYC_LANDMARKS) add(l.short, l.x, l.z, 'Landmark', l.name);
+  for (const p of GEO.plazas || []) add(p.name, (p.a[0] + p.b[0]) / 2, (p.a[1] + p.b[1]) / 2, 'Square');
+  // (Greeley Square: Herald Square's southern half, Broadway & 6th Ave at W 32nd-33rd St)
+  add('Greeley Square', -300, 762, 'Square');
+  for (const p of [...(GEO.parks || [])].sort((a, b) => (b.acres || 0) - (a.acres || 0))) {
+    let ring = null;
+    for (const r of p.rings || []) if (!ring || r.length > ring.length) ring = r;
+    if (!ring || ring.length < 2) continue;
+    let sx = 0;
+    let sz = 0;
+    for (let i = 0; i < ring.length; i += 2) {
+      sx += ring[i];
+      sz += ring[i + 1];
+    }
+    add(p.name, sx / (ring.length / 2), sz / (ring.length / 2), 'Park');
+  }
+  for (const [name, s] of Object.entries(GEO.landmarks || {})) add(name, s.x, s.z, 'Landmark');
+  for (const p of GEO.piers || []) if (p.name) add(p.name, p.cx, p.cz, 'Pier');
+  SEARCH_PLACES = out;
+  return out;
+}
+
+// A junction searched for (folded): two roads either side of 'and' / '&' / 'at' / 'x' ('ninth ave and 28th', '5th &
+// 42nd st'), every word of a side the start of one of the road's; where they cross (their centrelines, the CSCL's),
+// one per place: [{ name: '9th Ave & W 28th St', x, z }]
+function findJunctions(k) {
+  const sides = k.split(/ (?:and|at|x) /);
+  if (sides.length !== 2 || !sides[0] || !sides[1]) return [];
+  const roadsFor = (side) => {
+    const ws = side.split(' ');
+    return ROAD_LABELS.filter((l) => { const kw = foldName(l.text).split(' '); return ws.every((w) => kw.some((x) => x.startsWith(w))); });
+  };
+  const A = roadsFor(sides[0]);
+  const B = roadsFor(sides[1]);
+  const out = [];
+  if (!A.length || !B.length || A.length * B.length > 6000) return out;
+  for (const a of A) {
+    for (const b of B) {
+      // (their boxes 20 m apart or more: they don't meet)
+      if (a.text === b.text || a.minX > b.maxX + 20 || b.minX > a.maxX + 20 || a.minZ > b.maxZ + 20 || b.minZ > a.maxZ + 20) continue;
+      const P = a.road.pts;
+      const Q = b.road.pts;
+      for (let i = 0; i + 1 < P.length; i++) {
+        const p0 = P[i];
+        const p1 = P[i + 1];
+        const rx = p1.x - p0.x;
+        const rz = p1.z - p0.z;
+        for (let j = 0; j + 1 < Q.length; j++) {
+          const q0 = Q[j];
+          const q1 = Q[j + 1];
+          const sx = q1.x - q0.x;
+          const sz = q1.z - q0.z;
+          const den = rx * sz - rz * sx;
+          const lr = Math.hypot(rx, rz);
+          const ls = Math.hypot(sx, sz);
+          if (Math.abs(den) < 0.3 * lr * ls) continue; // (crossing at a real angle, not running alongside)
+          const t = ((q0.x - p0.x) * sz - (q0.z - p0.z) * sx) / den;
+          const u = ((q0.x - p0.x) * rz - (q0.z - p0.z) * rx) / den;
+          // (within the two stretches, or up to 20 m past an end: a road broken off round a square, Herald Square's)
+          if (t < -20 / lr || t > 1 + 20 / lr || u < -20 / ls || u > 1 + 20 / ls) continue;
+          const x = p0.x + rx * t;
+          const z = p0.z + rz * t;
+          if (out.some((o) => Math.hypot(o.x - x, o.z - z) < 40)) continue;
+          out.push({ name: `${a.text} & ${b.text}`, x, z });
+        }
+      }
+    }
+  }
+  return out.slice(0, 4);
+}
+
+// The search's pick on the full map: a cyan pin, its name on a dark tab over it
+function drawSearchPin(ctx, x, y, name, map) {
+  ctx.save();
+  ctx.fillStyle = 'rgba(8, 11, 15, 0.9)';
+  ctx.beginPath();
+  ctx.arc(x, y, 9, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = MAP.search;
+  ctx.beginPath();
+  ctx.arc(x, y, 7, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#0b1220';
+  ctx.beginPath();
+  ctx.arc(x, y, 2.6, 0, Math.PI * 2);
+  ctx.fill();
+  if (name) {
+    ctx.font = `600 12px ${FONT}`;
+    const w = map.textWidth(ctx, name) + 14;
+    ctx.fillStyle = 'rgba(8, 11, 15, 0.86)';
+    ctx.beginPath();
+    ctx.roundRect(x - w / 2, y - 36, w, 22, 6);
+    ctx.fill();
+    ctx.fillStyle = '#f6f5f2';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(name, x, y - 25);
+  }
+  ctx.restore();
+}
+
+const SEARCH_CSS = `
+.map-search-results { position: absolute; z-index: 6; display: none; padding: 6px; max-height: min(60vh, 420px); overflow: auto; }
+.map-search-results.on { display: block; }
+.map-search-results .hit { display: flex; align-items: baseline; gap: 10px; width: 100%; padding: 9px 12px; border: 0; border-radius: 10px; background: none; color: var(--text); font: inherit; font-size: 13.5px; text-align: left; cursor: pointer; }
+.map-search-results .hit.sel, .map-search-results .hit:hover { background: var(--hover); }
+.map-search-results .hit b { font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.map-search-results .hit span { margin-left: auto; flex: none; font-size: 11.5px; color: var(--text-3); white-space: nowrap; }
+.map-search-results .hit span.k { color: #FFC93C; }
+.map-search-results .none { padding: 10px 12px; font-size: 13px; color: var(--text-2); }
+.map-search-results .pick { display: flex; align-items: center; gap: 14px; padding: 6px 6px 6px 12px; }
+.map-search-results .pick div { min-width: 0; }
+.map-search-results .pick b { display: block; font-size: 14px; font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.map-search-results .pick small { display: block; margin-top: 2px; font-size: 11.5px; color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.map-search-results .pick button { margin-left: auto; flex: none; padding: 8px 14px; border: 0; border-radius: 10px; background: #FFC93C; color: #17140a; font: inherit; font-size: 13px; font-weight: 650; cursor: pointer; }
+.map-search-results .pick button.set { background: rgba(199, 125, 255, 0.22); color: #ecd9ff; }
+.map-search-results .pick kbd { font: inherit; font-size: 11px; opacity: 0.6; margin-left: 6px; }
+`;
+
 /** A map viewport: centre (cx, cz) in world metres, s pixels per metre, w x h CSS pixels on a canvas of pixel ratio dpr */
 class MapView {
   constructor(cx, cz, s, w, h, dpr = 1) {
@@ -481,6 +623,24 @@ class NYCMapSystem {
     this.hoverWorld = null;
     this.searchHighlight = '';
     this.searchPath = null;
+    // the search's hits (a list under the box) and the one picked (a pin on the map, 'Set waypoint')
+    this.searchHits = [];
+    this.searchSel = 0;
+    this.searchPick = null;
+    this.userWaypoint = null; // the player's own waypoint (a click on the map); onWaypoint(wp) hands it to the game's GPS
+    this.onWaypoint = null;
+    this.searchExtra = null; // () => [{ name, sub, x, z, kind }]: the game's own places (the mission's), found first
+    if (!document.getElementById('map-search-css')) {
+      const st = document.createElement('style');
+      st.id = 'map-search-css';
+      st.textContent = SEARCH_CSS;
+      document.head.appendChild(st);
+    }
+    this.elResults = document.createElement('div');
+    this.elResults.className = 'panel map-search-results';
+    if (this.modal) this.modal.appendChild(this.elResults);
+    const hint = document.getElementById('fullmap-hover-info');
+    if (hint) hint.textContent = this.hintText();
     this.textWidths = new Map();
     // Default GTA 6-style active GPS waypoint (Times Square / Broadway)
     const ts = NYC_LANDMARKS.find((l) => l.id === 'timessquare') || { x: 0, z: 0 };
@@ -548,7 +708,34 @@ class NYCMapSystem {
 
     if (this.elSearchInput) {
       this.elSearchInput.addEventListener('input', () => this.search(this.elSearchInput.value));
+      this.elSearchInput.addEventListener('keydown', (e) => {
+        const n = this.searchHits.length;
+        if (e.code === 'Escape') {
+          if (!this.elSearchInput.value) return; // (empty: Esc closes the map)
+          e.preventDefault();
+          this.elSearchInput.value = '';
+          this.search('');
+        } else if ((e.code === 'ArrowDown' || e.code === 'ArrowUp') && n) {
+          e.preventDefault();
+          this.searchSel = (this.searchSel + (e.code === 'ArrowDown' ? 1 : -1) + n) % n;
+          this.drawSearchResults();
+        } else if (e.code === 'Enter' || e.code === 'NumpadEnter') {
+          e.preventDefault();
+          if (this.searchPick && !n) this.setWaypoint(this.searchPick, { toggle: false });
+          else if (n) this.pickSearchHit(this.searchHits[Math.min(this.searchSel, n - 1)]);
+          else this.drawSearchResults(true);
+        }
+        e.stopPropagation();
+      });
+      this.elSearchInput.addEventListener('focus', () => this.drawSearchResults());
     }
+    this.elResults.addEventListener('click', (e) => {
+      const b = e.target.closest('button');
+      if (!b) return;
+      if (b.dataset.hit != null) this.pickSearchHit(this.searchHits[+b.dataset.hit]);
+      else if (b.dataset.wp != null && this.searchPick) this.setWaypoint(this.searchPick, { toggle: b.classList.contains('set') });
+    });
+    this.elResults.addEventListener('pointerdown', (e) => e.stopPropagation());
 
     window.addEventListener('keydown', (e) => {
       if (e.code === 'Escape' && this.isFullMapOpen) {
@@ -596,7 +783,10 @@ class NYCMapSystem {
           const wPos = this.screenToWorld(mx, my, rect.width, rect.height);
           this.hoverWorld = wPos;
           if (this.elHoverInfo) {
-            this.elHoverInfo.textContent = `${getLocationLabel(wPos.x, wPos.z)} · Click to teleport here`;
+            const wp = this.userWaypoint;
+            const onWp = wp && Math.hypot(wp.x - wPos.x, wp.z - wPos.z) * this.viewZoom < 14;
+            this.elHoverInfo.textContent = `${getLocationLabel(wPos.x, wPos.z)} · ${
+              this.canTeleport() ? 'Click to teleport here' : onWp ? 'Click to remove the waypoint' : 'Click to set a waypoint'}`;
           }
         }
       });
@@ -611,13 +801,11 @@ class NYCMapSystem {
           const my = e.clientY - rect.top;
           if (mx >= 0 && mx <= rect.width && my >= 0 && my <= rect.height) {
             const wPos = this.clampToManhattan(this.screenToWorld(mx, my, rect.width, rect.height));
-            this.waypoint = {
-              x: wPos.x,
-              z: wPos.z,
-              name: getLocationLabel(wPos.x, wPos.z)
-            };
-            if (this.onTeleport) {
+            if (this.canTeleport()) {
+              this.waypoint = { x: wPos.x, z: wPos.z, name: getLocationLabel(wPos.x, wPos.z) };
               this.onTeleport(wPos.x, wPos.z);
+            } else {
+              this.setWaypoint(wPos);
             }
             this.renderFullMap();
           }
@@ -649,43 +837,192 @@ class NYCMapSystem {
     }
   }
 
+  // The footer's line: what a click does here
+  hintText() {
+    const touch = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
+    return `${touch ? 'Tap' : 'Click'} to ${this.canTeleport() ? 'teleport' : 'set a waypoint'} · Drag to pan · ${touch ? 'Use + / − to zoom' : 'Scroll to zoom'}`;
+  }
+
+  // Teleporting is the sandbox's, behind ?debug (with the city's own handler); everywhere else a click sets a waypoint
+  canTeleport() {
+    return DEBUG_TELEPORT && typeof this.onTeleport === 'function';
+  }
+
   /**
-   * Street / landmark search: highlights every stretch of the matching streets and frames them (or flies to the
-   * matching landmark)
+   * The player's own waypoint: set at p (a click on it again takes it away). The game's GPS takes it through
+   * onWaypoint (it routes there and draws it); without one, the map's own route goes there.
+   */
+  setWaypoint(p, { toggle = true } = {}) {
+    const cur = this.userWaypoint;
+    const on = toggle && cur && Math.hypot(cur.x - p.x, cur.z - p.z) * this.viewZoom < 14;
+    const wp = on ? null : { x: p.x, z: p.z, name: p.name || getLocationLabel(p.x, p.z) };
+    this.userWaypoint = wp;
+    if (this.onWaypoint) this.onWaypoint(wp);
+    else this.waypoint = wp;
+    if (this.searchPick) this.drawSearchResults();
+    this.renderFullMap();
+  }
+
+  /**
+   * Street / place search: as you type, the hits (the game's own places first, then landmarks, squares, parks, piers
+   * and streets) in a list under the box and every stretch of the matching streets highlighted; Enter (or a click)
+   * picks one: the map goes there, a pin on it, and 'Set waypoint'
    */
   search(text) {
     const q = String(text || '').trim().toLowerCase();
     this.searchHighlight = q;
     this.searchPath = null;
+    this.searchPick = null;
+    this.searchSel = 0;
+    this.searchHits = q ? this.findPlaces(q) : [];
     if (q.length > 0) {
-      const lmMatch = NYC_LANDMARKS.find((l) => l.name.toLowerCase().includes(q) || l.short.toLowerCase().includes(q));
       const roads = ROAD_LABELS.filter((l) => l.lower.includes(q) || l.raw.includes(q));
-      if (roads.length) {
-        this.searchPath = new Path2D();
-        const b = { minX: Infinity, maxX: -Infinity, minZ: Infinity, maxZ: -Infinity };
-        for (const l of roads) {
-          addLine(this.searchPath, l.road.pts);
-          b.minX = Math.min(b.minX, l.minX);
-          b.maxX = Math.max(b.maxX, l.maxX);
-          b.minZ = Math.min(b.minZ, l.minZ);
-          b.maxZ = Math.max(b.maxZ, l.maxZ);
-        }
-        this.searchBounds = b;
-      }
-      if (lmMatch) {
-        this.viewCenterX = lmMatch.x;
-        this.viewCenterZ = lmMatch.z;
-        this.viewZoom = Math.max(this.viewZoom, 0.9);
-      } else if (roads.length) {
-        const b = this.searchBounds;
-        const { w, h } = this.fullSize();
-        this.viewCenterX = (b.minX + b.maxX) * 0.5;
-        this.viewCenterZ = (b.minZ + b.maxZ) * 0.5;
-        const fit = Math.min(w / ((b.maxX - b.minX) * 1.3 + 1), h / ((b.maxZ - b.minZ) * 1.3 + 1));
-        this.viewZoom = Math.max(0.05, Math.min(1.2, fit));
-      }
+      if (roads.length) this.highlightRoads(roads);
     }
+    this.drawSearchResults();
     this.renderFullMap();
+  }
+
+  highlightRoads(roads) {
+    this.searchPath = new Path2D();
+    const b = { minX: Infinity, maxX: -Infinity, minZ: Infinity, maxZ: -Infinity };
+    for (const l of roads) {
+      addLine(this.searchPath, l.road.pts);
+      b.minX = Math.min(b.minX, l.minX);
+      b.maxX = Math.max(b.maxX, l.maxX);
+      b.minZ = Math.min(b.minZ, l.minZ);
+      b.maxZ = Math.max(b.maxZ, l.maxZ);
+    }
+    this.searchBounds = b;
+  }
+
+  // The best hits for q, best first (at most 7): a whole-name match, then the name's start, a word's start, anywhere
+  findPlaces(q) {
+    const k = foldName(q);
+    if (!k) return [];
+    const words = k.split(' ');
+    const score = (key) => {
+      if (!key) return 0;
+      if (key === k) return 100;
+      if (key.startsWith(k)) return 80;
+      if ((' ' + key).includes(' ' + k)) return 60;
+      if (key.includes(k)) return 40;
+      return words.every((w) => key.includes(w)) ? 25 : 0;
+    };
+    const hits = [];
+    let extra = [];
+    try {
+      extra = this.searchExtra ? this.searchExtra() || [] : [];
+    } catch (e) {
+      extra = [];
+    }
+    for (const p of extra) {
+      const sc = score(foldName(p.name));
+      if (sc) hits.push({ name: p.name, sub: p.sub || 'Mission', x: p.x, z: p.z, kind: 'Mission', score: sc + 30 });
+    }
+    for (const p of searchPlaces()) {
+      const sc = Math.max(score(p.key), score(p.alias) - 5);
+      if (sc) hits.push({ name: p.name, sub: p.kind, x: p.x, z: p.z, kind: p.kind, score: sc });
+    }
+    const streets = new Set();
+    for (const l of ROAD_LABELS) {
+      if (streets.has(l.text)) continue;
+      const sc = score(foldName(l.text));
+      if (!sc) continue;
+      streets.add(l.text);
+      hits.push({ name: l.text, sub: 'Street', kind: 'Street', score: sc - 10 });
+    }
+    for (const j of findJunctions(k)) hits.push({ ...j, sub: 'Junction', kind: 'Junction', score: 95 });
+    hits.sort((a, b) => b.score - a.score || a.name.length - b.name.length);
+    const out = [];
+    const seen = new Set();
+    for (const h of hits) {
+      const key = foldName(h.name);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(h);
+      if (out.length >= 7) break;
+    }
+    return out;
+  }
+
+  // A hit picked: the map goes to it (a street: all of it, the pin at its nearest point to the player), the list
+  // gives way to its card
+  pickSearchHit(hit) {
+    if (!hit) return;
+    const { w, h } = this.fullSize();
+    if (hit.kind === 'Street') {
+      const roads = ROAD_LABELS.filter((l) => l.text === hit.name);
+      this.highlightRoads(roads);
+      this.searchHighlight = hit.name.toLowerCase();
+      const b = this.searchBounds;
+      this.viewCenterX = (b.minX + b.maxX) * 0.5;
+      this.viewCenterZ = (b.minZ + b.maxZ) * 0.5;
+      const fit = Math.min(w / ((b.maxX - b.minX) * 1.3 + 1), h / ((b.maxZ - b.minZ) * 1.3 + 1));
+      this.viewZoom = Math.max(0.05, Math.min(1.2, fit));
+      const ent = this.controllerManager.getActiveEntity();
+      let best = null;
+      let bd = Infinity;
+      for (const l of roads) {
+        const pts = l.road.pts;
+        for (let i = 0; i + 1 < pts.length; i++) {
+          const a = pts[i];
+          const c = pts[i + 1];
+          const dx = c.x - a.x;
+          const dz = c.z - a.z;
+          const t = Math.max(0, Math.min(1, ((ent.position.x - a.x) * dx + (ent.position.z - a.z) * dz) / (dx * dx + dz * dz || 1)));
+          const x = a.x + dx * t;
+          const z = a.z + dz * t;
+          const d = Math.hypot(x - ent.position.x, z - ent.position.z);
+          if (d < bd) {
+            bd = d;
+            best = { x, z };
+          }
+        }
+      }
+      if (!best) return;
+      this.searchPick = { name: hit.name, sub: getLocationLabel(best.x, best.z), x: best.x, z: best.z, kind: 'Street' };
+    } else {
+      this.viewCenterX = hit.x;
+      this.viewCenterZ = hit.z;
+      this.viewZoom = Math.max(this.viewZoom, 0.9);
+      this.searchHighlight = '';
+      this.searchPath = null;
+      this.searchPick = { name: hit.name, sub: `${hit.kind === 'Mission' ? 'Mission · ' : hit.kind + ' · '}${getLocationLabel(hit.x, hit.z)}`, x: hit.x, z: hit.z, kind: hit.kind };
+    }
+    this.searchHits = [];
+    this.drawSearchResults();
+    this.renderFullMap();
+  }
+
+  // The list under the box: the hits, 'No results for ...', or the picked place's card
+  drawSearchResults(showNone = false) {
+    const el = this.elResults;
+    const input = this.elSearchInput;
+    if (!el || !input) return;
+    const q = input.value.trim();
+    const esc = (t) => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    let html = '';
+    if (this.searchPick) {
+      const p = this.searchPick;
+      const wp = this.userWaypoint;
+      const set = wp && Math.hypot(wp.x - p.x, wp.z - p.z) < 1;
+      html = `<div class="pick"><div><b>${esc(p.name)}</b><small>${esc(p.sub || '')}</small></div>
+        <button type="button" data-wp="1" class="${set ? 'set' : ''}">${set ? 'Remove waypoint' : 'Set waypoint'}${set ? '' : '<kbd>Enter</kbd>'}</button></div>`;
+    } else if (this.searchHits.length) {
+      html = this.searchHits.map((hh, i) => `<button type="button" class="hit${i === this.searchSel ? ' sel' : ''}" data-hit="${i}"><b>${esc(hh.name)}</b><span class="${hh.kind === 'Mission' ? 'k' : ''}">${esc(hh.sub || hh.kind)}</span></button>`).join('');
+    } else if (q && (showNone || q.length >= 2)) {
+      html = `<div class="none">No results for “${esc(q)}”. Try a street, a park or a landmark.</div>`;
+    }
+    el.innerHTML = html;
+    el.classList.toggle('on', !!html && this.isFullMapOpen);
+    if (!html || !this.modal) return;
+    const wrap = input.closest('.fullmap-search-wrap') || input;
+    const r = wrap.getBoundingClientRect();
+    const m = this.modal.getBoundingClientRect();
+    el.style.left = `${r.left - m.left}px`;
+    el.style.top = `${r.bottom - m.top + 8}px`;
+    el.style.width = `${Math.max(280, r.width)}px`;
   }
 
   cancelPan() {
@@ -700,6 +1037,10 @@ class NYCMapSystem {
     this.isFullMapOpen = Boolean(open);
     if (!this.isFullMapOpen) this.cancelPan();
     if (this.onToggle) this.onToggle(this.isFullMapOpen);
+    const hint = document.getElementById('fullmap-hover-info');
+    if (hint && this.isFullMapOpen) hint.textContent = this.hintText();
+    if (!this.isFullMapOpen && this.elResults) this.elResults.classList.remove('on');
+    else if (this.isFullMapOpen && this.elSearchInput && this.elSearchInput.value) requestAnimationFrame(() => this.drawSearchResults());
     if (!this.modal) return;
     this.modal.classList.toggle('hidden', !this.isFullMapOpen);
     if (this.isFullMapOpen) {
@@ -1142,6 +1483,9 @@ class NYCMapSystem {
       drawRoute(ctx, toX(ent.position.x), toY(ent.position.z), wx, wy, 4);
       drawWaypoint(ctx, wx, wy, 7);
     }
+
+    // The search's pick: a pin with its name
+    if (this.searchPick) drawSearchPin(ctx, toX(this.searchPick.x), toY(this.searchPick.z), this.searchPick.name, this);
 
     // Live Player Blip & Heading Arrow, with a slow pulse to find it at a glance
     const px = toX(ent.position.x);

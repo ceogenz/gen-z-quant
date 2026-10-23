@@ -897,17 +897,18 @@ function createPersonMaterial(pose) {
 class PersonCrowd {
   /**
    * @param {number} maxCount - most people drawn at once
-   * @param {{ farDistance?: number, castShadow?: boolean }} options - beyond farDistance (m) people use the far LOD
+   * @param {{ farDistance?: number, castShadow?: boolean, farShadow?: boolean, name?: string }} options - beyond
+   *   farDistance (m) people use the far LOD (casting shadows unless farShadow is false); name prefixes the meshes'
    */
-  constructor(maxCount, { farDistance = 34, castShadow = true } = {}) {
+  constructor(maxCount, { farDistance = 34, castShadow = true, farShadow = true, name = 'People' } = {}) {
     this.farDistance = farDistance;
     this.lods = [1, 0].map((detail) => {
       const pose = attributeArray(maxCount * STRIDE, 'vec4').toReadOnly();
       const mesh = new THREE.Mesh(buildPersonGeometry(detail), createPersonMaterial(pose));
-      mesh.name = detail ? 'PeopleNear' : 'PeopleFar';
+      mesh.name = name + (detail ? 'Near' : 'Far');
       mesh.count = 1; // one (degenerate) person until the first frame, so the pipelines compile up front
       mesh.frustumCulled = false;
-      mesh.castShadow = castShadow;
+      mesh.castShadow = castShadow && (detail === 1 || farShadow);
       mesh.receiveShadow = true;
       return { pose, mesh, count: 0, max: maxCount };
     });
@@ -1421,6 +1422,57 @@ class PersonRig {
       _v.copy(j[LIMB.toe[i]]).sub(j[LIMB.foot[i]]).multiplyScalar(s).applyQuaternion(_qa).add(ankle);
       qY(_q2, footYaw).multiply(qX(_q, foot.pitch + foot.toe));
       this.writeBone(LIMB.toe[i], _q2, _v);
+    }
+  }
+
+  /**
+   * Knocked flying (WAGMI City, wagmi/street): the whole body turned by `q` (world; +Y head, +Z front, +X its left)
+   * about the pelvis joint at `pos`. `flail` 0..1: limbs flung out, windmilling and kicking (in the air) .. limp,
+   * spread a little (lying); `curl` 0..1: knees and arms drawn in (getting up); `t` the clock they flail by. The walk
+   * picks up afresh after it (reset).
+   */
+  tumble(pos, q, { flail = 0, curl = 0, t = 0 } = {}) {
+    const s = this.s;
+    const j = this.bind;
+    const k = this.seed * 3.7;
+    this.placed = false;
+    this.writeBone(BONE.PELVIS, q, pos);
+    _qChest.copy(q).multiply(qX(_q, 0.08 + 0.3 * flail * Math.sin(t * 6.3 + k) + 0.35 * curl));
+    _chest.copy(j[BONE.CHEST]).sub(j[BONE.PELVIS]).multiplyScalar(s).applyQuaternion(q).add(pos);
+    this.writeBone(BONE.CHEST, _qChest, _chest);
+    _qa.copy(_qChest).multiply(qX(_q, 0.1 - 0.35 * flail * Math.sin(t * 8.1 + k * 2)));
+    _v.copy(j[BONE.HEAD]).sub(j[BONE.CHEST]).multiplyScalar(s).applyQuaternion(_qChest).add(_chest);
+    this.writeBone(BONE.HEAD, _qa, _v);
+    for (let i = 0; i < 2; i++) {
+      const side = SIDES[i];
+      const ph = t * (8.6 + i * 1.9) + k + i * 2.1;
+      const abduction = lerp(lerp(0.55, 1.3 + 0.55 * Math.sin(ph), flail), 0.2, curl);
+      const flex = lerp(lerp(0.15, 1.5 * Math.sin(ph * 0.8 + 1), flail), 1.0, curl);
+      const elbow = lerp(lerp(0.3, 0.45 + 0.75 * Math.abs(Math.sin(ph * 1.3)), flail), 1.5, curl);
+      _shoulder.copy(j[LIMB.upperArm[i]]).sub(j[BONE.CHEST]).multiplyScalar(s).applyQuaternion(_qChest).add(_chest);
+      _qUpper.copy(_qChest).multiply(qZ(_q, side * (abduction - ARM_BIND_ABDUCTION))).multiply(qX(_q, -flex));
+      this.writeBone(LIMB.upperArm[i], _qUpper, _shoulder);
+      _v.copy(j[LIMB.forearm[i]]).sub(j[LIMB.upperArm[i]]).multiplyScalar(s).applyQuaternion(_qUpper).add(_shoulder);
+      _q2.copy(_qUpper).multiply(qX(_q, -elbow));
+      this.writeBone(LIMB.forearm[i], _q2, _v);
+    }
+    for (let i = 0; i < 2; i++) {
+      const side = SIDES[i];
+      const ph = t * (7.4 + i * 1.3) + k * 1.7 + i * 3.1;
+      const hip = lerp(lerp(0.12, 0.55 + 0.75 * Math.sin(ph), flail), 1.75, curl);
+      const splay = lerp(lerp(0.14, 0.32 + 0.22 * Math.sin(ph * 0.7), flail), 0.08, curl);
+      const knee = lerp(lerp(0.18, 0.35 + 0.8 * Math.abs(Math.sin(ph * 1.1)), flail), 2.3, curl);
+      _hip.copy(j[LIMB.thigh[i]]).sub(j[BONE.PELVIS]).multiplyScalar(s).applyQuaternion(q).add(pos);
+      _qa.copy(q).multiply(qZ(_q, side * splay)).multiply(qX(_q, -hip));
+      this.writeBone(LIMB.thigh[i], _qa, _hip);
+      _knee.copy(j[LIMB.shin[i]]).sub(j[LIMB.thigh[i]]).multiplyScalar(s).applyQuaternion(_qa).add(_hip);
+      _q2.copy(_qa).multiply(qX(_q, knee));
+      this.writeBone(LIMB.shin[i], _q2, _knee);
+      _ankle.copy(j[LIMB.foot[i]]).sub(j[LIMB.shin[i]]).multiplyScalar(s).applyQuaternion(_q2).add(_knee);
+      _qRoot.copy(_q2).multiply(qX(_q, 0.35 * (1 - curl) - 0.5 * curl));
+      this.writeBone(LIMB.foot[i], _qRoot, _ankle);
+      _v.copy(j[LIMB.toe[i]]).sub(j[LIMB.foot[i]]).multiplyScalar(s).applyQuaternion(_qRoot).add(_ankle);
+      this.writeBone(LIMB.toe[i], _qRoot, _v);
     }
   }
 

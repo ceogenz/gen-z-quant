@@ -2,10 +2,11 @@
 //  - puts Quant (assets/characters/quant.glb, every clip) in place of the procedural walker, his idle, walk, jog, run
 //    and sprint blended from his speed and his jump from the air under him;
 //  - puts Quant's car (wagmi/roadster.js) in place of the taxi, faster, its rocket package firing on the boost;
-//  - lets him get in and out of it, GTA style: F beside the car gets in, F in the car (slow) gets out at its door.
+//  - lets him get in and out of it, GTA style: F beside the car walks him to its door, which swings up, and in; F in it
+//    stops it and gets him out at its door (fast: he dives out). See 'in and out of it'.
 import * as THREE from 'three/webgpu';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { buildRoadster } from './roadster.js';
+import { buildRoadster, createDriver } from './roadster.js';
 
 const app = await new Promise((res) => { const t = setInterval(() => { if (window.__NYC_APP && window.__NYC_APP.controllerManager) { clearInterval(t); res(window.__NYC_APP); } }, 100); });
 const cm = app.controllerManager, person = cm.entities.person, car = cm.entities.car;
@@ -19,13 +20,43 @@ const WAGMI = (window.WAGMI = { app, person, car });
   const rs = buildRoadster(THREE);   // (its own default paint)
   rs.group.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
   car.chassisPivot.add(rs.group);
+  // its size: built at a sports car's, scaled up whole (S) to a big hypercar's, 4.8 m long, 2.2 m wide and 1.28 m tall;
+  // a driver in its seat (rs.anchor) stays his own size, the seat's marks (rs.seat, in the anchor's frame) scaled to
+  // match. body: its box in its own frame (x across it, z along it, top), for all that runs into it or round it;
+  // axle: its axles' distance either side of its middle (the wheels' ground); chase: the chase camera's framing
+  // (js/cameras.js): fov, the pull back per m/s, the lens widening with speed and more on the boost
+  const S = 1.1;
+  rs.group.scale.setScalar(S); rs.anchor.scale.setScalar(1 / S); rs.scale = S;
+  for (const k of Object.keys(rs.seat)) rs.seat[k] = rs.seat[k].map((v) => v * S);
+  Object.assign(rs, { length: rs.length * S, width: rs.width * S, height: rs.height * S });
+  Object.assign(car, { body: { hx: 1.08, z0: -2.33, z1: 2.47, top: 1.28 }, axle: 1.56, mass: 2.0,
+    chaseDistance: 6.7, chaseHeight: 2.0, chase: { fov: 58, pull: 0.012, kick: 2.5, boostKick: 7, vmax: 34 } });
   Object.assign(car, { label: "Quant's car", topSpeed: 34, boostSpeed: 56, accel: 16, boostAccel: 32, roadster: rs });
+  // (the speed panel's name for it, when the city started in the car before this ran)
+  if (cm.activeMode === 'car') { const lab = document.getElementById('hud-active-mode'); if (lab) lab.textContent = car.label; }
   car.onUpdate = (dt, keys, throttle, steer) => {
+    // (stopping for him to get out: car.halt m/s² of brakes, whatever is pressed)
+    if (car.halt) { car.speed -= Math.sign(car.speed) * Math.min(Math.abs(car.speed), car.halt * dt); throttle = 0; steer = 0; car.steerAngle *= 0.8; }
+    car.boosting = !!keys.boost && throttle > 0;
     rs.setThrust(keys.boost && throttle > 0 ? 1 : 0, keys.boost && throttle > 0 ? 0.85 : 0);
     rs.update(dt, car.speed, -steer * 0.9);
   };
-  // (parked, it still settles its thrust)
-  WAGMI.carIdle = (dt) => { if (cm.activeMode !== 'car') { rs.setThrust(0, 0); rs.update(dt, 0, 0); } };
+  // (parked, it still settles its thrust; rolling on with nobody in it, its wheels still turn)
+  WAGMI.carIdle = (dt) => { if (cm.activeMode !== 'car') { rs.setThrust(0, 0); rs.update(dt, car.speed || 0, 0); } };
+  // parked, it is solid to Quant on foot (the city's collision only knows the buildings): its body a box in its own frame
+  // (car.body: x across it, z along it, measured off the model), r m round it; he is put out at its nearest side
+  const BODY = car.body;
+  person.collide = (pos, r) => {
+    if (cm.activeMode === 'car' || !car.mesh.visible || pos.y > car.position.y + BODY.top) return false;
+    const cs = Math.cos(car.heading), sn = Math.sin(car.heading), dx = pos.x - car.position.x, dz = pos.z - car.position.z;
+    const lx = dx * cs - dz * sn, lz = dx * sn + dz * cs;
+    const side = BODY.hx + r - Math.abs(lx), back = lz - (BODY.z0 - r), front = BODY.z1 + r - lz;
+    if (side <= 0 || back <= 0 || front <= 0) return false;
+    let nx = lx, nz = lz;
+    if (side < Math.min(back, front)) nx = Math.sign(lx || 1) * (BODY.hx + r); else nz = back < front ? BODY.z0 - r : BODY.z1 + r;
+    pos.x = car.position.x + nx * cs + nz * sn; pos.z = car.position.z - nx * sn + nz * cs;
+    return true;
+  };
 }
 
 /* ----------------------------------------------------------------- Quant -- */
@@ -190,35 +221,327 @@ const WAGMI = (window.WAGMI = { app, person, car });
 }
 
 /* ------------------------------------------------------- in and out of it -- */
+// GTA style, with the car's doors (roadster.js) and the driver's way in and out of his seat (createDriver):
+//  - F beside it walks him to the driver's door the short way round the car, his hand lifts the door, he gets in, the
+//    door comes down and the engine starts, the camera easing over to the car's. F again or a drive key: in at once. In
+//    a fight, or with that side against a wall: in at once, the door flung up and slammed.
+//  - F in it, slow: it brakes to a stop, the door goes up, he climbs out and stands by it, the door comes down (F or a
+//    move key: out at once). From BAIL m/s up he dives out and rolls, and the car runs on, its door up, till it stops.
+//  - An F the game sends itself (the fight's drag-out, ?fight) works the old way, at once. Whatever else puts him in or
+//    out (a scene's place(), the sandbox's mode keys) is followed: in the car means at the wheel, on foot means out.
+// WAGMI.ride: phase (null, 'walk', 'in', 'stop', 'out' or 'bail'), getIn(quick), getOut(quick), skip(), door() (0..1),
+// driver (createDriver's)
+const BAIL = 10, T_IN = 1.15, T_OUT = 1.05, MOVE = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight']);
+const rs = car.roadster, Q = WAGMI.quant, cs = app.cameraSystem, cam = cs.camera, drv = createDriver(THREE, rs, Q);
+const ride = (WAGMI.ride = { phase: null, mode: null, k: 1, t: 0 });
+const smooth = (x) => { x = Math.min(1, Math.max(0, x)); return x * x * (3 - 2 * x); };
+const wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
+const hdist = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
+const _v = new THREE.Vector3(), _w = new THREE.Vector3(), _cl = new THREE.Vector3();
+// the car's own frame (x across it, +x its left, the driver's side; z along it) to the world's, and back
+const toWorld = (lx, lz, out = new THREE.Vector3()) => { const c = Math.cos(car.heading), s = Math.sin(car.heading); return out.set(car.position.x + lx * c + lz * s, car.position.y, car.position.z - lx * s + lz * c); };
+const toLocal = (p, out = { x: 0, z: 0 }) => { const c = Math.cos(car.heading), s = Math.sin(car.heading), dx = p.x - car.position.x, dz = p.z - car.position.z; out.x = dx * c - dz * s; out.z = dx * s + dz * c; return out; };
+const ground = (p) => cm.getGroundHeight(p.x, p.z, 'person');
+const near = () => Math.hypot(person.position.x - car.position.x, person.position.z - car.position.z) < 4.2 * (rs.scale || 1);
+// (a spot he can't stand on: in a building)
+const walled = (p) => { _v.set(p.x, ground(p), p.z); cm.resolveHorizontalCollision(_v, 0.35, _v.y + 1.0); return hdist(_v, p) > 0.02; };
+const sound = (name, vol = 1, at = null) => { const p = at || toWorld((car.body?.hx ?? 1) + 0.1, 0.1, _w); WAGMI.audio?.play?.(name, { pos: [p.x, p.y + 0.8, p.z], vol }); };
+// (jobs for later, seconds from now; a new move clears them)
+let jobs = [];
+const later = (secs, fn) => jobs.push({ t: secs, fn });
+
+// the driver's door: p its way up (0 to 1, eased on the hinge) going toward want; shut, it thunks (slam: a slam), and
+// starts the engine if he just got in
+const door = { p: 0, want: 0, rate: 2, slam: false };
+function doorTo(want, secs, slam = false) {
+  door.rate = 1 / secs; door.slam = slam;
+  if (door.want === want) return;
+  door.want = want; if (want) sound('doorOpen', 0.9);
+}
+function doorStep(dt) {
+  if (door.p === door.want) return;
+  door.p += Math.sign(door.want - door.p) * Math.min(Math.abs(door.want - door.p), dt * door.rate);
+  if (door.p === 0) { sound(door.slam ? 'doorClose' : 'doorThunk', 1); if (ride.engine) { ride.engine = false; sound('engineStart', 0.9); } }
+  rs.setDoor('L', door.p < 0.5 ? 4 * door.p ** 3 : 1 - (-2 * door.p + 2) ** 3 / 2);
+}
+
+// the camera: over T s from where it was to wherever the city's camera wants it now (it follows the mode); where it was
+// carried along with `with` (a point that moves, as he does diving out of a fast car)
+const blend = { on: false, t: 0, T: 1, pos: new THREE.Vector3(), look: new THREE.Vector3(), with: null, at: new THREE.Vector3(), off: new THREE.Vector3() };
+function camFrom(T, withPt = null) {
+  cam.getWorldDirection(_cl);
+  blend.pos.copy(cam.position); blend.look.copy(cam.position).addScaledVector(_cl, Math.max(2, cam.position.distanceTo(cs.currentLookAt)));
+  Object.assign(blend, { on: true, t: 0, T, with: withPt }); if (withPt) blend.at.copy(withPt);
+}
+{
+  const base = cs.update.bind(cs);
+  cs.update = function (dt, el) {
+    base(dt, el);
+    if (!blend.on) return;
+    blend.t += dt * (ride.slow || 1); const e = smooth(blend.t / blend.T);
+    if (e >= 1 || WAGMI.cutscene || WAGMI.directed) { blend.on = false; return; }
+    const off = blend.with ? blend.off.subVectors(blend.with, blend.at).setY(0) : blend.off.set(0, 0, 0);
+    cam.position.lerpVectors(_v.copy(blend.pos).add(off), cam.position, e); cam.lookAt(_cl.lerpVectors(_w.copy(blend.look).add(off), cs.currentLookAt, e));
+  };
+}
+
+// his way to the door: straight there, or by the corners round the car (its box, his room round it, kept clear), the
+// shortest; as world points
+function route(from) {
+  const B = car.body, hx = B.hx + 0.45, z0 = B.z0 - 0.45, z1 = B.z1 + 0.45, m = 0.62;
+  const S = toLocal(from), D = { x: drv.door[0], z: drv.door[1] };
+  // (pressed up against it: from just off its side)
+  if (Math.abs(S.x) < hx && S.z > z0 && S.z < z1) { const ex = hx - Math.abs(S.x), e0 = S.z - z0, e1 = z1 - S.z; if (ex <= Math.min(e0, e1)) S.x = Math.sign(S.x || 1) * (hx + 0.01); else S.z = e0 < e1 ? z0 - 0.01 : z1 + 0.01; }
+  const crosses = (a, b) => {
+    let t0 = 0, t1 = 1;
+    for (const [p, d, lo, hi] of [[a.x, b.x - a.x, -hx, hx], [a.z, b.z - a.z, z0, z1]]) {
+      if (Math.abs(d) < 1e-9) { if (p <= lo || p >= hi) return false; continue; }
+      let u0 = (lo - p) / d, u1 = (hi - p) / d; if (u0 > u1) [u0, u1] = [u1, u0];
+      t0 = Math.max(t0, u0); t1 = Math.min(t1, u1); if (t1 - t0 <= 1e-6) return false;
+    }
+    return true;
+  };
+  const N = [S, ...[[1, 1], [1, -1], [-1, 1], [-1, -1]].map(([sx, sz]) => ({ x: sx * (B.hx + m), z: sz > 0 ? B.z1 + m : B.z0 - m })), D];
+  const dist = N.map(() => Infinity), prev = N.map(() => -1), done = N.map(() => false); dist[0] = 0;
+  for (;;) {
+    let u = -1; for (let i = 0; i < N.length; i++) if (!done[i] && dist[i] < Infinity && (u < 0 || dist[i] < dist[u])) u = i;
+    if (u < 0 || u === N.length - 1) break; done[u] = true;
+    for (let v = 0; v < N.length; v++) if (!done[v] && !crosses(N[u], N[v])) { const d = dist[u] + Math.hypot(N[u].x - N[v].x, N[u].z - N[v].z); if (d < dist[v]) { dist[v] = d; prev[v] = u; } }
+  }
+  const path = []; for (let i = N.length - 1; i > 0; i = prev[i]) { if (i < 0) return [toWorld(D.x, D.z)]; path.unshift(toWorld(N[i].x, N[i].z)); }
+  return path;
+}
+
+// in: walk round to the door, then climb in (or at once)
+function getIn(quick = false) {
+  if (ride.phase) return;
+  if (quick || walled(toWorld(drv.door[0], drv.door[1]))) return inQuick();
+  jobs = [];
+  const path = route(person.position);
+  let L = 0; for (let i = 0; i < path.length; i++) L += hdist(i ? path[i - 1] : person.position, path[i]);
+  // (coming down the side from ahead, the door swings into his way: it opens once he's there)
+  const lastFrom = toLocal(path.length > 1 ? path[path.length - 2] : person.position);
+  Object.assign(ride, { phase: 'walk', mode: 'person', path, i: 0, t: 0, v: Math.min(5.2, Math.max(1.5, L * 0.8)), limit: L / 1.4 + 2.5, early: lastFrom.z < drv.door[1] + 0.6 });
+}
+function walkStep(dt) {
+  const P = person, path = ride.path;
+  // (knocked down on the way: that's the end of it)
+  if (WAGMI.combat?.player?.down) return abort();
+  ride.t += dt;
+  let rem = 0; for (let i = ride.i; i < path.length; i++) rem += hdist(i === ride.i ? P.position : path[i - 1], path[i]);
+  // at his pace, easing to a stop at the door (the last few cm stepped)
+  if (rem < 0.04 && ride.i < path.length) { const e = path[path.length - 1]; P.position.x = e.x; P.position.z = e.z; ride.i = path.length; rem = 0; }
+  P.speed += (Math.min(ride.v, 0.3 + Math.sqrt(10 * rem)) * (rem > 0 ? 1 : 0) - P.speed) * Math.min(1, dt * 8);
+  let go = P.speed * dt;
+  while (go > 1e-6 && ride.i < path.length) {
+    const to = path[ride.i], d = hdist(P.position, to);
+    if (d <= go) { P.position.x = to.x; P.position.z = to.z; go -= d; ride.i++; } else { P.position.x += (to.x - P.position.x) / d * go; P.position.z += (to.z - P.position.z) / d * go; go = 0; }
+  }
+  // facing the way he goes, and the car's way at the door
+  const to = path[Math.min(ride.i, path.length - 1)], there = ride.i >= path.length || (ride.i === path.length - 1 && hdist(P.position, to) < 0.3);
+  const face = there ? car.heading : Math.atan2(to.x - P.position.x, to.z - P.position.z), a = wrap(face - P.heading);
+  P.heading += Math.sign(a) * Math.min(Math.abs(a), dt * 9);
+  P.position.y = ground(P.position); P.verticalVel = 0;
+  P.mesh.position.copy(P.position); P.mesh.rotation.y = P.heading;
+  // the door up as he comes to it, his near hand (the right) lifting it by its edge
+  if (!door.want && (ride.i >= path.length || (ride.early && rem < 0.7))) doorTo(1, 0.55);
+  const inner = rs.doors?.L?.pivot.children[0];
+  if (door.want && door.p < 0.45 && inner) { inner.updateWorldMatrix(true, false); Q.reach('R', inner.localToWorld(_v.set(0.86, 0.86, -0.18)), 1); } else Q.reach('R', null, 0);
+  if ((ride.i >= path.length && door.p >= 0.5 && Math.abs(wrap(car.heading - P.heading)) < 0.2) || ride.t > ride.limit) startIn();
+}
+function startIn() {
+  Q.reach('R', null, 0);
+  camFrom(1.2);
+  person.inVehicle = true; person.speed = 0; person.mesh.visible = false;
+  app.selectMode('car'); car.speed = 0; cs.orbitYawOffset = 0;
+  if (!drv.attached) drv.attach();
+  Object.assign(ride, { phase: 'in', mode: 'car', k: 0, t: 0 });
+  doorTo(1, 0.4);
+}
+function inQuick() {
+  jobs = []; ride.phase = null; ride.k = 1;
+  Q.reach('R', null, 0);
+  person.inVehicle = true; person.speed = 0; person.mesh.visible = false;
+  app.selectMode('car'); car.speed = 0;
+  if (!drv.attached) drv.attach(0.12);
+  door.p = Math.max(door.p, 0.55); doorTo(1, 0.12); later(0.3, () => { doorTo(0, 0.22, true); ride.engine = true; });
+}
+
+// out: brake to a stop, then climb out; fast, a dive
+function getOut(quick = false) {
+  if (ride.phase) return;
+  if (quick) return outQuick();
+  if (Math.abs(car.speed) >= BAIL) return bail();
+  jobs = [];
+  if (Math.abs(car.speed) > 0.3) { Object.assign(ride, { phase: 'stop', mode: 'car' }); car.halt = 22; return; }
+  startOut();
+}
+function startOut() {
+  const d = toWorld(drv.door[0], drv.door[1]);
+  car.halt = 0; car.speed = 0;
+  if (walled(d)) return outQuick();
+  camFrom(1.1);
+  person.position.set(d.x, ground(d), d.z); person.heading = car.heading; person.speed = 0; person.verticalVel = 0;
+  person.inVehicle = false; person.mesh.visible = true;
+  app.selectMode('person');
+  Object.assign(ride, { phase: 'out', mode: 'person', k: 1, t: 0 });
+  doorTo(1, 0.5);
+}
+function finishOut() { if (drv.attached) drv.detach(person.mesh); ride.phase = null; ride.k = 1; doorTo(0, 0.5); }
+// (the old way: out at the driver's door at once, 1.75 m off the car's middle; the door flung up and slammed)
+function outQuick() {
+  jobs = []; ride.phase = null; ride.k = 1; car.halt = 0;
+  const h = car.heading, side = 1.75;
+  person.position.set(car.position.x + Math.cos(h) * side, car.position.y, car.position.z - Math.sin(h) * side);
+  person.position.y = ground(person.position);
+  person.heading = h; person.inVehicle = false; person.mesh.visible = true; person.verticalVel = 0;
+  car.speed = 0;
+  if (drv.attached) drv.detach(person.mesh);
+  app.selectMode('person');
+  door.p = Math.max(door.p, 0.4); doorTo(1, 0.15); later(0.9, () => doorTo(0, 0.4, true));
+}
+// the dive: the door flung up while he braces in his seat (LAUNCH s), then out of it with the car's way on him, a roll
+// on the road, up on his feet; the car runs on
+const LAUNCH = 0.12;
+function bail() {
+  jobs = [];
+  const seat = toWorld(rs.seat.hip[0], rs.seat.hip[2], _w); person.position.set(seat.x, ground(seat), seat.z);
+  camFrom(0.9, person.position);
+  person.inVehicle = false; person.speed = 0; person.verticalVel = 0;
+  app.selectMode('person');
+  Object.assign(ride, { phase: 'bail', mode: 'person', t: 0, k: 1, h: car.heading, f0: null, out: false, landed: false });
+  door.p = Math.max(door.p, 0.2); doorTo(1, 0.14);
+  bailStep(0);
+}
+function bailStep(dt) {
+  const P = person, t = (ride.t += dt), h = ride.h;
+  if (!ride.out) {
+    // (in his seat, the car's)
+    const seat = toWorld(rs.seat.hip[0], rs.seat.hip[2], _w);
+    P.position.set(seat.x, ground(seat), seat.z); P.heading = car.heading;
+    if (t < LAUNCH) return;
+    ride.out = true; ride.h = car.heading; ride.f0 = Math.max(-30, Math.min(30, car.speed));
+    if (drv.attached) drv.detach(person.mesh);
+    P.mesh.visible = true; P.heading = ride.h + 1.1;
+    Q.play('roll', { from: 0.12, ts: 1.05, fade: 0.08, fadeOut: 0.25 });
+    sound('whoosh', 0.8, P.position);
+  }
+  // (with the car for the first beat, clearing its side; then the road takes his way off him)
+  const u = t - LAUNCH, vf = u < 0.18 ? car.speed : ride.f0 * Math.exp(-3.2 * (u - 0.18)), vs = 6 * (u < 0.15 ? 1 : Math.exp(-6 * (u - 0.15)));
+  P.position.x += (Math.sin(ride.h) * vf + Math.cos(ride.h) * vs) * dt; P.position.z += (Math.cos(ride.h) * vf - Math.sin(ride.h) * vs) * dt;
+  cm.resolveHorizontalCollision(P.position, 0.42, P.position.y + 1.0);
+  P.position.y = ground(P.position); P.verticalVel = 0; P.speed = 0;
+  P.mesh.position.copy(P.position); P.mesh.rotation.y = P.heading;
+  if (!ride.landed && u > 0.45) { ride.landed = true; sound('pedHit', 0.45, P.position); }
+  if (u > 1.2) ride.phase = null;
+}
+// nobody at the wheel: it rolls on, slowing, into whatever is in its way; at rest, its door comes down
+function coast(dt) {
+  if (cm.activeMode === 'car' || (!car.speed && !car.vx && !car.vz)) return;
+  const s = Math.abs(car.speed);
+  car.speed -= Math.sign(car.speed) * Math.min(s, (1.2 + 0.3 * s) * dt);
+  car.angularVel = (car.angularVel || 0) * Math.exp(-dt * 7.8); car.heading += car.angularVel * dt;
+  car.position.x += (Math.sin(car.heading) * car.speed + (car.vx || 0)) * dt; car.position.z += (Math.cos(car.heading) * car.speed + (car.vz || 0)) * dt;
+  const g = Math.exp(-dt * 6.8); car.vx = (car.vx || 0) * g; car.vz = (car.vz || 0) * g;
+  if (Math.abs(car.vx) + Math.abs(car.vz) < 0.02) car.vx = car.vz = 0;
+  cm.resolveHorizontalCollision(car.position, 1.35, 1.0, car);
+  car.position.y = cm.getGroundHeight(car.position.x, car.position.z, 'car');
+  car.mesh.position.copy(car.position); car.mesh.rotation.y = car.heading;
+  if (Math.abs(car.speed) < 0.05) { car.speed = 0; if (!ride.phase && door.want) doorTo(0, 0.6); }
+}
+
+// F again (or a drive key): the rest of it at once
+function skip() {
+  if (ride.phase === 'walk') inQuick();
+  else if (ride.phase === 'in') ride.k = 1;
+  else if (ride.phase === 'out') finishOut();
+}
+// something else took him (a scene, a mode key): what was going stops where it is
+function abort() {
+  ride.phase = null; ride.k = 1; car.halt = 0; jobs = [];
+  Q.reach('R', null, 0);
+  if (cm.activeMode !== 'car' && drv.attached) drv.detach(person.mesh);
+  if (door.want) doorTo(0, 0.4);
+}
+// every frame, before his body is posed (person.model.update, below)
+function step(dt) {
+  if (jobs.length) { for (const j of jobs) j.t -= dt; const due = jobs.filter((j) => j.t <= 0); jobs = jobs.filter((j) => j.t > 0); for (const j of due) j.fn(); }
+  const mode = cm.activeMode;
+  if (ride.phase && (WAGMI.directed || WAGMI.cutscene || mode !== ride.mode)) abort();
+  doorStep(dt); coast(dt);
+  switch (ride.phase) {
+    case 'walk': walkStep(dt); break;
+    case 'in':
+      ride.k = Math.min(1, ride.k + dt / T_IN);
+      if (cm.keys.forward || cm.keys.backward || cm.keys.left || cm.keys.right) ride.k = 1;
+      if (ride.k > 0.84 && door.want) { doorTo(0, ride.k >= 1 ? 0.3 : 0.5); ride.engine = true; }
+      if (ride.k >= 1) ride.phase = null;
+      break;
+    case 'stop': if (Math.abs(car.speed) < 0.3) startOut(); break;
+    case 'out':
+      ride.t += dt;
+      if (door.p > 0.45) ride.k = Math.max(0, ride.k - dt / T_OUT);
+      if (ride.k <= 0) finishOut();
+      break;
+    case 'bail': bailStep(dt); break;
+  }
+  // in the car means at the wheel (unless a scene has him); on foot, out of it
+  if (!ride.phase) {
+    if (mode === 'car' && !WAGMI.directed) { if (!drv.attached) { person.inVehicle = true; person.mesh.visible = false; drv.attach(0); } ride.k = 1; }
+    else if (drv.attached) drv.detach(person.mesh);
+  }
+  // (at the wheel, where he is is where the car is)
+  if (drv.attached && mode === 'car') { person.position.copy(car.position); person.heading = car.heading; }
+}
+// his feet are his own on foot, not while a move of this has him: person.control is this; whatever else is set there
+// (the fight's footwork) runs under it, the latest first (one that wraps what it found gets the one before)
+const unders = [];
+let depth = 0;
+const control = (dt, keys, mgr) => {
+  if (ride.phase) return true;
+  const f = unders[unders.length - 1 - depth]; if (!f) return false;
+  depth++; try { return f(dt, keys, mgr); } finally { depth--; }
+};
+if (person.control) unders.push(person.control);
+Object.defineProperty(person, 'control', { configurable: true, get: () => control, set: (f) => { if (typeof f === 'function' && f !== control) unders.push(f); } });
+{
+  const base = person.model.update;
+  // (ride.slow, for looking at it: all of this in slow motion)
+  person.model.update = (dt, p, air) => {
+    dt *= ride.slow || 1;
+    step(dt);
+    if (drv.attached) { drv.pose(dt, ride.k); return; }
+    base(dt, p, air);
+  };
+}
+addEventListener('keydown', (e) => {
+  if (e.code !== 'KeyF' || e.repeat) return;
+  // (the game's own F: the old way, at once)
+  if (!e.isTrusted) { if (cm.activeMode === 'person' && near()) inQuick(); else if (cm.activeMode === 'car' && Math.abs(car.speed) < 4) outQuick(); return; }
+  if (WAGMI.cutscene || WAGMI.directed) return;
+  if (ride.phase) return skip();
+  if (cm.activeMode === 'person' && near()) getIn(!!WAGMI.combat?.fighting);
+  else if (cm.activeMode === 'car') getOut();
+});
+addEventListener('keydown', (e) => {
+  if (!ride.phase || !e.isTrusted || e.repeat || !MOVE.has(e.code)) return;
+  // (braking to get out: the throttle or reverse keeps him driving)
+  if (ride.phase === 'stop') { if (/W|S|Up|Down/.test(e.code)) { ride.phase = null; car.halt = 0; } return; }
+  if (ride.phase === 'bail') return;
+  skip();
+});
+Object.assign(ride, { getIn, getOut, skip, door: () => door.p, driver: drv });
+
 const hint = document.createElement('div');
 Object.assign(hint.style, { position: 'fixed', left: '50%', bottom: '120px', transform: 'translateX(-50%)', padding: '10px 18px', borderRadius: '12px',
   background: 'rgba(10,12,18,0.72)', color: '#fff', font: '600 15px system-ui, sans-serif', letterSpacing: '0.04em', zIndex: 20, display: 'none', pointerEvents: 'none' });
 document.body.appendChild(hint);
-const near = () => Math.hypot(person.position.x - car.position.x, person.position.z - car.position.z) < 4.2;
-function enter() {
-  person.inVehicle = true; person.mesh.visible = false; person.speed = 0;
-  app.selectMode('car');
-}
-function exit() {
-  // out at the driver's door (the left), facing the way the car does, on the ground there
-  const h = car.heading, side = 1.75;
-  person.position.set(car.position.x + Math.cos(h) * side, car.position.y, car.position.z - Math.sin(h) * side);
-  person.position.y = cm.getGroundHeight(person.position.x, person.position.z, 'person');
-  person.heading = h; person.inVehicle = false; person.mesh.visible = true; person.verticalVel = 0;
-  car.speed = 0;
-  app.selectMode('person');
-}
-addEventListener('keydown', (e) => {
-  if (e.code !== 'KeyF' || e.repeat) return;
-  if (cm.activeMode === 'person' && near()) enter();
-  else if (cm.activeMode === 'car' && Math.abs(car.speed) < 4) exit();
-});
 // the prompt, and the car's parked thrust settling
 let last = performance.now();
 (function tick() {
   const now = performance.now(), dt = Math.min(0.05, (now - last) / 1000); last = now;
   WAGMI.carIdle(dt);
-  const show = cm.activeMode === 'person' && near() ? 'F  ·  Get in' : cm.activeMode === 'car' && Math.abs(car.speed) < 4 ? 'F  ·  Get out' : '';
+  const show = ride.phase || WAGMI.paused || WAGMI.cutscene || WAGMI.directed ? '' : cm.activeMode === 'person' && near() ? 'F  ·  Get in' : cm.activeMode === 'car' && Math.abs(car.speed) < 4 ? 'F  ·  Get out' : '';
   hint.textContent = show; hint.style.display = show ? 'block' : 'none';
   requestAnimationFrame(tick);
 })();
@@ -226,6 +549,6 @@ WAGMI.ready = true;
 console.log('[wagmi] Quant and the car are in');
 
 // the rest of the game, a module each (one that fails to load leaves the others running)
-for (const m of ['./combat/index.js', './intro.js']) {
+for (const m of ['./audio/index.js', './combat/index.js', './street/index.js', './crash/index.js', './pursuit/index.js', './radio/index.js', './intro.js', './mission/m2.js', './mission/m3.js']) {
   try { const mod = await import(m); if (mod.install) await mod.install(WAGMI); } catch (err) { console.error('[wagmi]', m, err); }
 }

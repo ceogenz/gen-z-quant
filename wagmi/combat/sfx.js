@@ -13,11 +13,13 @@ export function createSfx() {
   function ready() {
     if (!ctx) {
       try {
-        ctx = new AudioContext();
+        // (the game's one mixer when it is there: its context, into its sfx bus)
+        const A = window.WAGMI?.audio;
+        ctx = A?.ctx || new AudioContext();
         const comp = ctx.createDynamicsCompressor(); comp.threshold.value = -16; comp.ratio.value = 4; comp.attack.value = 0.002; comp.release.value = 0.12;
         lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 20000; lp.Q.value = 0.5;
         const master = ctx.createGain(); master.gain.value = 0.85;
-        out = ctx.createGain(); out.connect(comp); comp.connect(lp); lp.connect(master); master.connect(ctx.destination);
+        out = ctx.createGain(); out.connect(comp); comp.connect(lp); lp.connect(master); master.connect(A?.ctx === ctx && A.bus?.sfx ? A.bus.sfx : ctx.destination);
         noise = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate); const d = noise.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = R() * 2 - 1;
         // the street's slap-back: a short decaying noise as an impulse response, sent a little of everything
         const len = Math.floor(ctx.sampleRate * 0.55), ir = ctx.createBuffer(2, len, ctx.sampleRate);

@@ -6,11 +6,14 @@
 //   search  'Search the van.'      hold F            checkpoint 3: Moon's collar and a burner phone; ZK's text
 //   then MISSION PASSED, and six seconds later Juno's DM and the J at Bryant Park.
 // Fails: 'Quant got rekt.' (knocked out), 'You left the fight.' (150 m from it). Retry, Quit, Skip (after three).
-// start(W, { at }) runs it from a phase ('car' | 'drive' | 'fight' | 'search'); ?m1=<phase> starts there.
+// start(W, { at }) runs it from a phase ('car' | 'drive' | 'arrival' | 'fight' | 'search'); ?m1=<phase> starts there.
+// The pause menu's 'Restart checkpoint' (mission/pause.js) knows it as 'm1'; its clocks are game time (W.clock: they
+// stop while paused). The GPS follows every objective (gps.objective; gps.drive for the drive).
 import * as THREE from 'three/webgpu';
 import { place, getCast, upright, UPRIGHT_BONES } from '../intro.js';
 import { createGPS } from './gps.js';
 import { createMarker } from './marker.js';
+import { missions } from './pause.js';
 import { createDirector, keys, angleKeys, spline, travel, handheld, clamp, lerp } from './cine.js';
 
 const PI = Math.PI;
@@ -61,11 +64,14 @@ function createMission(W) {
   /* ------------------------------------------------------------ helpers -- */
   let tok = { dead: false, err: null };
   const fail = (reason, rekt) => { if (!tok.dead) { tok.dead = true; tok.err = new Fail(reason, rekt); } };
+  // (game time, and nothing asked of the world while the pause menu is up)
+  const now = () => (W.clock ? W.clock.now() : performance.now());
   const wait = (cond, t = tok) => new Promise((res, rej) => {
-    const f = () => { if (t.dead) return rej(t.err || new Quit()); let ok = false; try { ok = cond(); } catch (e) { return rej(e); } if (ok) res(); else requestAnimationFrame(f); };
+    const f = () => { if (t.dead) return rej(t.err || new Quit()); if (W.paused) return requestAnimationFrame(f); let ok = false; try { ok = cond(); } catch (e) { return rej(e); } if (ok) res(); else requestAnimationFrame(f); };
     f();
   });
-  const delay = (secs, t = tok) => { const end = performance.now() + secs * 1000; return wait(() => performance.now() >= end, t); };
+  const delay = (secs, t = tok) => { const end = now() + secs * 1000; return wait(() => now() >= end, t); };
+  const gsleep = (ms) => new Promise((r) => { const end = now() + ms; const f = () => (now() >= end ? r() : setTimeout(f, Math.max(16, end - now()))); setTimeout(f, Math.max(0, ms)); });
   const dist = (a, x, z) => Math.hypot(a.x - x, a.z - z);
   const inCar = () => cm.activeMode === 'car';
   const me = () => (inCar() ? car.position : P.position);
@@ -73,7 +79,8 @@ function createMission(W) {
   // a voice mumbling each phrase of it as it goes (no words: the subtitles are the words)
   const VOICE = { Quant: 152, Bagsy: 104, Juno: 212, Fomo: 128 };
   function voice(who, text, secs) {
-    const f0 = VOICE[who]; if (!f0) return;
+    // (a line with a recorded voice speaks it itself: wagmi/radio/voices.js, from the subtitle)
+    const f0 = VOICE[who]; if (!f0 || W.voice?.has(who, text)) return;
     const parts = text.match(/[^.?!]+[.?!']*/g) || [text];
     let at = 0;
     for (const ph of parts) {
@@ -85,16 +92,18 @@ function createMission(W) {
   async function say(lines, t = tok) {
     for (const [who, color, text, pause = 0.25] of lines) {
       if (t.dead) break;
-      ui.sub(who, text, color); voice(who, text, Math.max(1.4, text.length / 15));
-      await sleep(Math.max(1.4, text.length / 15) * 1000);
-      ui.sub(null); await sleep(pause * 1000);
+      // (held for its reading time, or as long as its voice takes to say it)
+      const secs = Math.max(1.4, text.length / 15, (W.voice?.dur(who, text) || 0) + 0.15);
+      ui.sub(who, text, color); voice(who, text, secs);
+      await gsleep(secs * 1000);
+      ui.sub(null); await gsleep(pause * 1000);
     }
   }
   // Juno's call on the drive: a ring, the caller card, the lines
   async function junoCall(t) {
     sfx.play('ring', { gain: 0.16, times: 1 });
     ui.caller('Juno', BLUE, 'Incoming call');
-    await sleep(1800);
+    await gsleep(1800);
     if (t.dead) { ui.caller(null); return; }
     ui.caller('Juno', BLUE, 'On call');
     await say([
@@ -117,6 +126,7 @@ function createMission(W) {
   let running = true;
   (function loop() {
     if (!running) return;
+    if (W.paused) { requestAnimationFrame(loop); return; }
     gps.update();
     document.body.classList.toggle('wg-onfoot', !inCar());
     for (const f of frameHooks) { try { f(); } catch (e) { console.warn('[m1]', e); } }
@@ -145,21 +155,23 @@ function createMission(W) {
     // 1 · to the car
     async car(fresh) {
       if (fresh) place(W, { car: [88, 394.4, -PI / 2], quant: [109, 390.8, -1.41] });
-      gps.blip('car', { x: car.position.x, z: car.position.z, kind: 'car', edge: true });
-      ui.objective(['Get in your ', { car: 'blue' }, '.']);
+      gps.objective(['Get in your ', { car: 'blue' }, '.'], { follow: () => car.position, name: car.label || "Quant's car" });
+      gps.blip('car', { x: car.position.x, z: car.position.z, kind: 'car', edge: true, name: car.label || "Quant's car" });
       await delay(0.6);
       ui.help('Press [F] to get in a vehicle.', 10);
       await wait(inCar);
       gps.unblip('car'); ui.help(null);
-      ui.place(car.label || "Quant's Roadster", '', 3);
+      ui.place(car.label || "Quant's car", '', 3);
     },
     // 2 · the drive: the GPS, Juno's call, Moon's tag running ahead on the radar
-    async drive() {
-      gps.set(DEST);
+    async drive(fresh) {
+      // (from the pause menu or ?m1=drive: in the car at its mark)
+      if (fresh) { place(W, { car: [88, 394.4, -PI / 2], quant: [109, 390.8, -1.41] }); P.inVehicle = true; P.mesh.visible = false; P.speed = 0; app.selectMode('car'); }
       marker.at(DEST.x, 0, DEST.z);
-      const objective = () => ui.objective(["Follow Moon's tag to ", { 'Chelsea Park': 'yellow' }, '.']);
-      objective();
-      const t0 = performance.now(), tk = tok;
+      // the route follows the objective: out of the car on the way, to the car ('Get back in your car.'); within 250 m
+      // of the park on foot, on to it on foot (the fight is on foot anyway); back in, to the park again (gps.drive)
+      const nav = gps.drive({ dest: DEST, objective: ["Follow Moon's tag to ", { 'Chelsea Park': 'yellow' }, '.'], onFoot: 250 });
+      const t0 = now(), tk = tok;
       // the tag: a paw running down 5th Ave, west on 34th St, south on 9th Ave to the park, where it stops
       const tag = [[3.6, 470], [3.6, 641], [-1134, 641], [-1134, 1117], [-1180, 1122]];
       const segs = tag.slice(1).map((p, i) => Math.hypot(p[0] - tag[i][0], p[1] - tag[i][1])), tagLen = segs.reduce((a, b) => a + b, 0);
@@ -169,11 +181,11 @@ function createMission(W) {
         [8, ['GPS shows the quickest legal route with a ', { 'yellow line': 'yellow' }, '.']],
         [20, 'Hold [Shift] to boost.'],
       ];
-      let callAt = null, called = false, outOfCar = false;
+      let callAt = null, called = false;
       const places = [['Garment District', (p) => p.x < -300 && p.z < 700], ["Hell's Kitchen", (p) => p.x < -880 && p.z < 700], ['Chelsea', (p) => p.z > 760]];
       const seen = new Set();
       const off = hook(() => {
-        const t = (performance.now() - t0) / 1000;
+        const t = (now() - t0) / 1000;
         if (t < 22) { const [x, z] = tagAt(Math.min(1, t / 20)); gps.blip('tag', { x, z, kind: 'paw', edge: true }); } else gps.unblip('tag');
         while (helps.length && t >= helps[0][0]) ui.help(helps.shift()[1], 7);
         // Juno calls six seconds after he sets off
@@ -182,12 +194,10 @@ function createMission(W) {
         const p = me();
         if (W.cast && !W.cast.van.group.visible && dist(p, DEST.x, DEST.z) < 320) setVan(W.cast, true);
         for (const [name, test] of places) if (!seen.has(name) && test(p)) { seen.add(name); ui.place(name, 'WAGMI City', 3); }
-        // out of the car on the way: back in it
-        if (!inCar() && !outOfCar && dist(P.position, DEST.x, DEST.z) > 30) { outOfCar = true; ui.objective(['Get back in your ', { car: 'blue' }, '.']); gps.blip('car', { x: car.position.x, z: car.position.z, kind: 'car', edge: true }); }
-        if (inCar() && outOfCar) { outOfCar = false; gps.unblip('car'); objective(); }
+        nav.step();
       });
       await wait(() => (inCar() ? dist(car.position, DEST.x, DEST.z) < 6 && Math.abs(car.speed) < 8 : dist(P.position, DEST.x, DEST.z) < 6));
-      off(); gps.unblip('tag'); gps.unblip('car');
+      off(); nav.stop(); gps.unblip('tag'); gps.unblip('car');
     },
     // the arrival: Moon goes off in the SUV past him; the Degens by their van cross the lawn for him
     async arrival() {
@@ -196,9 +206,10 @@ function createMission(W) {
     },
     // 3 · the fight (checkpoint 2)
     async fight(fresh) {
+      // (him on the lawn at once: the cast can take a few seconds to build the first time, from ?m1=fight)
+      if (fresh) place(W, { car: [DEST.x, DEST.z, 0], quant: [-1145.5, 1160, -PI / 2] });
       const C = await getCast(W);
       setVan(C, true);
-      if (fresh) place(W, { car: [DEST.x, DEST.z, 0], quant: [-1145.5, 1160, -PI / 2] });
       parkHolds();
       const combat = W.combat;
       if (!combat?.spawnCrew) { ui.help('The fight is coming soon.', 4); await delay(3); return; }
@@ -207,10 +218,11 @@ function createMission(W) {
       const autoGetUp = combat.player.autoGetUp; combat.player.autoGetUp = false;
       const offDown = combat.player.onDown(() => fail('Quant got rekt.', true));
       try {
-        const crews = [combat.spawnCrew({ x: -1182, z: 1156, count: 4 }).engage()];
+        // (where the arrival leaves them: a few steps off him on the lawn's edge)
+        const crews = [combat.spawnCrew({ x: -1153, z: 1160, count: 4 }).engage()];
         let total = 4, fomo = false, warned = false;
         const down = () => crews.reduce((n, c) => n + c.enemies.length - c.alive(), 0);
-        const objective = () => ui.objective(['Beat up the ', { Degens: 'red' }, '.']);
+        const objective = () => gps.objective(['Beat up the ', { Degens: 'red' }, '.'], null);
         objective();
         ui.counter('DEGENS', `0/${total}`);
         delay(1.5).then(() => ui.help(['Degens are marked with a ', { 'red dot': 'red' }, ' on the Radar.'], 7)).catch(() => {});
@@ -229,7 +241,7 @@ function createMission(W) {
           // too far from the fight
           const d = dist(me(), ARENA.x, ARENA.z);
           if (d > 150) fail('You left the fight.');
-          else if (d > 90 && !warned) { warned = true; ui.objective(['Get back to the ', { fight: 'yellow' }, '.']); }
+          else if (d > 90 && !warned) { warned = true; gps.objective(['Get back to the ', { fight: 'yellow' }, '.'], { x: ARENA.x, z: ARENA.z, name: 'The fight · Chelsea Park' }); }
           else if (d < 80 && warned) { warned = false; objective(); }
         });
         await wait(() => fomo && crews.every((c) => c.alive() === 0));
@@ -240,20 +252,22 @@ function createMission(W) {
     },
     // 4 · the van (checkpoint 3): hold F at its door; Moon's collar, a burner, ZK's text
     async search(fresh) {
+      // (him at the van and the objective up at once; the cast, the van with it, can take a few seconds to build the
+      // first time, from ?m1=search or a restart)
+      if (fresh) place(W, { car: [DEST.x, DEST.z, 0], quant: [-1240, 1125.5, PI] });
+      gps.objective(['Search the ', { van: 'green' }, '.'], { x: SEARCH_AT[0], z: SEARCH_AT[1], name: "The Degens' van" }, { blip: false });
+      gps.blip('van', { x: VAN[0], z: VAN[1], kind: 'object', edge: true, name: "The Degens' van" });
       const C = await getCast(W);
       setVan(C, true);
       parkHolds();
-      if (fresh) place(W, { car: [DEST.x, DEST.z, 0], quant: [-1240, 1125.5, PI] });
-      ui.objective(['Search the ', { van: 'green' }, '.']);
-      gps.blip('van', { x: VAN[0], z: VAN[1], kind: 'object', edge: true });
       const spot = createMarker(THREE, app.scene, { color: '#4ADE80', radius: 0.8, height: 0.9, alpha: 0.28 }); spot.at(SEARCH_AT[0], 0.22, SEARCH_AT[1]);
       let k = 0, held = false, helped = false;
       const onKey = (e) => { if (e.code === 'KeyF') held = e.type === 'keydown'; };
       addEventListener('keydown', onKey); addEventListener('keyup', onKey);
       try {
-        let last = performance.now();
+        let last = now();
         await wait(() => {
-          const now = performance.now(), dt = Math.min(0.05, (now - last) / 1000); last = now;
+          const t = now(), dt = Math.min(0.05, (t - last) / 1000); last = t;
           const near = !inCar() && dist(P.position, SEARCH_AT[0], SEARCH_AT[1]) < 2.2;
           if (near && !helped) { helped = true; ui.help('Hold [F] to search.', 8); }
           k = near && held ? k + dt / 1.2 : Math.max(0, k - dt * 2);
@@ -261,7 +275,7 @@ function createMission(W) {
           return k >= 1;
         });
       } finally { removeEventListener('keydown', onKey); removeEventListener('keyup', onKey); ui.hold(null); spot.hide(); app.scene.remove(spot.group); }
-      gps.unblip('van'); ui.objective(null); ui.help(null);
+      gps.unblip('van'); gps.objective(null, null); ui.help(null);
       await scene('collar');
     },
   };
@@ -284,6 +298,8 @@ function createMission(W) {
     }
     for (const a of Q.mixer._actions) if (!C.qRig.owns(a)) a.setEffectiveWeight(0);
     let t = 0, END = 0, done = false, skip = false;
+    // (its clock, for looking at it: W.sceneClock.seek(t), .rate 0 holds it, .cam { pos, look, fov } in place of the shots)
+    const clock = W.sceneClock = { rate: 1, cam: null, get t() { return t; }, seek(x) { t = clamp(x, 0, END); } };
     const shots = [], cues = [], st = { dead: false };
     let pose = () => {}, cleanup = () => {};
     const quantAt = (x, z, h) => { P.position.set(x, cm.getGroundHeight(x, z, 'person'), z); P.heading = h; P.mesh.position.copy(P.position); P.mesh.rotation.y = h; P.mesh.visible = true; };
@@ -292,38 +308,43 @@ function createMission(W) {
     const ub = UPRIGHT_BONES.map((n) => Q.bones[n]).filter(Boolean), ub0 = ub.map((b) => b.quaternion.clone());
     const poseQuant = (t, h, k = 1) => { ub.forEach((b, i) => b.quaternion.copy(ub0[i])); C.qRig.pose(t); ub.forEach((b, i) => ub0[i].copy(b.quaternion)); Q.body.position.y = 0; Q.body.rotation.x = 0; upright(W, h, k); };
     if (name === 'arrival') {
-      // 'The swap' (docs/MISSIONS.md 5.5): A1 the long lens down W 28th St: Gwei slams the black SUV's door on Moon, her
-      // head out of its back window, and it pulls away from the van; A2 9th Ave, looking up it from beside Quant: the SUV
-      // comes round the corner and whips past him ('MOON!'); A3 after it, going south; A4 over his shoulder, a long lens on
-      // the four of them coming across the lawn for him.
-      // (A4 runs as long as Bagsy's three lines take: about 10 s)
+      // 'The swap' (docs/MISSIONS.md 5.5): A1 the long lens across W 28th St: Gwei slams the black SUV's door on Moon, her
+      // head out of its back window, and it peels out from the curb, tyres chirping, and tears past the lens; A2 9th Ave,
+      // 3/4 behind Quant by his car: the SUV comes round the corner and whips past him ('MOON!'); A3 after it, going south;
+      // then the four of them across the lawn for him: A4 over his shoulder as they walk up, A5 Bagsy coming on, A6 the two
+      // of them face to face (Quant's answer), A7 Bagsy over Quant's shoulder.
+      // (the lines run 9.2-19.1 s; the four stop a few steps off him, where the fight then starts)
       END = 19.4;
-      const T = { a2: 3.2, a3: 6.4, a4: 8.6 };
+      const T = { a2: 3.2, a3: 6.4, a4: 8.6, a5: 11.4, a6: 13.0, a7: 15.5 };
       const suv = C.suv || (C.suv = buildSUV(app.scene));
-      // the SUV's way out (s = metres along it): the corner of 9th Ave at s 78-100, past Quant (z 1160) at s 123. Across
-      // the cut into A2 it jumps on (s 16 -> 70): A1 sees it pull away, A2 sees it take the corner and go by him at 5.8 s.
-      const sPath = spline([[-1222, 1120.2], [-1186, 1120.0], [-1150, 1119.6], [-1139.5, 1122.5], [-1134.5, 1129], [-1131.2, 1140], [-1131, 1175], [-1131, 1500]]);
-      const sA = travel([[0.85, 0], [T.a2, 14]]);
+      // the SUV's way out (s = metres along it): out from the curb into the lane, the corner of 9th Ave at s 78-100, past
+      // Quant (z 1160) at s 123. Across the cut into A2 it jumps on (s 26 -> 70): A1 sees it peel out and go by the lens,
+      // A2 sees it take the corner and go by him at 5.8 s.
+      const sPath = spline([[-1222, 1120.2], [-1215, 1119.3], [-1207, 1117.9], [-1196, 1117.5], [-1170, 1118.2], [-1150, 1119.6], [-1139.5, 1122.5], [-1134.5, 1129], [-1131.2, 1140], [-1131, 1175], [-1131, 1500]]);
+      const sA = travel([[0.85, 0], [1.35, 5], [2.2, 13], [T.a2, 21]]);
       const sB = travel([[T.a2, 20], [3.7, 16], [4.4, 16], [5.0, 24], [5.8, 27], [6.4, 28], [8.6, 20], [12, 20]]);
       const sS = (t) => (t < T.a2 ? sA(t) : 70 + sB(t));
       sS.speed = (t) => (t < T.a2 ? sA.speed(t) : sB.speed(t));
       const crew = [[C.bagsy, -1236.5, 1124.4], [C.stops, -1238.8, 1125.0], [C.gwei, -1223.2, 1122.2], [C.wick, -1244.2, 1125.3]];
-      // (A1 by the van, Gwei at the SUV's back door and away from it; across the cut, out on the lawn walking for him,
-      // kept in a band the long lens holds)
-      const lawn = [[-1195, 1156, -1182, 1157], [-1199, 1160.5, -1186, 1161], [-1201, 1154, -1189, 1155], [-1204, 1162.5, -1191, 1162.5]];
-      for (const [d] of crew) d.rig.set([[0, 'walk', { from: 0.85, speed: 0 }], [T.a4, 'walk', { speed: 1.0, fade: 0.2 }]]);
-      C.gwei.rig.set([[0, 'walk', { from: 0.85, speed: 0 }], [0.75, 'walk', { speed: 1.0, fade: 0.2 }], [T.a2, 'walk', { from: 0.85, speed: 0, fade: 0.3 }], [T.a4, 'walk', { speed: 1.0, fade: 0.2 }]]);
+      // (A1 by the van, Gwei at the SUV's back door and away from it; across the cut, on the lawn walking up to him at
+      // 1.4 m/s, Bagsy in front, each stopping a few steps off him: [from x, z, to x, z])
+      // (standing to talk; their fists up as Bagsy says his last word: the fight is next)
+      const lawn = [[-1154.7, 1160.9, -1148.4, 1160.4], [-1156.6, 1157.4, -1150.3, 1158.2], [-1157.0, 1163.7, -1150.6, 1162.6], [-1159.4, 1159.1, -1152.3, 1159.8]];
+      const stopAt = lawn.map(([x0, z0, x1, z1]) => T.a4 + Math.hypot(x1 - x0, z1 - z0) / 1.4), FISTS = 18.3;
+      const walkUp = (i) => [[T.a4, 'walk', { speed: 1.12, fade: 0.2 }], [stopAt[i], 'walk', { from: 0.85, speed: 0, fade: 0.35 }], [FISTS + i * 0.15, 'thugIdle', { fade: 0.3 }]];
+      crew.forEach(([d], i) => d.rig.set([[0, 'walk', { from: 0.85, speed: 0 }], ...walkUp(i)]));
+      C.gwei.rig.set([[0, 'walk', { from: 0.85, speed: 0 }], [0.75, 'walk', { speed: 1.0, fade: 0.2 }], [T.a2, 'walk', { from: 0.85, speed: 0, fade: 0.3 }], ...walkUp(2)]);
       const gweiX = keys([[0.75, -1223.2], [T.a2, -1227.2]], 'linear');
-      // Quant: watching the corner, then the SUV going by him, turning after it; across the cut, back to the lawn
-      const qh = angleKeys([[0, 2.87], [4.4, 2.87], [5.0, 2.3], [5.6, 1.6], [6.4, 1.05], [T.a4 - 0.05, 1.05], [T.a4, -PI / 2]]);
+      // Quant: watching the corner, then the SUV going by him, turning after it; across the cut, facing Bagsy
+      const qh = angleKeys([[0, 2.87], [4.4, 2.87], [5.0, 2.3], [5.6, 1.6], [6.4, 1.05], [T.a4 - 0.05, 1.05], [T.a4, -1.46]]);
       C.qRig.set([[0, 'idle'], [5.3, ['idle/body', 'talk/arms'], { fade: 0.15 }], [6.3, 'idle', { fade: 0.3 }], [T.a4 + 4.4, ['idle/body', 'talk/arms'], { fade: 0.3 }], [T.a4 + 6.8, 'idle', { fade: 0.4 }]]);
       const suvAt = (t) => { const d = sS(t); return d < sPath.length - 0.5 ? sPath.at(d) : null; };
       const smooth01 = (x) => { x = clamp(x); return x * x * (3 - 2 * x); };
-      // A1 a long lens from the park's edge, across W 28th St: Gwei at the SUV's back door, Moon's face at its window; it
-      // pulls away and the lens goes with it
+      // A1 a long lens from the park's edge behind it, down W 28th St: Gwei at the SUV's back door, Moon's face at its
+      // window; it swings out from the curb and tears off down the block, the lens going with it (it shrinks: it is leaving)
       shots.push({ t: 0, cam: (t) => {
-        const p = suvAt(t), base = [-1222.6, 1.05, 1121.2], w = smooth01((t - 1.0) / 1.4);
-        return { pos: [-1200, 1.45, 1131.5], look: p ? base.map((a, i) => lerp(a, [p.x - 0.8, 1.05, p.z + 0.6][i], w)) : base, fov: keys([[0, 11], [1.0, 11], [T.a2, 19]])(t), shake: 0.3 };
+        const p = suvAt(t), base = [-1222.6, 1.05, 1121.2], w = smooth01((t - 0.85) / 0.5);
+        return { pos: [-1236, 1.35, 1129.5], look: p ? base.map((a, i) => lerp(a, [p.x + 0.6, 1.0, p.z][i], w)) : base, fov: 14, shake: t > 0.85 ? 0.9 : 0.3 };
       } });
       // A2 behind Quant (his left shoulder in the left third), looking up 9th Ave to the corner; the lens goes after the SUV
       shots.push({ t: T.a2, cam: (t) => {
@@ -333,15 +354,21 @@ function createMission(W) {
       } });
       // A3 after it: its tail lights going away south down 9th Ave
       shots.push({ t: T.a3, cam: (t) => { const p = suvAt(t); return { pos: [-1127.6, 1.45, 1166], look: p ? [lerp(-1131, p.x, 0.7), 1.0, p.z + 4] : [-1131, 1.0, 1300], fov: keys([[T.a3, 32], [T.a4, 13]])(t), shake: 0.6 }; } });
-      // A4 over his right shoulder, a long lens on them: four men coming across the grass, not four dots
-      shots.push({ t: T.a4, cam: (t) => ({ pos: keys([[T.a4, [-1141.0, 1.78, 1159.3]], [END, [-1141.3, 1.78, 1159.25]]], 'linear')(t), look: keys([[T.a4, [-1189, 1.2, 1161.1]], [END, [-1184, 1.15, 1161.0]]])(t), fov: keys([[T.a4, 9], [END, 11]])(t), shake: 0.35 }) });
+      // A4 over his right shoulder: the four walking up across the grass at him, Bagsy talking as he comes
+      shots.push({ t: T.a4, cam: (t) => ({ pos: keys([[T.a4, [-1143.7, 1.74, 1159.3]], [T.a5, [-1144.0, 1.72, 1159.35]]], 'linear')(t), look: keys([[T.a4, [-1154, 1.25, 1160.2]], [T.a5, [-1152, 1.3, 1160.2]]])(t), fov: 26, shake: 0.35 }) });
+      // A5 Bagsy from beside Quant, walking up into a medium shot, the others behind him
+      shots.push({ t: T.a5, cam: () => { const b = C.bagsy.root.position; return { pos: [-1146.0, 1.6, 1161.3], look: [b.x, 1.45, b.z], fov: 30, shake: 0.4 }; } });
+      // A6 the two of them face to face (Quant answers), from the sidewalk: Bagsy three-quarters on, Stops behind him
+      shots.push({ t: T.a6, cam: (t) => ({ pos: keys([[T.a6, [-1145.3, 1.55, 1164.9]], [T.a7, [-1145.35, 1.55, 1164.6]]], 'linear')(t), look: [-1146.9, 1.35, 1160.2], fov: 30, shake: 0.35 }) });
+      // A7 over Quant's right shoulder, close on Bagsy, pushing in
+      shots.push({ t: T.a7, cam: (t) => ({ pos: keys([[T.a7, [-1144.3, 1.7, 1159.05]], [END, [-1144.55, 1.68, 1159.1]]], 'linear')(t), look: [-1148.4, 1.55, 1160.4], fov: keys([[T.a7, 26], [END, 21]])(t), shake: 0.3 }) });
       let engine = null;
       pose = (t, dt) => {
         crew.forEach(([d, x, z], i) => {
           d.root.visible = true;
           let px = x, pz = z, h = PI / 2 + 0.2;
           if (d === C.gwei && t < T.a4) { px = gweiX(t); pz = t < 0.75 ? z : lerp(z, 1123.8, clamp((t - 0.75) / 2.2)); h = t < 0.6 ? PI : -PI / 2 - 0.2; }
-          if (t >= T.a4) { const k = clamp((t - T.a4) / (END - T.a4 + 0.6)); const [x0, z0, x1, z1] = lawn[i]; px = lerp(x0, x1, k); pz = lerp(z0, z1, k); h = Math.atan2(-1145.5 - px, 1160 - pz); }
+          if (t >= T.a4) { const k = clamp((t - T.a4) / (stopAt[i] - T.a4)); const [x0, z0, x1, z1] = lawn[i]; px = lerp(x0, x1, k); pz = lerp(z0, z1, k); h = Math.atan2(-1145.5 - px, 1160 - pz); }
           d.root.position.set(px, cm.getGroundHeight(px, pz, 'person'), pz); d.root.rotation.y = h;
           d.rig.pose(t);
         });
@@ -364,10 +391,11 @@ function createMission(W) {
       cleanup = () => { suv.group.visible = false; C.moon.group.visible = false; engine?.stop(0.4); };
       cues.push([0.2, () => ui.place('Chelsea Park', 'Chelsea · WAGMI City', 3)]);
       cues.push([0.45, () => sfx.play('thunk', { gain: 0.45, f: 70 })]);
-      cues.push([0.85, () => { engine = sfx.engine(); sfx.play('squeal', { gain: 0.16, dur: 0.9, p: -0.3 }); }]);
+      cues.push([0.85, () => { engine = sfx.engine(); sfx.play('squeal', { gain: 0.42, dur: 0.6, p: -0.3 }); }]);
       cues.push([1.4, () => sfx.play('bark', { gain: 0.22, n: 2, p: -0.4 })]);
+      cues.push([2.75, () => sfx.play('whoosh', { gain: 0.3, dur: 0.5 })]);
       cues.push([3.8, () => sfx.play('squeal', { gain: 0.35, dur: 1.1, p: -0.2 })]);
-      cues.push([5.5, () => { ui.sub('Quant', 'MOON!', WHITE); sfx.play('shout', { gain: 0.5, f0: 240, vowel: 'u', dur: 0.7 }); }]);
+      cues.push([5.5, () => { ui.sub('Quant', 'MOON!', WHITE); if (!W.voice?.has('Quant', 'MOON!')) sfx.play('shout', { gain: 0.5, f0: 240, vowel: 'u', dur: 0.7 }); }]);
       cues.push([5.7, () => sfx.play('whoosh', { gain: 0.35, dur: 0.6 })]);
       cues.push([6.6, () => ui.sub(null)]);
       cues.push([7.3, () => sfx.play('bark', { gain: 0.1, n: 1, p: 0.1 })]);
@@ -421,9 +449,9 @@ function createMission(W) {
     const shotAt = (x) => { let s = shots[0]; for (const sh of shots) if (sh.t <= x) s = sh; return s; };
     let ci = 0;
     const frame = (dt) => {
-      if (!done) t = Math.min(END, t + dt);
+      if (!done) t = Math.min(END, t + dt * clock.rate);
       pose(t, dt);
-      const c = shotAt(t).cam(t);
+      const c = clock.cam || shotAt(t).cam(t);
       D.camera.pos = c.pos; D.camera.look = c.look; D.camera.fov = c.fov; D.camera.shake = c.shake ? handheld(t, c.shake) : null;
       if (grade) grade.exposure.value = 1.3;
       while (ci < cues.length && cues[ci][0] <= t) { try { cues[ci][1](); } catch (e) { console.warn(e); } ci++; }
@@ -438,7 +466,7 @@ function createMission(W) {
     for (const d of [C.bagsy, C.stops, C.gwei, C.wick]) d.root.visible = false;
     C.qRig.stop(); Q.act('idle').setEffectiveWeight(1); Q.body.rotation.x = 0;
     cleanup();
-    delete W.directed; D.onFrame = null;
+    delete W.directed; delete W.sceneClock; D.onFrame = null;
     if (grade) grade.exposure.value = exp0;
     if (name === 'collar') { C.van.setDoor(1); place(W, { quant: [VAN[0] - 0.1, VAN[1] + 2.4, 0.25] }); }
     else place(W, { quant: [-1145.5, 1160, -PI / 2] });
@@ -455,16 +483,10 @@ function createMission(W) {
     sfx.play('passed');
     await ui.passed({ title: 'Dognapped', stats: [['TIME', `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`], ['DEGENS REKT', `${stats.rekt || 5}/5`], ['HITS TAKEN', String(stats.hits)]], reward: '+4,210', note: '#CoinKidFights is trending' }, 6);
     W.followers = (W.followers || 0) + 4210;
-    await sleep(6000);
-    sfx.play('buzz', { gain: 0.18, times: 1 }); sfx.play('ding', { gain: 0.16 });
-    ui.dm('Juno', 'that burner is a gift. bring it to me. bryant park, by the library. try not to get mugged on the way.', 10);
-    gps.blip('juno', { x: -296, z: 84.5, kind: 'letter', letter: 'J', pulse: 6, edge: true });
-    await sleep(1500);
-    ui.help(['A new mission is available. Go to the ', { J: 'yellow' }, ' on the Radar.'], 9);
-    // (Mission 2 is not built yet: its marker says so)
-    const m = createMarker(THREE, app.scene, { color: '#FFC93C', radius: 2 }); m.at(-296, 0.22, 84.5);
-    let told = false;
-    hook(() => { const d = dist(me(), -296, 84.5); if (d < 3 && !told) { told = true; ui.help(['Mission 2 · ', { Burner: 'yellow' }, ' is coming soon.'], 6); } if (d > 8) told = false; });
+    await sleep(4000);
+    // the way on (mission/m2.js): Juno's DM, 'Meet Juno at Bryant Park.', the route to the J and its corona there, the
+    // J kept on the radar with a nudge when he wanders; into the corona, Mission 2
+    try { (await import('./m2.js')).handoff(W); } catch (e) { console.error('[m1] hand-off', e); }
   }
 
   /* ------------------------------------------------------- the runner -- */
@@ -473,7 +495,8 @@ function createMission(W) {
     stop() { running = false; tok.dead = true; tidy(); },
     async run(at = 'car', fromIntro = false) {
       let i = Math.max(0, ORDER.indexOf(at)), fresh = !fromIntro;
-      while (i < ORDER.length) {
+      // (stopped, by a restart from the pause menu: this run goes no further)
+      while (i < ORDER.length && running) {
         const phase = (M._phase = ORDER[i]);
         tok = { dead: false, err: null };
         try {
@@ -493,10 +516,20 @@ function createMission(W) {
           i = ORDER.indexOf(cp); fresh = true;
         }
       }
+      if (!running) return;
       M._phase = 'passed';
       await passed();
     },
     fail,
   };
+  // the pause menu's 'Restart checkpoint': any phase up to the one he is in, from its start
+  const LABELS = { car: 'Get in the car', drive: 'Drive to Chelsea Park', arrival: 'Chelsea Park · the swap', fight: 'The fight', search: 'Search the van' };
+  missions(W).register({
+    id: 'm1', act: 'Act I · Mission 1', title: 'Dognapped',
+    checkpoints: ORDER.map((id) => ({ id, label: LABELS[id] })),
+    active: () => running && !!M._phase && M._phase !== 'passed',
+    at: () => M._phase,
+    restart: (at) => { W.combat?.clear?.(); holds([]); ui.rekt(false); start(W, { at }).catch((e) => console.error('[m1]', e)); },
+  });
   return M;
 }

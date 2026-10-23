@@ -186,6 +186,28 @@ export function buildRoadster(THREE, o = {}) {
     const m = (p) => [-p[0], p[1], p[2]];
     push(out, m(a), m(na)); push(out, m(c), m(nc)); push(out, m(b), m(nb));
   }
+  // the doors' cut: two shut lines across the car, each a plane standing on the x axis ([z at y0, y0, dz / dy]), the
+  // front one behind the front wheel, the rear one under the B pillar and on up it to the roof's edge. Between them the
+  // side (from the black line up), the panel over the shoulder and the side glass are the door's (doorBk, one door a
+  // side: L on +x, the driver's, R on -x)
+  const SHUT_F = [0.81, 0.3, 0.1613], SHUT_R = [-0.191, 0.299, -0.304];
+  const shutF = (p) => p[2] - SHUT_F[0] - (p[1] - SHUT_F[1]) * SHUT_F[2], shutR = (p) => SHUT_R[0] + (p[1] - SHUT_R[1]) * SHUT_R[2] - p[2];
+  const doorBk = { L: { paint: [], glass: [] }, R: { paint: [], glass: [] } };
+  // a polygon cut by f into the part where f < 0 and the rest (the normals carried along the cut); and a fan of it
+  function splitBy(poly, f) {
+    const A = [], B = [];
+    for (let i = 0; i < poly.length; i++) {
+      const u = poly[i], v = poly[(i + 1) % poly.length], fu = f(u.p), fv = f(v.p);
+      (fu < 0 ? A : B).push(u);
+      if ((fu < 0) !== (fv < 0)) { const t = fu / (fu - fv), lp = (x, y) => x.map((q, j) => q + (y[j] - q) * t), w = { p: lp(u.p, v.p), n: unit(lp(u.n, v.n)) }; A.push(w); B.push(w); }
+    }
+    return [A, B];
+  }
+  function fan(out, poly, mirror) { for (let k = 1; k < poly.length - 1; k++) tri(out, poly[0].p, poly[k].p, poly[k + 1].p, poly[0].n, poly[k].n, poly[k + 1].n, mirror); }
+  function cutTri(mat, a, b, c, na, nb, nc, mirror) {
+    const [inF, outF] = splitBy([{ p: a, n: na }, { p: b, n: nb }, { p: c, n: nc }], shutF), [door, outR] = splitBy(inF, shutR);
+    fan(buckets[mat], outF, mirror); fan(buckets[mat], outR, mirror); fan(doorBk[mirror ? 'R' : 'L'][mat], door, mirror);
+  }
   // a strip over stations i0..i1: its grid, its normals (smooth over the grid, split at a creased joint), both halves
   function run(s, i0, i1, mat) {
     const rows = []; for (let i = i0; i <= i1; i++) rows.push(across(S[i], s).map(([x, y]) => [x, y, Z[i]]));
@@ -206,11 +228,15 @@ export function buildRoadster(THREE, o = {}) {
       if (s.crown && k === n) u[0] = 0;
       return unit(u);
     };
-    const out = buckets[mat];
+    const out = buckets[mat], si = STRIPS.indexOf(s), doorish = si === 4 || si === 5 || (si === 6 && mat === 'glass');
     for (let r = 0; r < rows.length - 1; r++) for (let k = 0; k < n; k++) {
       const a = rows[r][k], b = rows[r][k + 1], c = rows[r + 1][k], d = rows[r + 1][k + 1];
       const na = nrm(r, k, 1), nb = nrm(r, k + 1, -1), nc = nrm(r + 1, k, 1), nd = nrm(r + 1, k + 1, -1);
-      for (const mirror of [false, true]) { tri(out, a, b, c, na, nb, nc, mirror); tri(out, b, d, c, nb, nd, nc, mirror); }
+      const cut = doorish && Math.max(a[2], c[2]) > -0.5 && Math.min(a[2], c[2]) < 0.95;
+      for (const mirror of [false, true]) {
+        if (cut) { cutTri(mat, a, b, c, na, nb, nc, mirror); cutTri(mat, b, d, c, nb, nd, nc, mirror); }
+        else { tri(out, a, b, c, na, nb, nc, mirror); tri(out, b, d, c, nb, nd, nc, mirror); }
+      }
     }
   }
   for (const s of STRIPS) {
@@ -377,10 +403,11 @@ export function buildRoadster(THREE, o = {}) {
   const both = (make) => { for (const sd of [1, -1]) { const m = make(sd); if (m) g.add(m); } };
   const mx = (p, sd) => [p[0] * sd, p[1], p[2]];
 
-  // a ribbon laid over the body: two edges (lists of points on the right side), lifted off the surface
-  function ribbon(e1, e2, mat, lift = 0.003) {
+  // a ribbon laid over the body: two edges (lists of points on the right side), lifted off the surface (on both sides,
+  // or on those in sides; into parent)
+  function ribbon(e1, e2, mat, lift = 0.003, sides = [1, -1], parent = g) {
     const pos = [], idx = [];
-    for (const sd of [1, -1]) {
+    for (const sd of sides) {
       const base = pos.length / 3;
       for (let i = 0; i < e1.length; i++) for (const e of [e1[i], e2[i]]) { const p = mx(e.p, sd), n = mx(e.n, sd); pos.push(p[0] + n[0] * lift, p[1] + n[1] * lift, p[2] + n[2] * lift); }
       // (wound so its face looks out the way the surface does)
@@ -388,7 +415,7 @@ export function buildRoadster(THREE, o = {}) {
       for (let i = 0; i < e1.length - 1; i++) { const a = base + i * 2, b = a + 1, c = a + 2, d = a + 3; if ((sd > 0) === out) idx.push(a, b, c, b, d, c); else idx.push(a, c, b, b, c, d); }
     }
     const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); geo.setIndex(idx); geo.computeVertexNormals();
-    const m = new THREE.Mesh(geo, mat); g.add(m); return m;
+    const m = new THREE.Mesh(geo, mat); parent.add(m); return m;
   }
   // a flat shape on the side: corners [z, y] round it, each set on the surface; lifted off it
   function decal(corners, mat, lift) {
@@ -417,22 +444,20 @@ export function buildRoadster(THREE, o = {}) {
   const rect = (x0, y0, x1, y1) => [[x0, y0], [x1, y0], [x1, y1], [x0, y1]];
 
   /* ---------------------------------------------------- pillars and seams -- */
-  // the B pillar: two fine black lines across the side glass, leaning back as they climb
-  for (const [zf, zt] of [[ZBP[1] - 0.02, ZBP[0] - 0.015], [ZBP[1] + 0.04, ZBP[0] + 0.016]]) {
+  // the B pillar: two fine black lines across the side glass, leaning back as they climb (the front one is on the door)
+  const pillarB = [[ZBP[1] - 0.02, ZBP[0] - 0.015], [ZBP[1] + 0.04, ZBP[0] + 0.016]].map(([zf, zt]) => {
     const e1 = [], e2 = [];
     for (let k = 0; k <= 6; k++) { const t = k / 6, z = zf + (zt - zf) * t; e1.push(at(z - 0.006, 7, t)); e2.push(at(z + 0.006, 7, t)); }
-    ribbon(e1, e2, M.trim, 0.004);
-  }
-  // the A pillars: two fine lines down each windscreen edge, one on the side glass, one on the screen
-  both((sd) => {
-    const grp = new THREE.Group();
-    for (const [k, tt] of [[7, 0.93], [9, 0.04]]) {
-      const pts = [];
-      for (let j = 0; j <= 10; j++) { const z = ZAP[0] + (ZAP[1] - ZAP[0]) * (j / 10), q = segPt(z, k, tt), n = segN(z, k, tt); pts.push(V3((q[0] + n[0] * 0.005) * sd, q[1] + n[1] * 0.005, z + n[2] * 0.005)); }
-      grp.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 16, 0.006, 5, false), M.trim));
-    }
-    return grp;
+    return [e1, e2];
   });
+  ribbon(...pillarB[0], M.trim, 0.004);
+  // the A pillars: two fine lines down each windscreen edge, one on the screen, one on the side glass (the door's)
+  const pillarA = (k, tt, sd) => {
+    const pts = [];
+    for (let j = 0; j <= 10; j++) { const z = ZAP[0] + (ZAP[1] - ZAP[0]) * (j / 10), q = segPt(z, k, tt), n = segN(z, k, tt); pts.push(V3((q[0] + n[0] * 0.005) * sd, q[1] + n[1] * 0.005, z + n[2] * 0.005)); }
+    return new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 16, 0.006, 5, false), M.trim);
+  };
+  both((sd) => pillarA(9, 0.04, sd));
   // the shut lines: one sharp, nearly upright cut behind the front wheel, one under the B pillar; and the rear
   // quarter's crease, curving from the shoulder down and back to the black over the back wheel
   const seam = (pts, w = 0.0035, lift = 0.0015) => {
@@ -441,13 +466,77 @@ export function buildRoadster(THREE, o = {}) {
     ribbon(e1, e2, M.seam, lift);
   };
   const line = (z0, y0, z1, y1, n = 8) => Array.from({ length: n + 1 }, (_, k) => [z0 + (z1 - z0) * (k / n), y0 + (y1 - y0) * (k / n)]);
-  seam(line(0.87, 0.672, 0.81, 0.3)); seam(line(-0.366, 0.874, -0.191, 0.299));
+  // (the doors' shut lines: up from the black line to the fender's crest, and to the glass under the B pillar)
+  seam(line(SHUT_F[0] + (0.78 - SHUT_F[1]) * SHUT_F[2], 0.78, SHUT_F[0], SHUT_F[1], 24), 0.0035, 0.003); seam(line(-0.366, 0.874, -0.191, 0.299));
   seam(Array.from({ length: 13 }, (_, k) => { const t = k / 12, u = 1 - t; return [u * u * -1.68 + 2 * u * t * -1.83 + t * t * -1.935, u * u * 0.862 + 2 * u * t * 0.78 + t * t * 0.63]; }), 0.003);
   // the gill high on the front fender, behind the wheel: a black slot, its front end raked down and forward, an amber tip
   decal([[0.885, 0.652], [1.115, 0.652], [1.138, 0.612], [0.885, 0.612]], M.trim, 0.002);
   decal([[1.065, 0.649], [1.112, 0.649], [1.133, 0.615], [1.086, 0.615]], M.amber, 0.0035);
   // a red reflector slanting across each black rear quarter
   decal([[-1.8, 0.608], [-1.97, 0.698], [-1.97, 0.684], [-1.8, 0.594]], M.reflector, 0.0025);
+
+  /* ------------------------------------------------------------ the doors -- */
+  // each side's door, cut from the body (doorBk): its outer skin, the painted panel and the side glass; round the panel
+  // a shell DOOR_D deep, its edges in the paint and an inner skin in the cabin's suede with a red light line along it;
+  // and in the body round the opening it leaves, jambs JAMB_D deep (at the sill, on down to the cabin's floor). Each
+  // hangs on a hinge by the A pillar's foot and swings up and forward and a little out: setDoor('L' | 'R', 0..1)
+  const CFLOOR = 0.18, DOOR_D = 0.05, JAMB_D = 0.16;
+  const HINGE = o.hinge || [0.9, 0.78, 0.74], HAXIS = unit(o.hingeAxis || [0.6, -0.6, 0.53]), HANG = o.hingeAngle ?? 1.3;
+  const key3 = (p) => p.map((v) => Math.round(v * 2e4)).join(',');
+  // a bucket's triangles welded at their corners (each corner's normal the mean of its own), and its rim: the edges
+  // only one triangle has, each the way that triangle runs round
+  function weld(arr) {
+    const idx = new Map(), P = [], N = [], T = [];
+    for (let i = 0; i < arr.length; i += 6) {
+      const p = [arr[i], arr[i + 1], arr[i + 2]], k = key3(p);
+      let j = idx.get(k); if (j === undefined) { j = P.length; idx.set(k, j); P.push(p); N.push([0, 0, 0]); }
+      N[j][0] += arr[i + 3]; N[j][1] += arr[i + 4]; N[j][2] += arr[i + 5]; T.push(j);
+    }
+    return { P, N: N.map(unit), T };
+  }
+  function rim(w) {
+    const cnt = new Map(), ek = (a, b) => (a < b ? a + '_' + b : b + '_' + a), out = [];
+    for (let t = 0; t < w.T.length; t += 3) for (let e = 0; e < 3; e++) { const k = ek(w.T[t + e], w.T[t + (e + 1) % 3]); cnt.set(k, (cnt.get(k) || 0) + 1); }
+    for (let t = 0; t < w.T.length; t += 3) for (let e = 0; e < 3; e++) { const a = w.T[t + e], b = w.T[t + (e + 1) % 3]; if (cnt.get(ek(a, b)) === 1) out.push([a, b]); }
+    return out;
+  }
+  const inset = (w, i, d) => { const p = w.P[i], n = w.N[i]; return [p[0] - n[0] * d, p[1] - n[1] * d, p[2] - n[2] * d]; };
+  const solid = (pts, mat) => { const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3)); geo.computeVertexNormals(); const m = new THREE.Mesh(geo, mat); m.castShadow = true; m.receiveShadow = true; return m; };
+  const doors = {}, jambs = [];
+  for (const sd of [1, -1]) {
+    const sideK = sd > 0 ? 'L' : 'R', bk = doorBk[sideK];
+    const pivot = new THREE.Group(); pivot.name = 'door' + sideK; pivot.position.set(HINGE[0] * sd, HINGE[1], HINGE[2]); g.add(pivot);
+    const inner = new THREE.Group(); inner.position.copy(pivot.position).negate(); pivot.add(inner);
+    // the outer skin, as cut
+    for (const k of ['paint', 'glass']) {
+      const arr = bk[k], n = arr.length / 6, pos = new Float32Array(n * 3), nrm = new Float32Array(n * 3);
+      for (let i = 0; i < n; i++) for (let c = 0; c < 3; c++) { pos[i * 3 + c] = arr[i * 6 + c]; nrm[i * 3 + c] = arr[i * 6 + 3 + c]; }
+      const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.BufferAttribute(pos, 3)); geo.setAttribute('normal', new THREE.BufferAttribute(nrm, 3));
+      const m = new THREE.Mesh(geo, M[k]); m.castShadow = k === 'paint'; m.receiveShadow = true; inner.add(m);
+    }
+    // the panel's shell: its edges, then its inner skin facing into the cabin
+    const w = weld(bk.paint), shell = [], lining = [];
+    for (const [a, b] of rim(w)) { const A = w.P[a], B = w.P[b], A1 = inset(w, a, DOOR_D), B1 = inset(w, b, DOOR_D); shell.push(...A, ...A1, ...B1, ...A, ...B1, ...B); }
+    for (let t = 0; t < w.T.length; t += 3) lining.push(...inset(w, w.T[t], DOOR_D), ...inset(w, w.T[t + 2], DOOR_D), ...inset(w, w.T[t + 1], DOOR_D));
+    inner.add(solid(shell, M.paint), solid(lining, M.cabin));
+    // (the red light line along the inside, as the cabin's has; the front B pillar line and the A pillar's on the glass)
+    const e1 = [], e2 = [];
+    for (let k = 0; k <= 16; k++) { const z = -0.25 + 1.0 * (k / 16); e1.push(side(z, 0.6)); e2.push(side(z, 0.612)); }
+    ribbon(e1, e2, M.ambient, -(DOOR_D + 0.003), [sd], inner);
+    ribbon(...pillarB[1], M.trim, 0.004, [sd], inner);
+    inner.add(pillarA(7, 0.93, sd));
+    // the jambs round the opening, facing into it
+    const all = weld([...bk.paint, ...bk.glass]);
+    for (const [a, b] of rim(all)) {
+      const A = all.P[a], B = all.P[b], A1 = inset(all, a, JAMB_D), B1 = inset(all, b, JAMB_D);
+      jambs.push(...A, ...B1, ...A1, ...A, ...B, ...B1);
+      if (A[1] < 0.36 && B[1] < 0.36) jambs.push(...A1, B1[0], CFLOOR, B1[2], ...B1, ...A1, A1[0], CFLOOR, A1[2], B1[0], CFLOOR, B1[2]);
+    }
+    doors[sideK] = { pivot, axis: V3(HAXIS[0], HAXIS[1] * sd, HAXIS[2] * sd), t: 0 };
+  }
+  g.add(solid(jambs, M.paint));
+  // a door open by t (0 shut, 1 all the way up)
+  function setDoor(sideK, t) { const d = doors[sideK]; if (!d) return; d.t = Math.max(0, Math.min(1, t)); d.pivot.quaternion.setFromAxisAngle(d.axis, HANG * d.t); }
 
   /* ------------------------------------------------------------- the lamps -- */
   // the nose: one slim white line along the bonnet's front edge, and off each end a short slash climbing the pod's front
@@ -548,31 +637,46 @@ export function buildRoadster(THREE, o = {}) {
   }
 
   /* -------------------------------------------------------------- the cabin -- */
-  // seen through the glass: a floor, a liner along each side just under the window line, a bulkhead behind the seats,
-  // the dash running forward under the windscreen, two seats, a console, a yoke and a screen
+  // seen through the glass: a floor, a liner along each side just under the window line (the doors carry their own), a
+  // bulkhead behind the seats, the dash running forward under the windscreen over a footwell, two low bucket seats, a
+  // console, the yoke on its column out of a pod before the driver (on the left), and a screen
+  const yoke = new THREE.Group(), yokeSpin = new THREE.Group(); yoke.name = 'yoke'; yoke.add(yokeSpin);
+  // the driver's mark: his hips on the seat, his heels in the footwell (both sides, the passenger's mirrored)
+  const SEAT = { hip: [0.36, 0.35, -0.2], heel: [0.11, 0.27, 0.56] };
   {
     const quad = (a, b, c, d, mat) => { const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.Float32BufferAttribute([...a, ...b, ...c, ...a, ...c, ...d], 3)); geo.computeVertexNormals(); g.add(new THREE.Mesh(geo, mat)); };
-    const CF = 0.3, Z0c = ZQ + 0.02, Z1c = 1.45;
+    const CF = CFLOOR, Z0c = ZQ + 0.02, Z1c = 1.45;
     quad([-0.8, CF, Z0c], [0.8, CF, Z0c], [0.8, CF, Z1c], [-0.8, CF, Z1c], M.cabin);
-    // (the liners: in under the window line all along, then level under the dash)
+    // (the liners: in under the window line all along, then level under the dash; none where the doors are)
     const lz = []; for (let z = Z0c; z < Z1c; z += 0.05) lz.push(z); lz.push(Z1c);
     const lx = (z) => (z <= ZAP[1] ? Math.min(0.8, BLX(z) - 0.05) : 0.8), ly = (z) => (z <= ZAP[1] ? BLY(z) - 0.012 : 0.66);
     for (const sd of [1, -1]) for (let i = 0; i < lz.length - 1; i++) {
       const [za, zb] = [lz[i], lz[i + 1]];
+      if (zb > -0.39 && za < 0.88) continue;
       quad([sd * lx(za), CF, za], [sd * lx(zb), CF, zb], [sd * lx(zb), ly(zb), zb], [sd * lx(za), ly(za), za], M.cabin);
       if (za > -0.65 && zb < 0.55) quad([sd * (lx(za) - 0.004), 0.6, za], [sd * (lx(zb) - 0.004), 0.6, zb], [sd * (lx(zb) - 0.004), 0.612, zb], [sd * (lx(za) - 0.004), 0.612, za], M.ambient);
     }
     const bw = Math.min(BLX(Z0c), CRX(Z0c)) - 0.02;
     quad([-bw, CF, Z0c], [bw, CF, Z0c], [bw, CRY(Z0c) - 0.02, Z0c], [-bw, CRY(Z0c) - 0.02, Z0c], M.cabin);
-    // (the dash, its profile [z, y] across the car)
-    prism([[0.55, CF], [Z1c, CF], [Z1c, 0.665], [0.64, 0.625], [0.55, 0.53]], 1.6, (u, v, w) => [w - 0.8, v, u], M.cabin);
-    prism(rect(-0.09, CF, 0.09, 0.5), 1.1, (u, v, w) => [u, v, 0.55 - w], M.cabin);
-    // (the seats: a cushion and a raked back in one profile, set across the car)
-    for (const x of [0.36, -0.36]) prism([[-0.18, CF + 0.02], [-0.18, 0.43], [-0.6, 0.4], [-0.7, 0.42], [-0.79, 0.97], [-0.9, 0.97], [-0.86, 0.4], [-0.8, CF + 0.02]], 0.46, (u, v, w) => [x - 0.23 + w, v, u], M.seat);
-    // (the yoke, before the driver on the left, and the screen in the middle of the dash)
-    const yoke = new THREE.Mesh(new THREE.TorusGeometry(0.15, 0.017, 8, 28), M.trim); yoke.scale.set(1, 0.62, 1); yoke.rotation.x = -0.35; yoke.position.set(0.36, 0.63, 0.42); g.add(yoke);
+    // (the dash, its profile [z, y] across the car: a shelf over the footwell, the toe board under it)
+    prism([[0.55, 0.47], [0.74, 0.44], [0.8, CF], [Z1c, CF], [Z1c, 0.665], [0.64, 0.625], [0.55, 0.53]], 1.6, (u, v, w) => [w - 0.8, v, u], M.cabin);
+    prism(rect(-0.09, CF, 0.09, 0.46), 1.1, (u, v, w) => [u, v, 0.55 - w], M.cabin);
+    // (the seats: a low cushion and a raked back in one profile, set across the car)
+    for (const x of [SEAT.hip[0], -SEAT.hip[0]]) prism([[0.12, CF + 0.01], [0.12, 0.3], [-0.28, 0.26], [-0.35, 0.29], [-0.68, 0.92], [-0.79, 0.93], [-0.5, 0.26], [-0.42, CF + 0.01]], 0.46, (u, v, w) => [x - 0.23 + w, v, u], M.seat);
+    // (the driver's pod on the dash, the yoke's column out of it)
+    prism([[0.3, 0.52], [0.56, 0.47], [0.56, 0.64], [0.38, 0.645]], 0.3, (u, v, w) => [SEAT.hip[0] - 0.15 + w, v, u], M.cabin);
+    // (the yoke, the screen in the middle of the dash)
+    // (its axis down and forward from his chest to the pod: the rim's top leans toward the dash)
+    yoke.position.set(SEAT.hip[0], 0.69, 0.06); yoke.rotation.x = 0.33; g.add(yoke);
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.15, 0.018, 8, 28), M.trim); ring.scale.set(1, 0.62, 1); yokeSpin.add(ring);
+    const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.055, 0.03, 20), M.trim); hub.rotation.x = Math.PI / 2; yokeSpin.add(hub);
+    const col = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.028, 0.3, 10), M.trim); col.rotation.x = Math.PI / 2; col.position.z = 0.15; yoke.add(col);
     const scr = new THREE.Mesh(new THREE.PlaneGeometry(0.3, 0.17), M.screen); scr.rotation.x = -0.35; scr.position.set(0, 0.68, 0.6); scr.rotation.y = Math.PI; g.add(scr);
   }
+  // where a hand holds the yoke (the wrist's mark: a touch out, under and back from the rim's end), in the world
+  const gripOf = (sideK, out = new THREE.Vector3()) => { yokeSpin.updateWorldMatrix(true, false); return yokeSpin.localToWorld(out.set(sideK === 'L' ? 0.17 : -0.17, -0.035, -0.05)); };
+  // (Quant in his seat goes in here, in the car's own frame)
+  const anchor = new THREE.Group(); anchor.name = 'driver'; g.add(anchor);
 
   /* ----------------------------------------------------------- the splitter -- */
   // a thick black blade under the whole nose, from the front wheels forward, a touch proud of the sides and jutting 5 cm
@@ -732,7 +836,7 @@ export function buildRoadster(THREE, o = {}) {
   // plumes and the plate stay as they are
   {
     g.updateMatrixWorld(true);
-    const keep = new Set([body, glow, ...wheels.map((w) => w.W), ...plumes, ...fans]), byMat = new Map(), gone = [];
+    const keep = new Set([body, glow, ...wheels.map((w) => w.W), ...plumes, ...fans, ...Object.values(doors).map((d) => d.pivot), yoke, anchor]), byMat = new Map(), gone = [];
     for (const o of g.children) {
       if (keep.has(o)) continue;
       o.traverse((m) => {
@@ -773,9 +877,155 @@ export function buildRoadster(THREE, o = {}) {
     t += dt; puffT += dt * cold;
     for (const w of wheels) { w.spin.rotation.x += (speed * dt) / w.r; if (w.front) w.W.rotation.y = steer * 0.42; }
     for (const f of fans) f.rotation.z += dt * (2 + Math.abs(speed) * 1.5);
+    // (the yoke turns with the front wheels, a good deal further: left (steer > 0) is anticlockwise to the driver)
+    yokeSpin.rotation.z += (-steer * 1.15 - yokeSpin.rotation.z) * Math.min(1, dt * 16);
     cold += (coldWant - cold) * Math.min(1, dt * 10); burn += (burnWant - burn) * Math.min(1, dt * 6);
     applyThrust();
   }
   setThrust(o.cold ?? 0, o.burn ?? 0); cold = coldWant; burn = burnWant; applyThrust();
-  return { group: g, materials: M, wheels, setThrust, update, length: ZF - ZR, width: 2.0, height: 1.16 };
+  // the doors: setDoor / door(side, t), t 0 shut to 1 up; doorT(side) how far open it is. The cabin: anchor (a group in
+  // the car's own frame, for a driver), seat (his marks, the driver's side; mirror x for the passenger's), grip(side) the
+  // world point a hand holds the yoke at
+  return { group: g, materials: M, wheels, setThrust, update, length: ZF - ZR, width: 2.0, height: 1.16,
+    setDoor, door: setDoor, doorT: (sideK) => doors[sideK]?.t ?? 0, doors, anchor, seat: SEAT, grip: gripOf, yoke };
+}
+
+/* ================================================================ the driver -- */
+// Quant at the wheel, and on his way in or out of the driver's door (the left, +x), posed in the car's own frame. q is
+// his rig (WAGMI.quant): body (the glb scene), bones by name, mixer, act(name) (a clip's action on that mixer):
+//   const d = createDriver(THREE, car, WAGMI.quant);
+//   d.attach();          // into the car where he stands, eased over from the pose he is in
+//   d.pose(dt, k);       // k 0: standing at the door (d.door, car-local [x, z]) facing the way the car does; 1: in the
+//                        // seat, hands on the yoke
+//   d.detach(parent);    // back out, his body put in parent (standing at the door)
+// k runs the way in: a hand down on the sill, the right foot in over the sill, the seat taken leaning out and
+// ducking forward under the roof, the left leg in, then back into the seat by way of the middle (the head never near
+// the B pillar). The way out is the same, backwards.
+export function createDriver(THREE, rs, q, { fade = 0.22 } = {}) {
+  const { body, bones: B, mixer } = q, anchor = rs.anchor, S = rs.seat, sit = q.act('sit'), idle = q.act('idle');
+  const V = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
+  const smooth = (x) => { x = Math.min(1, Math.max(0, x)); return x * x * (3 - 2 * x); };
+  // a track through keys [k, value...]: eased in and out at each key
+  const track = (keys) => (k) => {
+    if (k <= keys[0][0]) return keys[0].slice(1);
+    for (let i = 1; i < keys.length; i++) if (k <= keys[i][0]) { const a = keys[i - 1], b = keys[i], t = smooth((k - a[0]) / (b[0] - a[0])); return a.slice(1).map((v, j) => v + (b[j + 1] - v) * t); }
+    return keys[keys.length - 1].slice(1);
+  };
+  // (the car's marks are its model's, times its scale, rs.scale; the seat's, rs.seat, come in the anchor's frame,
+  // already scaled)
+  const sc = rs.scale || 1, m = (...v) => v.map((x) => x * sc);
+  const DOOR = m(1.45, -0.26), [hx, hy, hz] = S.hip, [fx, fy, fz] = S.heel;
+  let R0 = null;   // (his hips over his feet in the idle, measured the first time)
+  const hip = (k) => track([[0, DOOR[0] + R0.x, R0.y, DOOR[1] + R0.z], [0.3, ...m(1.12, 0.6, -0.2)], [0.55, ...m(0.62, 0.39, -0.2)], [0.75, hx + 0.04 * sc, hy, hz], [1, hx, hy, hz]])(k);
+  const yaw = track([[0, 0], [0.25, 0.55], [0.5, 0.8], [0.72, 0.45], [1, 0]]);
+  // the lean of his back (from his hips to his neck): [weight, tilt from upright, which way (from ahead, +z, toward
+  // the door, +x)]
+  const lean = track([[0, 0, 0, 0], [0.15, 1, 0.25, 0.55], [0.35, 1, 0.5, 0.7], [0.55, 1, 0.65, 0.3], [0.72, 1, 0.6, -0.3], [0.88, 1, 0.55, -1.6], [1, 1, 0.5, -Math.PI]]);
+  // the feet (the ankles' marks) and how much they follow them
+  const footR = track([[0.1, DOOR[0] - 0.12, 0.12, DOOR[1] + 0.05], [0.28, ...m(1.02, 0.5, 0)], [0.42, ...m(0.62, 0.3, 0.25)], [0.75, hx - 0.06 * sc, fy, 0.45 * sc], [1, hx - fx, fy, fz]]);
+  const footL = track([[0.1, DOOR[0] + 0.1, 0.12, DOOR[1]], [0.55, DOOR[0] - 0.25, 0.12, 0], [0.66, ...m(1.2, 0.22, 0.15)], [0.78, ...m(0.95, 0.52, 0.3)], [0.9, ...m(0.55, 0.33, 0.5)], [1, hx + fx, fy, fz]]);
+  const wFoot = track([[0.06, 0, 0], [0.18, 1, 1]]);
+  // the hands: the left down on the sill beside him while he gets down, both to the yoke at the end
+  const wSill = track([[0.18, 0], [0.32, 1], [0.55, 1], [0.66, 0]]), wYoke = track([[0.8, 0], [1, 1]]), SILL = m(0.93, 0.4, -0.08);
+  const sitW = track([[0.08, 0], [0.55, 1]]);
+
+  const _a = V(), _b = V(), _c = V(), _t = V(), _n = V(), _p = V(), _r = V(), _q = new THREE.Quaternion(), _q2 = new THREE.Quaternion(), _qw = new THREE.Quaternion();
+  const up = V(0, 1, 0);
+  // turn bone b by the world rotation r (on top of its world orientation)
+  function turnWorld(b, r) { b.getWorldQuaternion(_qw); _q2.copy(r).multiply(_qw); b.parent.getWorldQuaternion(_qw); b.quaternion.copy(_qw.invert().multiply(_q2)); b.updateMatrixWorld(true); }
+  // two-bone reach: b1 (shoulder, hip), b2 (elbow, knee), b3 (wrist, ankle) to the world point to, the middle joint
+  // toward the world direction pole; w blends it over the pose
+  function reach(n1, n2, n3, to, pole, w) {
+    const b1 = B[n1], b2 = B[n2], b3 = B[n3]; if (!b1 || !b2 || !b3 || w < 0.01) return;
+    const q1 = b1.quaternion.clone(), q2 = b2.quaternion.clone();
+    b1.getWorldPosition(_a); b2.getWorldPosition(_b); b3.getWorldPosition(_c);
+    const la = _a.distanceTo(_b), lb = _b.distanceTo(_c), d = Math.min(la + lb - 1e-3, Math.max(1e-3, to.distanceTo(_a)));
+    const cur = _p.subVectors(_a, _b).normalize().angleTo(_n.subVectors(_c, _b).normalize());
+    const want = Math.acos(Math.min(1, Math.max(-1, (la * la + lb * lb - d * d) / (2 * la * lb))));
+    _n.crossVectors(_p.subVectors(_a, _b), _n.subVectors(_c, _b)); if (_n.lengthSq() < 1e-8) _n.set(1, 0, 0); _n.normalize();
+    turnWorld(b2, _q.setFromAxisAngle(_n, want - cur));
+    b3.getWorldPosition(_c);
+    turnWorld(b1, _q.setFromUnitVectors(_p.subVectors(_c, _a).normalize(), _n.subVectors(to, _a).normalize()));
+    b2.getWorldPosition(_b);
+    const ax = _p.subVectors(to, _a).normalize(), e = _n.subVectors(_b, _a); e.addScaledVector(ax, -e.dot(ax));
+    const pl = _r.copy(pole); pl.addScaledVector(ax, -pl.dot(ax));
+    if (e.lengthSq() > 1e-6 && pl.lengthSq() > 1e-6) { let ang = e.angleTo(pl); if (_c.crossVectors(e, pl).dot(ax) < 0) ang = -ang; turnWorld(b1, _q.setFromAxisAngle(ax, ang)); }
+    if (w < 0.999) { b1.quaternion.slerpQuaternions(q1, _q.copy(b1.quaternion), w); b2.quaternion.slerpQuaternions(q2, _q2.copy(b2.quaternion), w); b1.updateMatrixWorld(true); }
+  }
+  const world = (a, out) => anchor.localToWorld(out.set(a[0], a[1], a[2]));
+  const dirOf = (a, b, out) => out.subVectors(B[b].getWorldPosition(_t), B[a].getWorldPosition(out)).normalize();
+  const bodyQ = new THREE.Quaternion(), _pole = V(), _to = V(), _d = V(), _w = V();
+  // in his own frame (yaw only), as a world direction
+  const his = (x, y, z, out) => out.set(x, y, z).applyQuaternion(bodyQ).applyQuaternion(anchor.getWorldQuaternion(_qw)).normalize();
+
+  const snap = { on: false, t: 0, q: new Map(), root: V(), pos: V(), quat: new THREE.Quaternion() };
+  const all = Object.values(B);
+  function weights(sw) {
+    for (const a of mixer._actions) if (a !== sit && a !== idle) a.setEffectiveWeight(0);
+    for (const a of [sit, idle]) { a.enabled = true; if (!a.isRunning()) a.play(); }
+    sit.time = 0; sit.setEffectiveWeight(sw); idle.setEffectiveWeight(1 - sw);
+  }
+  const d = {
+    door: DOOR, attached: false,
+    // into the car, from wherever (and however) he stands: the pose he is in eased over to the one asked for
+    attach(ease = fade) {
+      anchor.updateWorldMatrix(true, false); body.updateWorldMatrix(true, false);
+      for (const b of all) { let s = snap.q.get(b); if (!s) snap.q.set(b, (s = new THREE.Quaternion())); s.copy(b.quaternion); }
+      snap.root.copy(B.root.position);
+      anchor.attach(body); snap.pos.copy(body.position); snap.quat.copy(body.quaternion);
+      snap.on = ease > 0; snap.t = 0; snap.dur = ease;
+      if (!R0) {
+        // (the idle's hips, in his own frame)
+        const p0 = body.position.clone(), q0 = body.quaternion.clone();
+        weights(0); mixer.update(0); body.position.set(0, 0, 0); body.quaternion.identity(); body.updateMatrixWorld(true);
+        R0 = anchor.worldToLocal(B.root.getWorldPosition(V()));
+        body.position.copy(p0); body.quaternion.copy(q0);
+      }
+      d.attached = true;
+    },
+    detach(parent) {
+      parent.add(body); body.position.set(0, 0, 0); body.quaternion.identity();
+      // (the clips' weights are his rig's again: it, or a scene, sets them)
+      sit.setEffectiveWeight(0); sit.stop();
+      d.attached = false;
+    },
+    pose(dt, k, { steer = 0 } = {}) {
+      k = Math.min(1, Math.max(0, k));
+      weights(smooth(sitW(k)[0])); mixer.update(dt);
+      // where he is: turned by his yaw, then moved so his hips are on their mark
+      bodyQ.setFromAxisAngle(up, yaw(k)[0]);
+      body.quaternion.copy(bodyQ); body.position.set(0, 0, 0); body.updateMatrixWorld(true);
+      const h = hip(k), r = anchor.worldToLocal(B.root.getWorldPosition(_p));
+      body.position.set(h[0] - r.x, h[1] - r.y, h[2] - r.z); body.updateMatrixWorld(true);
+      // his back leaned (the whole of him over the hips), his head kept nearer level
+      const [wl, tilt, az] = lean(k);
+      if (wl > 0.01 && B.spine05 && B.neck01) {
+        const cur = dirOf('spine05', 'neck01', _d), want = _to.set(Math.sin(tilt) * Math.sin(az), Math.cos(tilt), Math.sin(tilt) * Math.cos(az)).transformDirection(anchor.matrixWorld);
+        _q.setFromUnitVectors(cur, _w.copy(cur).lerp(want, wl).normalize()); turnWorld(B.spine05, _q);
+        if (B.neck01) { const nd = dirOf('neck01', 'head', _d), lv = _w.copy(up).lerp(nd, 0.45).normalize(); _q.setFromUnitVectors(nd, nd.clone().lerp(lv, 0.5 * wl).normalize()); turnWorld(B.neck01, _q); }
+      }
+      // the legs and the arms
+      const wf = wFoot(k)[0];
+      reach('upperleg01_R', 'lowerleg01_R', 'foot_R', world(footR(k), _to), his(0, 0.4, 1, _pole), wf);
+      reach('upperleg01_L', 'lowerleg01_L', 'foot_L', world(footL(k), _to), his(0, 0.4, 1, _pole), wf);
+      const wr = wSill(k)[0], wy = wYoke(k)[0];
+      if (wy > 0.01) {
+        reach('upperarm01_L', 'lowerarm01_L', 'wrist_L', rs.grip('L', _to), his(1, -1, -0.4, _pole), wy);
+        reach('upperarm01_R', 'lowerarm01_R', 'wrist_R', rs.grip('R', _to), his(-1, -1, -0.4, _pole), wy);
+      }
+      if (wr > 0.01) reach('upperarm01_L', 'lowerarm01_L', 'wrist_L', world(SILL, _to), his(1, 0.3, -1, _pole), wr);
+      // (eased over from the pose he came in with)
+      if (snap.on) {
+        snap.t += dt; const f = smooth(snap.t / snap.dur);
+        if (f >= 1) snap.on = false;
+        else {
+          for (const b of all) { _q.copy(b.quaternion); b.quaternion.copy(snap.q.get(b)).slerp(_q, f); }
+          B.root.position.lerpVectors(snap.root, _p.copy(B.root.position), f);
+          body.position.lerpVectors(snap.pos, _p.copy(body.position), f); _q.copy(body.quaternion); body.quaternion.copy(snap.quat).slerp(_q, f);
+          body.updateMatrixWorld(true);
+        }
+      }
+    },
+  };
+  return d;
 }

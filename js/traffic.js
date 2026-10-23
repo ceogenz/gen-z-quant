@@ -38,7 +38,7 @@ const { PersonCrowd, PersonRig } = window.NYC;
 const { mergeGeometries } = window.NYC.Addons;
 
 const NUM_CARS = 200;
-const NUM_BUSES = 32;
+const NUM_BUSES = 24; // (WAGMI City: 32 bunched into columns and walls of buses round the player)
 const NUM_PEDS = 340;
 
 // Intelligent Driver Model: max acceleration, comfortable braking, time headway, standstill gap; and the sideways
@@ -53,6 +53,10 @@ const LOOKAHEAD = 70; // metres a driver looks ahead for vehicles, stop lines an
 const VEHICLE_RADIUS = 380;
 const PED_RADIUS = 320;
 const NEAR_RADIUS = 350;
+// A vehicle that has stood still this long (s, longer than a red and the queue behind it) is in a jam: out of view it is
+// put somewhere else. Buses are placed at least BUS_SPACING m from one another.
+const JAM_WAIT = 45;
+const BUS_SPACING = 110;
 
 function createBusDestinationTexture() {
   const c = document.createElement('canvas');
@@ -133,7 +137,7 @@ function createTrafficSystem(scene, sidewalks, obstacles) {
       bus, half, halfWidth, axle, driver, v0,
       edge: null, lane: 0, s: 0, speed: 0, acc: 0, gap: Infinity, leaderSpeed: 0,
       move: null, out: 0, conn: null, cs: 0, trail: null, commit: null, claimed: false, yielding: false, yieldAt: 0,
-      wait: 0, laneTimer: Math.random() * 0.5,
+      wait: 0, laneTimer: Math.random() * 0.5, blocked: 0,
       dl: 0, dlv: 0, blink: 0, blinkPhase: Math.random() * 0.8,
       x: 0, z: 0, prevX: 0, prevZ: 0, tx: 0, tz: 1, nose: 0, yaw: 0, yawRate: 0, steer: 0,
       pitch: 0, roll: 0, pitchVel: 0, rollVel: 0, vx: 0, vz: 0, yawOffset: 0, yawVel: 0,
@@ -303,6 +307,12 @@ function createTrafficSystem(scene, sidewalks, obstacles) {
   const buses = [];
   for (let i = 0; i < NUM_BUSES; i++) buses.push(createVehicle(true, 6.0, 1.3, 3.6, BUS_DRIVER, 8 + (i % 3)));
   const vehicles = [...cars, ...buses];
+  // (the body as drawn, for keeping vehicles out of one another: half length & width)
+  vehicles.forEach((v, i) => {
+    v.id = i;
+    v.bodyL = v.bus ? 5.72 : v.isSUV ? 2.22 : 2.18;
+    v.bodyW = v.halfWidth;
+  });
   group.add(busBodyInst, busHeaderInst, busWheelLeftInst, busWheelRightInst);
 
   // =========================================================================
@@ -405,6 +415,13 @@ function createTrafficSystem(scene, sidewalks, obstacles) {
   let focusX = 0;
   let focusZ = 140;
   const player = { active: false, entity: null, x: 0, z: 0, vx: 0, vz: 0, halfW: 0.86, halfL: 2.18, push: 0.5 };
+  // (WAGMI City: Quant's car, parked where he left it while he is on foot. The traffic brakes for it, goes round it and
+  // is pushed off it like off the player, but never moves it)
+  const parked = { active: false, x: 0, z: 0, yaw: 0, halfW: 0.95, halfL: 2.25 };
+  // (WAGMI City: the game's own moving cars, a chase's (wagmi/pursuit): { x, z, yaw, halfW, halfL, vx, vz } kept up to
+  // date by the game in trafficSystem.blockers. The traffic brakes for them and goes round them as for the parked car)
+  const blockers = [];
+  let gapSpeed = 0; // the speed of whatever playerGap() last found nearest ahead (the player, or 0: the parked car)
 
   // Lane lists hold pooled { v, s } entries sorted by position s along the lane, rebuilt every frame
   const pool = [];
@@ -584,22 +601,59 @@ function createTrafficSystem(scene, sidewalks, obstacles) {
   // Where the player is relative to v: metres ahead, metres to the right, and how fast it moves v's way
   function relateToPlayer(v) {
     v.pAhead = Infinity;
+    v.kAhead = Infinity;
+    const fx = Math.sin(v.yaw);
+    const fz = Math.cos(v.yaw);
+    // (and to the parked car: ahead, to the right, and its half width & length across & along v's way)
+    if (parked.active && Math.abs(parked.x - v.x) < LOOKAHEAD + 10 && Math.abs(parked.z - v.z) < LOOKAHEAD + 10) {
+      const dx = parked.x - v.x;
+      const dz = parked.z - v.z;
+      const c = Math.abs(Math.cos(parked.yaw - v.yaw));
+      const sn = Math.abs(Math.sin(parked.yaw - v.yaw));
+      v.kAhead = dx * fx + dz * fz;
+      v.kRight = dz * fx - dx * fz;
+      v.kW = parked.halfW * c + parked.halfL * sn;
+      v.kL = parked.halfW * sn + parked.halfL * c;
+      v.kSpeed = 0;
+    }
+    // (and the nearest of the blockers ahead near its lane, and how fast it goes v's way)
+    for (const k of blockers) {
+      const dx = k.x - v.x;
+      const dz = k.z - v.z;
+      if (Math.abs(dx) > LOOKAHEAD + 10 || Math.abs(dz) > LOOKAHEAD + 10) continue;
+      const ahead = dx * fx + dz * fz;
+      const right = dz * fx - dx * fz;
+      if (ahead < -8 || Math.abs(right) > 8 || (v.kAhead !== Infinity && Math.abs(ahead) >= Math.abs(v.kAhead))) continue;
+      const c = Math.abs(Math.cos(k.yaw - v.yaw));
+      const sn = Math.abs(Math.sin(k.yaw - v.yaw));
+      v.kAhead = ahead;
+      v.kRight = right;
+      v.kW = k.halfW * c + k.halfL * sn;
+      v.kL = k.halfW * sn + k.halfL * c;
+      v.kSpeed = Math.max(0, (k.vx || 0) * fx + (k.vz || 0) * fz);
+    }
     if (!player.active) return;
     const dx = player.x - v.x;
     const dz = player.z - v.z;
     if (Math.abs(dx) > LOOKAHEAD + 10 || Math.abs(dz) > LOOKAHEAD + 10) return;
-    const fx = Math.sin(v.yaw);
-    const fz = Math.cos(v.yaw);
     v.pAhead = dx * fx + dz * fz;
     v.pRight = dz * fx - dx * fz;
     v.pSpeed = Math.max(0, player.vx * fx + player.vz * fz);
   }
 
-  // Gap to the player if it is ahead in the lane whose centre is `off` metres to the right of v
+  // Gap to the player (or the parked car) if it is ahead in the lane whose centre is `off` metres to the right of v;
+  // gapSpeed: how fast that one goes v's way
   function playerGap(v, off) {
-    if (v.pAhead < 0 || v.pAhead > LOOKAHEAD) return Infinity;
-    if (Math.abs(v.pRight - off) > v.halfWidth + player.halfW + 0.4) return Infinity;
-    return v.pAhead - v.half - player.halfL;
+    let gap = Infinity;
+    if (v.pAhead >= 0 && v.pAhead <= LOOKAHEAD && Math.abs(v.pRight - off) <= v.halfWidth + player.halfW + 0.4) {
+      gap = v.pAhead - v.half - player.halfL;
+      gapSpeed = v.pSpeed;
+    }
+    if (v.kAhead >= 0 && v.kAhead <= LOOKAHEAD && Math.abs(v.kRight - off) <= v.halfWidth + v.kW + 0.4 && v.kAhead - v.half - v.kL < gap) {
+      gap = v.kAhead - v.half - v.kL;
+      gapSpeed = v.kSpeed || 0;
+    }
+    return gap;
   }
 
   // =========================================================================
@@ -886,13 +940,31 @@ function createTrafficSystem(scene, sidewalks, obstacles) {
     const across = m.turn === 'L' && !!e.opposite;
     const wait = first ? (across ? yieldPoint(v, c, e) : c.len - 3 - v.half) : -1; // < 0: no room inside to wait
     if (m.turn === 'L' ? across && wait < 0 && yieldOncoming(e.opposite, v.wait > 8, v) : e.opposite && e.opposite.lefts > 0) return false;
-    if (!n.signal && e.axisIndex !== 0 && yieldToAvenue(v, n)) return false;
+    if (!n.signal && e.axisIndex !== 0 && yieldToAvenue(v, n)) {
+      // (waited a while at the line for a gap that doesn't come: the avenue lets it through, see below)
+      if (v.wait > 6 && d < 3 && !(n.courtesyNext > clock)) {
+        n.courtesy = clock + 6;
+        n.courtesyNext = clock + 14;
+      }
+      return false;
+    }
+    // At a corner without signals the avenue gives way for a few seconds now and then to a side road's driver who has
+    // waited at the line (a steady stream on the avenue kept the side roads waiting for good)
+    if (!n.signal && e.axisIndex === 0 && stoppable && n.courtesy > clock) return false;
     // nobody on the crosswalks while it passes over them, on the way in and on the way out, and a free place to
     // clear the intersection to, taking turns with lanes merging into it
     if (pedestrianOn(n, e.inSide, laneCoord(e, v.lane), 0, timeTo(v, d + 2.5 + 2 * v.half))) return false;
     if (wait < 0 && pedestrianOn(n, f.outSide, laneCoord(f, j), timeTo(v, d + c.len - 3), timeTo(v, d + c.len + 2 * v.half))) return false;
     const vs = v.s - e.len - c.len; // where on f it would be now
-    if (!room(f, j, v) || alongside(f, j, v, vs, m.turn !== 'S') || mergingAhead(v, f, j)) return false;
+    if (!room(f, j, v) || alongside(f, j, v, vs, m.turn !== 'S') || mergingAhead(v, f, j)) {
+      // (waited a good while at the line for room on its way out: another way this lane allows, now and then)
+      if (v.wait > 15 && d < 3 && !(v.rerouteAt > clock)) {
+        v.rerouteAt = clock + 4;
+        const m2 = chooseMove(v, true);
+        if (m2 && m2.out[v.lane] >= 0) v.move = m2;
+      }
+      return false;
+    }
     v.out = j;
     v.yielding = wait >= 0;
     v.yieldAt = wait;
@@ -913,11 +985,16 @@ function createTrafficSystem(scene, sidewalks, obstacles) {
     if (v.move.out[v.lane] < 0) {
       const t = v.lane + Math.sign(nearestLane(v.move, v.lane) - v.lane);
       if (laneSafe(v, t, -4)) target = t;
-    } else if (v.speed > 2) {
-      let best = laneAcc(v, v.lane) + 0.6;
+    } else if (v.speed > 2 || v.wait > 4) {
+      // (stopped a while behind something that doesn't move off, the parked car, the player, a jam: a lane clearly
+      // freer beside it is worth pulling out into)
+      let best = v.blocked > 1.5 ? -Infinity : laneAcc(v, v.lane) + (v.speed > 2 ? 0.6 : 1.2);
       for (let t = v.lane - 1; t <= v.lane + 1; t += 2) {
         if (t < 0 || t >= e.lanes.length || v.move.out[t] < 0 || !laneSafe(v, t, -3)) continue;
-        const acc = laneAcc(v, t);
+        // (WAGMI City: a bus keeps to the curb lane, the bus lane, pulling out only round something slow, and never
+        // alongside another bus: no wall of buses side by side at a light)
+        if (v.bus && e.occ[t].some((o) => o.v.bus && Math.abs(o.s - v.s) < 16)) continue;
+        const acc = laneAcc(v, t) + (v.bus ? (t > v.lane ? 0.8 : -0.8) : 0);
         if (acc > best) {
           best = acc;
           target = t;
@@ -953,6 +1030,7 @@ function createTrafficSystem(scene, sidewalks, obstacles) {
     }
     const off = v.edge.lanes[t] - v.edge.lanes[v.lane] - v.dl;
     const reach = v.half + player.halfL + 6;
+    if (v.kAhead < Infinity && Math.abs(v.kRight - off) < v.halfWidth + v.kW + 0.4 && Math.abs(v.kAhead) < v.half + v.kL + 6) return false;
     return !(Math.abs(v.pRight - off) < v.halfWidth + player.halfW + 0.4 && v.pAhead > -reach && v.pAhead < reach);
   }
 
@@ -961,7 +1039,7 @@ function createTrafficSystem(scene, sidewalks, obstacles) {
     const o = ahead(v.edge.occ[t], v.s, v);
     let worst = o ? brake(v, o.s - o.v.half - v.s - v.half, o.v.speed) : 0;
     const pg = playerGap(v, v.edge.lanes[t] - v.edge.lanes[v.lane] - v.dl);
-    if (pg < LOOKAHEAD) worst = Math.min(worst, brake(v, pg, v.pSpeed));
+    if (pg < LOOKAHEAD) worst = Math.min(worst, brake(v, pg, gapSpeed));
     return freeAcc(v) + worst;
   }
 
@@ -1018,10 +1096,10 @@ function createTrafficSystem(scene, sidewalks, obstacles) {
     }
     const pg = playerGap(v, 0);
     if (pg < LOOKAHEAD) {
-      worst = Math.min(worst, brake(v, pg, v.pSpeed));
+      worst = Math.min(worst, brake(v, pg, gapSpeed));
       if (pg < v.gap) {
         v.gap = pg;
-        v.leaderSpeed = v.pSpeed;
+        v.leaderSpeed = gapSpeed;
       }
     }
     const acc = Math.min(freeAcc(v) + worst, (cap - v.speed) * 2);
@@ -1056,6 +1134,97 @@ function createTrafficSystem(scene, sidewalks, obstacles) {
     v.move = chooseMove(v, false);
   }
 
+  // Vehicles by 14 m cell (rebuilt every frame), for blockedAhead
+  const GRID = 14;
+  const grid = new Map();
+  const gridKey = (x, z) => (Math.floor(x / GRID) + 2048) * 4096 + Math.floor(z / GRID) + 2048;
+  function buildGrid() {
+    for (const list of grid.values()) list.length = 0;
+    for (const v of vehicles) {
+      if (!v.edge) continue;
+      const k = gridKey(v.x, v.z);
+      let list = grid.get(k);
+      if (!list) grid.set(k, (list = []));
+      list.push(v);
+    }
+  }
+  // How far two vehicles' bodies (as drawn) reach into each other, with a at (ax, az): 0 apart
+  function bodyPen(a, ax, az, b) {
+    const ya = a.yaw + a.yawOffset;
+    const yb = b.yaw + b.yawOffset;
+    const dx = b.x - ax;
+    const dz = b.z - az;
+    let pen = Infinity;
+    for (const y of [ya, yb]) {
+      for (let k = 0; k < 2; k++) {
+        const nx = k ? Math.sin(y) : Math.cos(y);
+        const nz = k ? Math.cos(y) : -Math.sin(y);
+        const ra = a.bodyW * Math.abs(Math.cos(ya) * nx - Math.sin(ya) * nz) + a.bodyL * Math.abs(Math.sin(ya) * nx + Math.cos(ya) * nz);
+        const rb = b.bodyW * Math.abs(Math.cos(yb) * nx - Math.sin(yb) * nz) + b.bodyL * Math.abs(Math.sin(yb) * nx + Math.cos(yb) * nz);
+        const p = ra + rb - Math.abs(dx * nx + dz * nz);
+        if (p <= 0) return 0;
+        if (p < pen) pen = p;
+      }
+    }
+    return pen;
+  }
+  // Would moving ds on take v further into a vehicle ahead of it (in front of its nose, within ~55 degrees)? Of two
+  // nose to nose, the first in the list goes.
+  const inFront = (a, b) => {
+    const dx = b.x - a.x;
+    const dz = b.z - a.z;
+    return dx * a.tx + dz * a.tz > 0.57 * Math.hypot(dx, dz);
+  };
+  function blockedAhead(v, ds) {
+    const nx = v.x + v.tx * ds;
+    const nz = v.z + v.tz * ds;
+    const cx = Math.floor(nx / GRID);
+    const cz = Math.floor(nz / GRID);
+    for (let ix = cx - 1; ix <= cx + 1; ix++) {
+      for (let iz = cz - 1; iz <= cz + 1; iz++) {
+        const list = grid.get((ix + 2048) * 4096 + iz + 2048);
+        if (!list) continue;
+        for (const o of list) {
+          if (o === v || Math.abs(o.x - nx) > o.bodyL + v.bodyL + 0.5 || Math.abs(o.z - nz) > o.bodyL + v.bodyL + 0.5) continue;
+          if (!inFront(v, o) || (inFront(o, v) && v.id < o.id)) continue;
+          const after = bodyPen(v, nx, nz, o);
+          if (after > 0.02 && after > bodyPen(v, v.x, v.z, o) + 1e-4) return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  // Last of all, any two vehicles found in one another all the same (a wreck handed back across a lane, a knock, a
+  // spawn) are eased apart along the line between them, a quarter metre a frame at most (a bus hardly moves). Within
+  // sight of the camera; not the wrecks, which wagmi/crash moves itself
+  function separate() {
+    buildGrid();
+    for (const v of vehicles) {
+      if (!v.edge || v.wreck || Math.abs(v.x - focusX) + Math.abs(v.z - focusZ) > 350) continue;
+      const cx = Math.floor(v.x / GRID);
+      const cz = Math.floor(v.z / GRID);
+      for (let ix = cx - 1; ix <= cx + 1; ix++) {
+        for (let iz = cz - 1; iz <= cz + 1; iz++) {
+          const list = grid.get((ix + 2048) * 4096 + iz + 2048);
+          if (!list) continue;
+          for (const o of list) {
+            if (o.id <= v.id || o.wreck || Math.abs(o.x - v.x) > o.bodyL + v.bodyL || Math.abs(o.z - v.z) > o.bodyL + v.bodyL) continue;
+            const pen = bodyPen(v, v.x, v.z, o);
+            if (pen < 0.02) continue;
+            const d = Math.hypot(o.x - v.x, o.z - v.z) || 1;
+            const ux = (o.x - v.x) / d;
+            const uz = (o.z - v.z) / d;
+            const step = Math.min(pen, 0.25);
+            const mine = v.bus === o.bus ? 0.5 : v.bus ? 0.15 : 0.85; // v's share of the push
+            shove(v, -ux * step * mine, -uz * step * mine);
+            shove(o, ux * step * (1 - mine), uz * step * (1 - mine));
+          }
+        }
+      }
+    }
+  }
+
   function drive(v, dt) {
     v.laneTimer -= dt;
     if (v.laneTimer <= 0) {
@@ -1071,6 +1240,13 @@ function createTrafficSystem(scene, sidewalks, obstacles) {
       ds = Math.max(0, v.gap - 0.3);
       v.speed = Math.min(v.speed, v.leaderSpeed);
     }
+    // ...nor into any other, whatever lane or turn it is on (a bus swinging wide, a car knocked across the lanes),
+    // within sight of the camera (~250 m)
+    if (ds > 0 && Math.abs(v.x - focusX) + Math.abs(v.z - focusZ) < 350 && blockedAhead(v, ds)) {
+      ds = 0;
+      v.speed = 0;
+      v.blocked += dt; // (how long, for changeLanes: something its lane doesn't know about stands in the way)
+    } else if (ds > 0) v.blocked = 0;
     v.acc = Math.max(-9, (v.speed - speed) / dt); // as driven, for the body to pitch with: none standing still
     v.wait = v.speed < 0.5 ? v.wait + dt : 0;
     if (!v.conn) {
@@ -1196,6 +1372,20 @@ function createTrafficSystem(scene, sidewalks, obstacles) {
       o.pitchVel -= along * Math.min(8.0, relVn) * 0.14;
       if (relVn > 2.2) spawnCollisionSparks((v.x + o.x) * 0.5, 0.56, (v.z + o.z) * 0.5, nx, nz, relVn);
     }
+  }
+
+  // (WAGMI City: a wreck handed back to its lane where it stands, wagmi/crash: along and across the lane by how far it is
+  // from where the lane has it, turned by how far it is turned from it; true if that is near enough to drive off from)
+  function unwreck(v, x, z, yaw) {
+    locate(v);
+    shove(v, x - v.x, z - v.z);
+    v.yaw = Math.atan2(v.tx, v.tz) - v.nose;
+    let d = yaw - v.yaw;
+    d -= Math.round(d / (Math.PI * 2)) * Math.PI * 2;
+    v.yawOffset = clamp(d, -0.85, 0.85);
+    v.yawVel = v.yawRate = v.vx = v.vz = v.speed = v.acc = 0;
+    v.dlv = 0;
+    return Math.hypot(v.x - x, v.z - z) < 0.6 && Math.abs(d) < 0.85;
   }
 
   // Physical 4-axis 2D SAT OBB test between a vehicle (half extents halfW x halfL, heading rotY) and the player.
@@ -1331,6 +1521,18 @@ function createTrafficSystem(scene, sidewalks, obstacles) {
     if (approachSpeed > 1.8) spawnCollisionSparks(contactX, v.bus ? 0.65 : 0.58, contactZ, nx, nz, approachSpeed);
   }
 
+  // (WAGMI City) Pushed off Quant's parked car, which stays put
+  function pushOffParked(v, rotY, halfW, halfL) {
+    const relX = parked.x - v.x;
+    const relZ = parked.z - v.z;
+    if (Math.abs(relX) > halfL + 3 || Math.abs(relZ) > halfL + 3) return;
+    const hit = overlapWithPlayer(relX, relZ, rotY, halfW, halfL, parked.yaw, parked.halfW, parked.halfL);
+    if (!hit) return;
+    const { nx, nz, pen } = hit;
+    shove(v, -nx * pen, -nz * pen);
+    if ((v.tx * v.speed + v.vx) * nx + (v.tz * v.speed + v.vz) * nz > 0) v.speed *= 0.3;
+  }
+
   // =========================================================================
   // 6. PLACING VEHICLES
   // =========================================================================
@@ -1348,7 +1550,7 @@ function createTrafficSystem(scene, sidewalks, obstacles) {
     v.trail = null;
     v.commit = null;
     v.yielding = false;
-    v.wait = 0;
+    v.wait = v.blocked = 0;
     v.speed = v.v0 * 0.5;
     v.acc = 0;
     v.dl = v.dlv = 0;
@@ -1367,13 +1569,16 @@ function createTrafficSystem(scene, sidewalks, obstacles) {
     for (let attempt = 0; attempt < 12; attempt++) {
       const e = nearEdges[Math.floor(Math.random() * nearEdges.length)];
       if (!e || (v.bus && e.axis !== 'ave') || e.len < 2 * v.half + 10 || heldEdges.has(e)) continue;
-      const lane = Math.floor(Math.random() * e.lanes.length);
+      const lane = v.bus && Math.random() < 0.8 ? e.lanes.length - 1 : Math.floor(Math.random() * e.lanes.length); // (a bus mostly in the curb lane)
       const s = v.half + 5 + Math.random() * (e.len - 2 * v.half - 10);
       const x = e.sx + e.dx * s + e.rx * e.lanes[lane];
       const z = e.sz + e.dz * s + e.rz * e.lanes[lane];
       const d = Math.hypot(x - focusX, z - focusZ);
       if (d < rMin || d > rMax || (hidden && visible(x, z, v.half + 4))) continue;
       if (player.active && Math.hypot(x - player.x, z - player.z) < 25) continue;
+      if (parked.active && Math.hypot(x - parked.x, z - parked.z) < 25) continue;
+      if (blockers.some((k) => Math.hypot(x - k.x, z - k.z) < 25)) continue; // (WAGMI City)
+      if (v.bus && buses.some((b) => b !== v && b.edge && Math.hypot(b.x - x, b.z - z) < BUS_SPACING)) continue; // (no bus convoys)
       if (!laneClear(e.occ[lane], s, v.half + 8)) continue;
       place(v, e, lane, s);
       return true;
@@ -1888,8 +2093,22 @@ function createTrafficSystem(scene, sidewalks, obstacles) {
       player.vx = Math.sin(heading) * speed + (playerEntity.vx || 0);
       player.vz = Math.cos(heading) * speed + (playerEntity.vz || 0);
     }
-    player.halfW = activeMode === 'cyclist' ? 0.35 : activeMode === 'person' ? 0.32 : 0.86;
-    player.halfL = activeMode === 'cyclist' ? 0.85 : activeMode === 'person' ? 0.32 : 2.18;
+    // (WAGMI City: Quant's car, standing where he left it)
+    const pc = activeMode !== 'car' && window.__NYC_APP && window.__NYC_APP.controllerManager && window.__NYC_APP.controllerManager.entities.car;
+    parked.active = !!(pc && pc.mesh && pc.mesh.visible && pc.position.y < 2.6);
+    if (parked.active) {
+      parked.x = pc.position.x;
+      parked.z = pc.position.z;
+      parked.yaw = pc.heading || 0;
+      if (pc.body) {
+        parked.halfW = pc.body.hx;
+        parked.halfL = (pc.body.z1 - pc.body.z0) / 2;
+      }
+    }
+    // (a car with a body of its own, Quant's: its half width & length)
+    const pb = activeMode === 'car' && playerEntity && playerEntity.body;
+    player.halfW = activeMode === 'cyclist' ? 0.35 : activeMode === 'person' ? 0.32 : pb ? pb.hx : 0.86;
+    player.halfL = activeMode === 'cyclist' ? 0.85 : activeMode === 'person' ? 0.32 : pb ? (pb.z1 - pb.z0) / 2 : 2.18;
     player.push = activeMode === 'cyclist' ? 0.82 : activeMode === 'person' ? 0.88 : 0.50;
 
     // 1. Cars & buses
@@ -1901,6 +2120,7 @@ function createTrafficSystem(scene, sidewalks, obstacles) {
     nypdDrawn = 0;
     visibleBuses = 0;
     let budget = jump ? Infinity : 4;
+    buildGrid();
     for (let i = 0; i < vehicles.length; i++) {
       const v = vehicles[i];
       const d = v.edge ? Math.hypot(v.x - focusX, v.z - focusZ) : Infinity;
@@ -1910,22 +2130,34 @@ function createTrafficSystem(scene, sidewalks, obstacles) {
         if (!spawnVehicle(v, 120, NEAR_RADIUS, true)) spawnVehicle(v, 120, 900, false); // (WAGMI City: a hold zone)
       } else if (budget > 0 && (d > 1200 || (d > VEHICLE_RADIUS && !visible(v.x, v.z, v.half + 2))) && spawnVehicle(v, 100, 300, true)) {
         budget--;
+      } else if (budget > 0 && v.wait > JAM_WAIT && !visible(v.x, v.z, v.half + 2) && spawnVehicle(v, 100, 300, true)) {
+        budget--; // stuck in a jam out of view: somewhere else
+      } else if (budget > 0 && v.bus && !v.wreck && d > 60 && !visible(v.x, v.z, v.half + 2) &&
+        buses.some((b) => b !== v && b.edge && b.id < v.id && Math.abs(b.x - v.x) + Math.abs(b.z - v.z) < 45) && spawnVehicle(v, 100, 300, true)) {
+        budget--; // (WAGMI City) a bus bunched up with another, out of view: somewhere else
       }
       if (!v.edge) continue;
 
       v.prevX = v.x;
       v.prevZ = v.z;
-      relateToPlayer(v);
-      drive(v, dt);
-      locate(v);
-      knock(v, dt);
-      pose(v, dt);
-      if (player.active) collideWithPlayer(v, v.yaw + v.yawOffset, v.bus ? 1.30 : v.isSUV ? 0.92 : 0.86, v.bus ? 5.72 : v.isSUV ? 2.22 : 2.18);
+      // (WAGMI City: wrecked, wagmi/crash moves it, sliding, spinning, standing there, until it hands it back to its lane;
+      // and in the car that crashes itself, playerEntity.crash, the crash meets the traffic, not collideWithPlayer)
+      if (v.wreck && !v.wreck(v, dt)) v.wreck = null;
+      if (!v.wreck) {
+        relateToPlayer(v);
+        drive(v, dt);
+        locate(v);
+        knock(v, dt);
+        pose(v, dt);
+      }
+      if (player.active && !playerEntity.crash) collideWithPlayer(v, v.yaw + v.yawOffset, v.bus ? 1.30 : v.isSUV ? 0.92 : 0.86, v.bus ? 5.72 : v.isSUV ? 2.22 : 2.18);
+      if (parked.active) pushOffParked(v, v.yaw + v.yawOffset, v.bodyW, v.bodyL);
       if (v.vx * v.vx + v.vz * v.vz > 0.36) knockOn(v);
 
       if (v.bus) renderBus(v);
       else renderCar(v);
     }
+    separate();
     const hideEmpty = ++updates > 2;
     for (const m of bodyMeshes) {
       const n = m.count;
@@ -1979,6 +2211,8 @@ function createTrafficSystem(scene, sidewalks, obstacles) {
     pedCrowd.begin();
     for (let i = 0; i < NUM_PEDS; i++) {
       const p = peds[i];
+      // (WAGMI City: knocked down by a car, wagmi/street moves and draws them until it hands them back out of view)
+      if (p.away) { if (p.away(p)) continue; p.away = null; if (!spawnPed(p, 60, NEAR_RADIUS, true)) spawnPed(p, 60, 900, false); }
       const d = p.placed ? Math.hypot(p.x - focusX, p.z - focusZ) : Infinity;
       if (!p.placed || (jump && d > NEAR_RADIUS)) {
         spawnPed(p, 0, NEAR_RADIUS, false);
@@ -2009,7 +2243,10 @@ function createTrafficSystem(scene, sidewalks, obstacles) {
     buses,
     peds,
     network,
-    hold // (WAGMI City)
+    hold, // (WAGMI City)
+    unwreck, // (WAGMI City)
+    blockers, // (WAGMI City)
+    _dbg: { phaseOf, boxBusy, room, alongside, mergingAhead, yieldOncoming, yieldPoint, pedestrianOn, laneCoord, timeTo, canStopBefore, yieldToAvenue } // TEMP (fix-round diagnosis)
   };
 }
 

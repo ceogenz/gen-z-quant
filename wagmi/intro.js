@@ -40,7 +40,13 @@ const WHITE = '#FFFFFF', ACID = '#B6FF3B', BLUE = '#6CB8FF', YELLOW = '#FFC93C';
 export async function install(W) {
   // (the sandbox's mode keys 1-4 are for the developers: F gets in and out of the car)
   addEventListener('keydown', (e) => { if (/^Digit[1-4]$/.test(e.code) && !Q.has('sandbox')) e.stopImmediatePropagation(); }, true);
-  if (Q.has('nointro')) { document.getElementById('wg-boot')?.remove(); outBesideCar(W); return; }
+  // (?m2= and ?m3= start their missions straight in, as ?nointro: mission/m2.js, m3.js)
+  if (Q.has('nointro') || Q.get('m2') || Q.get('m3')) {
+    document.getElementById('wg-boot')?.remove(); outBesideCar(W);
+    // (the city can still pick its own start, in the car, after this: out beside it again once the city is up)
+    if (Q.has('nointro') && !Q.get('m2') && !Q.get('m3')) (async () => { for (let i = 0; i < 600 && !W.app.ready; i++) await new Promise((r) => setTimeout(r, 100)); if (W.app.controllerManager.activeMode !== 'person') outBesideCar(W); })();
+    return;
+  }
   const ui = (W.ui = createUI()), sfx = (W.sfx = createAudio());
   // (the sandbox's HUD out at once, before any frame of it shows under the gate; the boot veil, index.html, holds the
   // key art over the city until the gate is up)
@@ -53,11 +59,17 @@ export async function install(W) {
   if (!Q.get('m1')) { place(W, { quant: [112, 386.7, 0] }); W.person.mesh.visible = false; }
   if (Q.get('m1')) { await m1.start(W, { at: Q.get('m1') }); return; }
   // the start gate: up the moment the city is on screen, whatever else is still loading (the key also unlocks the sound)
-  const gate = Q.has('nogate') ? null : ui.gate({ when: () => W.app.ready, onStart: () => sfx.unlock(), fine: 'Headphones on · Built on Slop New York by mrdoob' });
+  // (with a saved game: CONTINUE or NEW GAME on it, mission/m3-save.js)
+  const save = Q.has('nogate') ? null : await import('./mission/m3-save.js').then((m) => (m.readSave() ? m : null)).catch(() => null);
+  const gateOpts = { when: () => W.app.ready, onStart: () => sfx.unlock(), fine: 'Headphones on · Built on Slop New York by mrdoob' };
+  const gate = Q.has('nogate') ? null : save ? save.saveGate(ui, gateOpts) : ui.gate(gateOpts);
   // the first shot's camera and the bars from now on, while the cast is built behind the loading screen
   const hold = createDirector(W); hold.camera = { pos: [260, 140, 250], look: [-80, 172, 686], fov: 50 }; hold.take(); ui.cine(true);
   W._holdCam = hold;
-  const cast = await castOpening(W);
+  const castP = castOpening(W);
+  // (Continue: free roam on foot by the next mission's blip, no opening; the cast still builds, for the missions)
+  if (save && (await gate) === 'continue') { castP.catch(() => {}); await save.resume(W, hold); return; }
+  const cast = await castP;
   W.intro = cast.api;
   await cast.run(gate);
   await m1.start(W, { at: 'car', fromIntro: true });
@@ -471,13 +483,12 @@ function buildScript(ctx) {
     [76.95, ['walk/body', 'idle/arms'], { speed: 0.9, fade: 0.3 }],
     [77.85, 'idle', { fade: 0.4 }],
   ]);
-  // the phone: 'held' (in his right hand: up in front of him by upW, read low or on a video call at his chin by callK,
-  // his left hand on it too by bothK), 'drop' (out of his hand at the shove), 'ground', 'pick' (the get-up's hand to it)
+  // the phone: 'held' (in his right hand: up in front of him by upW, read low or on a video call at his chin by callK;
+  // his left hand on the lead), 'drop' (out of his hand at the shove), 'ground', 'pick' (the get-up's hand to it)
   const PHONE = [[0, 'none'], [11.45, 'held'], [36.12, 'drop'], [36.5, 'ground'], [45.45, 'pick'], [45.95, 'held']];
   const phoneAt = (t) => { let i = 0; for (let k = 0; k < PHONE.length; k++) if (PHONE[k][0] <= t) i = k; return { mode: PHONE[i][1], since: t - PHONE[i][0] }; };
   const upW = keys([[0, 1], [23.9, 1], [24.35, 0], [47.25, 0], [47.75, 1], [69.6, 1], [70.15, 0], [73.45, 0], [73.9, 1], [75.4, 1], [75.95, 0]]);
   const callK = keys([[49.7, 0], [50.25, 1], [69.1, 1], [69.6, 0], [73.4, 0], [73.5, 1]]); // (the MoonTag held up too: his face in the close)
-  const bothK = keys([[0, 1], [23.5, 1], [23.95, 0]]);
   const pickW = keys([[45.45, 0], [45.66, 0.92], [45.76, 0.92], [45.95, 0]]);
   // what he looks at: [t, target(t) | null]
   // (14.0: up from the phone as his card lands, his face to us; 34.3: after Moon; 41.3: on the pavement, his head
@@ -628,17 +639,17 @@ function buildScript(ctx) {
     // the call: Quant on the left third, the call coming in over the right; he answers
     { t: T.call, exp: STREET, cam: callCam },
     // ZK in his room, full frame (the city's frame is his: mission/zk.js)
-    { t: T.zkA, exp: STREET, cam: callCam, zk: (t) => ({ pos: keys([[50.55, zr(0.36, -0.05, 2.1)], [54.25, zr(0.28, -0.03, 1.8)]], 'linear')(t), look: zr(0, -0.13, -0.1), fov: 32 }) },
+    { t: T.zkA, exp: STREET, cam: callCam, zk: (t) => ({ pos: keys([[50.55, zr(0.36, -0.05, 2.1)], [54.25, zr(0.28, -0.03, 1.8)]], 'linear')(t), look: zr(0, -0.19, -0.1), fov: 34 }) },
     // Quant: 'Who is this?'
     { t: T.call2, exp: STREET, cam: callCam },
     // a lonely wide from across the street
     { t: T.wide, exp: STREET, cam: wideCam },
     // ZK closer, the other side: 'Zero Knowledge. ZK.'
-    { t: T.zkB, exp: STREET, cam: wideCam, zk: (t) => ({ pos: keys([[57.1, zr(-0.3, 0.02, 1.5)], [59.8, zr(-0.24, 0.02, 1.28)]], 'linear')(t), look: zr(0, -0.07, 0), fov: 30 }) },
+    { t: T.zkB, exp: STREET, cam: wideCam, zk: (t) => ({ pos: keys([[57.1, zr(-0.32, 0.02, 1.68)], [59.8, zr(-0.26, 0.02, 1.46)]], 'linear')(t), look: zr(0, -0.2, 0), fov: 34 }) },
     // his face: 'Give Moon back.'
     { t: T.close1, exp: 1.5, cam: (t) => { const pos = keys([[59.8, [110.37, 1.8, 392.43]], [61.35, [110.33, 1.8, 392.38]]], 'linear')(t); return { pos, look: aimAt(pos, eyeAt(), -0.22, 34, 0.32), fov: 34, shake: 0.5 }; } },
     // ZK: the stakes, leaning into the lens on 'collateral'; then close, his hand up to the lens: the demand
-    { t: T.zkC, exp: 1.5, cam: closeCam, zk: (t) => ({ pos: keys([[61.35, zr(0.32, -0.04, 1.95)], [65, zr(0.2, -0.01, 1.4)]], 'linear')(t), look: zr(0, -0.09, 0), fov: 32 }) },
+    { t: T.zkC, exp: 1.5, cam: closeCam, zk: (t) => ({ pos: keys([[61.35, zr(0.32, -0.04, 1.95)], [65, zr(0.2, -0.01, 1.4)]], 'linear')(t), look: zr(0, -0.16, 0), fov: 34 }) },
     { t: T.zkD, exp: 1.5, cam: closeCam, zk: (t) => ({ pos: keys([[65, zr(-0.12, -0.03, 1.3)], [66.6, zr(-0.1, -0.02, 1.16)]], 'linear')(t), look: zr(0.02, -0.19, 0), fov: 36 }) },
     // over his right shoulder onto the phone: ZK on its screen
     { t: T.ots, exp: STREET, cam: (t) => {
@@ -684,7 +695,8 @@ function buildScript(ctx) {
   function voices() {
     const out = [];
     for (const [who, , a, b, text] of LINES) {
-      const v = VOICE[who]; if (!v || text === 'Moon!') continue;
+      // (a line with a recorded voice speaks it itself: wagmi/radio/voices.js, from the subtitle)
+      const v = VOICE[who]; if (!v || text === 'Moon!' || W.voice?.has(who, text)) continue;
       const parts = text.match(/[^.?!]+[.?!']*/g) || [text], cps = text.length / (b - a);
       let at = a;
       for (const ph of parts) {
@@ -725,7 +737,7 @@ function buildScript(ctx) {
     [26.3, (r = 2.7) => ui.caption('The Degens', 'Bagsy & Stops · down bad', ACID, r), 2.7, true],
     [33.6, () => sfx.play('whoosh', { gain: 0.15, dur: 0.4 })],
     [34.05, () => sfx.play('yelp', { gain: 0.42, n: 3 })],
-    [34.95, () => sfx.play('shout', { gain: 0.5, f0: 235, vowel: 'u', dur: 0.62 })],
+    [34.95, () => { if (!W.voice?.has('Quant', 'Moon!')) sfx.play('shout', { gain: 0.5, f0: 235, vowel: 'u', dur: 0.62 }); }],
     [36.06, () => { sfx.play('grunt', { gain: 0.5, f0: 105 }); sfx.play('shove', { gain: 0.85 }); sfx.play('hit', { gain: 0.5 }); }],
     [36.18, () => sfx.play('grunt', { gain: 0.55, f0: 165, vowel: 'o' })],
     [36.95, () => { sfx.play('fall', { gain: 0.85 }); sfx.play('grunt', { gain: 0.35, f0: 140, vowel: 'u', dur: 0.3 }); }],
@@ -776,10 +788,8 @@ function buildScript(ctx) {
   }
   const FINGERS = (side) => [2, 3, 4, 5].flatMap((f) => [1, 2, 3].map((j) => B[`finger${f}-${j}_${side}`])).filter(Boolean);
   const THUMB = (side) => [1, 2, 3].map((j) => B[`finger1-${j}_${side}`]).filter(Boolean);
-  const qKeep = keeper([B.spine05, B.foot_L, B.foot_R, B.neck02, B.neck01, B.head, B.upperarm01_R, B.lowerarm01_R, B.upperarm01_L, B.lowerarm01_L, B.wrist_R, B.wrist_L, ...FINGERS('R'), ...THUMB('R'), ...FINGERS('L')]);
-  // a hand closed round the phone: each finger joint curled about its own axis (k 0..1)
-  const _gq = new THREE.Quaternion(), GRIP = { axis: new THREE.Vector3(1, 0, 0), finger: 0.45, thumb: 0.2 };
-  // a hand turned so its fingers run along `along` and its palm faces `facing` (world), by weight
+  const qKeep = keeper([B.spine05, B.foot_L, B.foot_R, B.neck02, B.neck01, B.head, B.upperarm01_R, B.lowerarm01_R, B.upperarm01_L, B.lowerarm01_L, B.lowerarm02_R, B.lowerarm02_L, B.wrist_R, B.wrist_L, ...FINGERS('R'), ...THUMB('R'), ...FINGERS('L'), ...THUMB('L')]);
+  // a hand turned so its fingers run along `along` and the back of it faces `facing` (world), by weight
   function orientHand(side, along, facing, w) {
     const wr = B[`wrist_${side}`], fm = B[`finger3-1_${side}`], ix = B[`finger2-1_${side}`], pk = B[`finger5-1_${side}`];
     if (!wr || !fm || !ix || !pk || w <= 0.001) return;
@@ -793,17 +803,88 @@ function buildScript(ctx) {
     if (w < 0.999) turn.slerpQuaternions(new THREE.Quaternion(), turn.clone(), w);
     turnBone(wr, turn);
   }
-  // the middle of a palm, and the way it faces
-  function palm(side) {
-    const wr = B[`wrist_${side}`].getWorldPosition(V()), fm = B[`finger3-1_${side}`].getWorldPosition(V());
-    return wr.lerp(fm, 0.55);
+  // (a hand turned about the forearm takes the forearm's twist bone part way with it: no wrung wrist)
+  function shareTwist(side, k = 0.55) {
+    const wr = B[`wrist_${side}`], tw = B[`lowerarm02_${side}`]; if (!tw || wr.parent !== tw) return;
+    const d = wr.position.clone().normalize(), q = wr.quaternion, s = d.x * q.x + d.y * q.y + d.z * q.z;
+    const part = new THREE.Quaternion().slerp(new THREE.Quaternion(d.x * s, d.y * s, d.z * s, q.w).normalize(), k);
+    tw.quaternion.multiply(part); wr.quaternion.premultiply(part.invert()); tw.updateMatrixWorld(true);
   }
-  function grip(side, k) {
-    if (k <= 0.01) return;
-    const ax = window.__gripAxis ? new THREE.Vector3(...window.__gripAxis) : GRIP.axis;
-    for (const b of FINGERS(side)) { b.quaternion.multiply(_gq.setFromAxisAngle(ax, GRIP.finger * k)); }
-    for (const b of THUMB(side)) { b.quaternion.multiply(_gq.setFromAxisAngle(ax, GRIP.thumb * k)); }
-    B[`wrist_${side}`]?.updateMatrixWorld(true);
+  // The fingers. Each curls about its own hinge (one axis for all its joints: the rig's bones all rest unturned), read
+  // off the fist in his fight clip; the left hand's mirrored. A shape: the curls of the index, middle, ring and little
+  // fingers [knuckle, middle, tip], the thumb's [base, middle, tip] and its base swung about the hand's length (radians),
+  // set over the clip's own by weight.
+  const HINGE = { 1: [0.92, -0.1, -0.38], 2: [0.45, 0.66, 0.6], 3: [0.43, 0.56, 0.71], 4: [0.39, 0.46, 0.8], 5: [0.35, 0.35, 0.87], len: [-0.42, -0.48, 0.77] };
+  const hingeOf = (n, side) => { const [x, y, z] = HINGE[n]; return side === 'R' ? V(x, y, z).normalize() : V(x, -y, -z).normalize(); };
+  const _gq = new THREE.Quaternion(), _gq2 = new THREE.Quaternion();
+  function shape(side, s, w = 1) {
+    if (w <= 0.001) return;
+    s.fingers.forEach((curl, i) => { const ax = hingeOf(i + 2, side); curl.forEach((a, j) => B[`finger${i + 2}-${j + 1}_${side}`]?.quaternion.slerp(_gq.setFromAxisAngle(ax, a), w)); });
+    const [t1, t2, t3, sw] = s.thumb, ax = hingeOf(1, side);
+    B[`finger1-1_${side}`]?.quaternion.slerp(_gq.setFromAxisAngle(hingeOf('len', side), sw).multiply(_gq2.setFromAxisAngle(ax, t1)), w);
+    B[`finger1-2_${side}`]?.quaternion.slerp(_gq.setFromAxisAngle(ax, t2), w);
+    B[`finger1-3_${side}`]?.quaternion.slerp(_gq.setFromAxisAngle(ax, t3), w);
+    B[`wrist_${side}`].updateMatrixWorld(true);
+  }
+  // round the phone (the fingers round its far edge, the thumb over the screen); a loose fist round the lead; laid flat
+  const SHAPES = {
+    // (the fingers fitted to the phone as he holds it: nothing through it, the tips on the glass inside its far edge)
+    phone: { fingers: [[-0.2, 0.7, 0.63], [0.35, 1.25, 1.13], [0.45, 1.2, 1.08], [0.55, 0.9, 0.81]], thumb: [0, 0.3, 0.2, 0] },
+    lead: { fingers: [[0.75, 1.1, 0.6], [0.8, 1.2, 0.65], [0.85, 1.25, 0.65], [0.9, 1.25, 0.65]], thumb: [0.45, 0.4, 0.3, 0.15] },
+    flat: { fingers: [[0.08, 0.15, 0.1], [0.1, 0.15, 0.1], [0.12, 0.18, 0.12], [0.15, 0.2, 0.12]], thumb: [0.1, 0.1, 0.05, -0.1] },
+  };
+  // a hand's frame: f along it (wrist to middle knuckle), a across it (to the index), p out of the palm; c the middle of
+  // the palm
+  function handFrame(side) {
+    const w = B[`wrist_${side}`].getWorldPosition(V()), m = B[`finger3-1_${side}`].getWorldPosition(V());
+    const len = w.distanceTo(m), f = m.clone().sub(w).divideScalar(len);
+    const a = B[`finger2-1_${side}`].getWorldPosition(V()).sub(B[`finger5-1_${side}`].getWorldPosition(V()));
+    a.addScaledVector(f, -a.dot(f)).normalize();
+    return { w, f, a, p: side === 'R' ? V().crossVectors(a, f) : V().crossVectors(f, a), len, c: w.clone().addScaledVector(f, len * 0.5) };
+  }
+  // The phone in his right hand: its back on his palm, its screen out of it, the hand across it `tilt` from its length
+  // (fingers to its far edge); its middle `along` the hand and `across` it (to the index) from the palm's, `depth` the
+  // palm's flesh under the bones. Glued there: wherever the hand goes, so does the phone, and never through it.
+  const HOLD = { tilt: 1.05, along: 0.012, across: -0.004, depth: 0.017 };
+  const PHONE_HALF = 0.0045;
+  function gluePhone() {
+    const H = handFrame('R'), st = Math.sin(HOLD.tilt), ct = Math.cos(HOLD.tilt);
+    const U = H.f.clone().multiplyScalar(ct).addScaledVector(H.a, st), N = H.p, S = V().crossVectors(U, N).normalize();
+    _m.makeBasis(S, U, N); phone.quaternion.setFromRotationMatrix(_m);
+    phone.position.copy(H.c).addScaledVector(H.f, HOLD.along).addScaledVector(H.a, HOLD.across).addScaledVector(N, HOLD.depth + PHONE_HALF);
+  }
+  // and the other way: where the right hand goes for the phone to be at C, its screen N, its top U (S its right): the
+  // wrist's place and the hand's length and palm
+  function handForPhone(C, S, U, N) {
+    const st = Math.sin(HOLD.tilt), ct = Math.cos(HOLD.tilt), len = HAND_LEN();
+    const f = U.clone().multiplyScalar(ct).addScaledVector(S, -st), a = U.clone().multiplyScalar(st).addScaledVector(S, ct);
+    const w = C.clone().addScaledVector(N, -(HOLD.depth + PHONE_HALF)).addScaledVector(a, -HOLD.across).addScaledVector(f, -(HOLD.along + len * 0.5));
+    return { w, f, back: N.clone().negate() };
+  }
+  let handLen = 0;
+  const HAND_LEN = () => handLen || (handLen = B.wrist_R.getWorldPosition(V()).distanceTo(B['finger3-1_R'].getWorldPosition(V())));
+  // His thumb on the glass: its last joint reached to a point on the screen ([x, y] from its middle, metres), the
+  // knuckle out over the edge, the tip laid along the glass toward the far corner. Reading his feed it strokes up the
+  // screen every so often; on the call it rests low by the edge.
+  const THUMB_ON = { rest: [0.022, 0.012], up: [0.01, 0.042], r: 0.0095 };
+  function thumbAt(t) {
+    if (!(t < 24 && screenAt(t) === 'feed')) return THUMB_ON.rest;
+    const c = ((t - 11.6) % 1.45) / 1.45, k = c < 0.22 ? smooth(c / 0.22) : 1 - smooth((c - 0.3) / 0.45);
+    return [lerp(THUMB_ON.rest[0], THUMB_ON.up[0], k), lerp(THUMB_ON.rest[1], THUMB_ON.up[1], k)];
+  }
+  function thumbOn([x, y], w = 1) {
+    if (w <= 0.001) return;
+    const b1 = B['finger1-1_R'], b2 = B['finger1-2_R'], b3 = B['finger1-3_R']; if (!b1 || !b2 || !b3) return;
+    phone.updateMatrixWorld(true);
+    const e = phone.matrixWorld.elements, S = V(e[0], e[1], e[2]).normalize(), U = V(e[4], e[5], e[6]).normalize(), N = V(e[8], e[9], e[10]).normalize();
+    const tg = phone.position.clone().addScaledVector(S, x).addScaledVector(U, y).addScaledVector(N, PHONE_HALF + THUMB_ON.r);
+    const q3 = b3.quaternion.clone();
+    reach(b1, b2, b3, tg, b2.getWorldPosition(V()).addScaledVector(N, 1).addScaledVector(S, 0.6), w);
+    // (the last bone: along the glass, a little into it)
+    const d = b3.position.clone().normalize().transformDirection(b3.matrixWorld), want = S.clone().multiplyScalar(-0.55).addScaledVector(U, 0.8).addScaledVector(N, -0.12).normalize();
+    turnBone(b3, new THREE.Quaternion().setFromUnitVectors(d, want));
+    if (w < 0.999) b3.quaternion.slerpQuaternions(q3, b3.quaternion.clone(), w);
+    b3.updateMatrixWorld(true);
   }
   // (the loader drops the dots from the thug's bone names: 'upperArm.L' is 'upperArmL')
   const thugKeep = (d) => keeper(['spine', 'spine1', 'spine2', 'neck', 'head', 'upperArmL', 'forearmL', 'upperArmR', 'forearmR'].map((n) => d.bones[n]));
@@ -835,7 +916,7 @@ function buildScript(ctx) {
     const q1 = b1.quaternion.clone(), q2 = b2.quaternion.clone();
     const turn = (b, q) => { b.getWorldQuaternion(_q); const want = q.clone().multiply(_q); b.parent.getWorldQuaternion(_q); b.quaternion.copy(_q.invert().multiply(want)); b.updateMatrixWorld(true); };
     const a = b1.getWorldPosition(V()), b = b2.getWorldPosition(V()), c = b3.getWorldPosition(V());
-    const la = a.distanceTo(b), lb = b.distanceTo(c), d = clamp(target.distanceTo(a), 0.05, la + lb - 1e-3);
+    const la = a.distanceTo(b), lb = b.distanceTo(c), d = clamp(target.distanceTo(a), Math.abs(la - lb) + 1e-3, la + lb - 1e-3);
     const cur = V().subVectors(a, b).normalize().angleTo(V().subVectors(c, b).normalize());
     const want = Math.acos(clamp((la * la + lb * lb - d * d) / (2 * la * lb), -1, 1));
     let n = V().crossVectors(V().subVectors(a, b), V().subVectors(c, b)); if (n.lengthSq() < 1e-8) n.set(1, 0, 0); n.normalize();
@@ -870,24 +951,18 @@ function buildScript(ctx) {
   function phoneFrame(mode) {
     const h = P.mesh.rotation.y, F = fwd(h), R = right(h);
     const e = eyeOf(), eye = V(e[0], e[1], e[2]);
-    // read: low in front of his chest (both hands: in the middle; one: a little to his right); call: up at his chin
+    // read: in front of his chest, a little to his right, near enough that his elbow stays bent by his side (not held
+    // out on a flat palm), its screen tipped up toward his face more than square to his eyes; call: up at his chin
     const C = mode === 'call' ? eye.clone().addScaledVector(F, 0.31).add(V(0, -0.22, 0)).addScaledVector(R, 0.1)
-      : mode === 'both' ? eye.clone().addScaledVector(F, 0.27).add(V(0, -0.44, 0)).addScaledVector(R, 0.02)
-      : eye.clone().addScaledVector(F, 0.27).add(V(0, -0.42, 0)).addScaledVector(R, 0.1);
+      : eye.clone().addScaledVector(F, 0.26).add(V(0, -0.35, 0)).addScaledVector(R, 0.07);
     const N = eye.clone().sub(C).normalize();
+    if (mode !== 'call') N.addScaledVector(F, -0.3).normalize();
     const U = V(0, 1, 0).addScaledVector(F, mode === 'call' ? 0.15 : 1.0); U.addScaledVector(N, -U.dot(N)).normalize();
     const S = V().crossVectors(U, N).normalize();
     return { C, N, U, S, F, R };
   }
-  // the phone in the palm of his right hand (by his side, picking it up)
-  function phoneInHand() {
-    const wr = B.wrist_R.getWorldPosition(V()), fi = (B['finger3-1_R'] || B.wrist_R).getWorldPosition(V()), th = (B['finger1-2_R'] || B.wrist_R).getWorldPosition(V());
-    const along = fi.clone().sub(wr).normalize();
-    const pos = wr.clone().lerp(fi, 0.75).lerp(th, 0.25);
-    let face = th.clone().sub(wr); face.addScaledVector(along, -face.dot(along)); if (face.lengthSq() < 1e-6) face = V(0, 1, 0); face.normalize();
-    const side = V().crossVectors(along, face).normalize();
-    _m.makeBasis(side, along, face); phone.quaternion.setFromRotationMatrix(_m); phone.position.copy(pos).addScaledVector(face, 0.012);
-  }
+  // the phone in his right hand (by his side, dropping it, picking it up): his fingers round it
+  function phoneInHand(w = 1) { shape('R', SHAPES.phone, w); gluePhone(); thumbOn(THUMB_ON.rest, w); }
   let phoneGround = null; // (where it lies: under his hand as he gets up, found once)
   function findPhoneGround() {
     const sv = { p: P.mesh.position.clone(), h: P.mesh.rotation.y };
@@ -898,6 +973,7 @@ function buildScript(ctx) {
     return V(hnd.x, 0.226, hnd.z);
   }
   const T_PICK = 45.72;
+  const PHONE_DOWN = new THREE.Quaternion().setFromEuler(new THREE.Euler(-PI / 2, 0, 0.7)); // (lying face up)
   const standK = keys([[0, 1], [35.4, 1], [35.7, 0], [46.4, 0], [47.4, 1]]);
   const flatK = keys([[36.45, 0], [36.95, 1], [45.2, 1], [45.5, 0]]);
   // his back laid on the pavement (k 0..1): the back of his head resting on it
@@ -907,7 +983,31 @@ function buildScript(ctx) {
     const L = d.length(), want = Math.asin(clamp((P.position.y + 0.1 - hip.y) / L, -0.9, 0.9)), cur = Math.atan2(d.y, flat);
     const axis = V(d.x, 0, d.z).normalize().cross(V(0, 1, 0)).normalize();
     turnBone(B.spine05, new THREE.Quaternion().setFromAxisAngle(axis, -(cur - want) * k));
+    // and square on his back, his shoulders level (the clip leaves him rolled onto his right side)
+    const ax = B.head.getWorldPosition(V()).sub(B.spine05.getWorldPosition(V())).normalize();
+    const sh = B.upperarm01_R.getWorldPosition(V()).sub(B.upperarm01_L.getWorldPosition(V()));
+    const a0 = sh.clone().addScaledVector(ax, -sh.dot(ax)).normalize(), a1 = sh.clone().setY(0); a1.addScaledVector(ax, -a1.dot(ax)).normalize();
+    let roll = a0.angleTo(a1); if (V().crossVectors(a0, a1).dot(ax) < 0) roll = -roll;
+    turnBone(B.spine05, new THREE.Quaternion().setFromAxisAngle(ax, roll * k));
   }
+  // His arms down on the pavement beside him, palms on it (the fall's clip flings them over his head, and laying his
+  // back flat took them through the pavement): each wrist reached to a place on it [toward his feet, out to his side]
+  // from its shoulder, the elbow out, the hand turned palm down and laid flat.
+  const ARMS_DOWN = { R: [0.12, 0.4], L: [0.2, 0.42] };
+  function armsDown(k) {
+    if (k <= 0.001) return;
+    const g = P.position.y, feet = B.spine05.getWorldPosition(V()).sub(B.head.getWorldPosition(V())).setY(0).normalize();
+    const out = B.upperarm01_R.getWorldPosition(V()).sub(B.upperarm01_L.getWorldPosition(V())).setY(0).normalize(); // (to his right)
+    for (const side of ['R', 'L']) {
+      const sh = B[`upperarm01_${side}`].getWorldPosition(V()), o = side === 'R' ? out : out.clone().negate(), [dn, ou] = ARMS_DOWN[side];
+      const tg = sh.clone().addScaledVector(feet, dn).addScaledVector(o, ou); tg.y = g + 0.025;
+      reach(B[`upperarm01_${side}`], B[`lowerarm01_${side}`], B[`wrist_${side}`], tg, sh.clone().addScaledVector(o, 1).addScaledVector(feet, -0.25).add(V(0, -0.35, 0)), k);
+      orientHand(side, tg.clone().sub(sh).setY(0).normalize().addScaledVector(o, 0.15), V(0, 1, 0), k);
+      shareTwist(side, 0.55 * k);
+      shape(side, SHAPES.flat, k);
+    }
+  }
+  const armsK = keys([[36.5, 0], [36.95, 1], [45.2, 1], [45.42, 0]]);
   // his hand out after Moon as Stops lifts her
   const reachK = keys([[34.32, 0], [34.62, 1], [35.25, 1], [35.5, 0]]);
 
@@ -965,47 +1065,40 @@ function buildScript(ctx) {
     const ph = phoneAt(t);
     phone.visible = ph.mode !== 'none' && q.vis;
     if (!phoneGround) { phoneGround = findPhoneGround(); qKeep.restore(); qRig.pose(t); qKeep.save(); P.mesh.updateMatrixWorld(true); }
-    if (ph.mode === 'held' && upW(t) <= 0.001) grip('R', 1);
+    // (on the pavement his arms lie on it beside him)
+    armsDown(armsK(t));
     if (ph.mode === 'held') {
       const up = upW(t);
       if (up > 0.001) {
-        const ck = callK(t), bk = bothK(t), fr0 = phoneFrame('read'), fb = phoneFrame('both'), fc = phoneFrame('call');
-        const fr = { C: fr0.C.lerp(fb.C, bk), N: fr0.N.lerp(fb.N, bk).normalize(), U: fr0.U.lerp(fb.U, bk), F: fr0.F, R: fr0.R };
+        // where he holds it up: read low, or up at his chin on the call
+        const ck = callK(t), fr = phoneFrame('read'), fc = phoneFrame('call'), F = fr.F, R = fr.R;
         const C = fr.C.clone().lerp(fc.C, ck), N = fr.N.clone().lerp(fc.N, ck).normalize(), U = fr.U.clone().lerp(fc.U, ck);
-        U.addScaledVector(N, -U.dot(N)).normalize(); const S = V().crossVectors(U, N).normalize(), F = fr.F, R = fr.R;
-        // the right hand's palm behind the phone, its fingers up the back (the left's too, reading with both); the
-        // wrist reached to below it, then turned to that
-        const tr = C.clone().addScaledVector(S, 0.03 * bk).addScaledVector(U, -0.085).addScaledVector(N, -0.03);
-        const sh = B.upperarm01_R.getWorldPosition(V());
-        reach(B.upperarm01_R, B.lowerarm01_R, B.wrist_R, tr, sh.clone().add(V(0, -1, 0)).addScaledVector(R, 0.5).addScaledVector(F, -0.3), up);
-        orientHand('R', U.clone().addScaledVector(S, -0.25), N, up);
-        const both = bothK(t) * up;
-        if (both > 0.001) {
-          const tl = C.clone().addScaledVector(S, -0.035).addScaledVector(U, -0.085).addScaledVector(N, -0.03), sl = B.upperarm01_L.getWorldPosition(V());
-          reach(B.upperarm01_L, B.lowerarm01_L, B.wrist_L, tl, sl.clone().add(V(0, -1, 0)).addScaledVector(R, -0.5).addScaledVector(F, -0.3), both);
-          orientHand('L', U.clone().addScaledVector(S, 0.25), N, both);
-          grip('L', both * 0.6);
-        }
-        grip('R', 1);
-        // the phone where his hand holds it, the way he holds it up (eased from his palm)
-        const pos = palm('R').addScaledVector(N, 0.02).addScaledVector(U, 0.035).addScaledVector(S, -0.03 * bk);
-        _m.makeBasis(S, U, N); const qa = new THREE.Quaternion().setFromRotationMatrix(_m);
-        phoneInHand(); const qh = phone.quaternion.clone(), p0 = phone.position.clone();
-        phone.quaternion.slerpQuaternions(qh, qa, up); phone.position.lerpVectors(p0, pos, up);
-      } else phoneInHand();
+        U.addScaledVector(N, -U.dot(N)).normalize(); const S = V().crossVectors(U, N).normalize();
+        // his right hand where it holds it there: the wrist reached to its place, the elbow down by his side, the hand
+        // turned palm to the phone's back
+        const hd = handForPhone(C, S, U, N), sh = B.upperarm01_R.getWorldPosition(V());
+        reach(B.upperarm01_R, B.lowerarm01_R, B.wrist_R, hd.w, sh.clone().add(V(0, -1, 0)).addScaledVector(R, 0.5).addScaledVector(F, -0.3), up);
+        orientHand('R', hd.f, hd.back, up);
+        shareTwist('R', 0.55 * up);
+      }
+      // the phone in it, his thumb on the screen
+      shape('R', SHAPES.phone); gluePhone(); thumbOn(thumbAt(t));
     } else if (ph.mode === 'drop') {
-      phoneInHand(); const k = ease.in(ph.since / 0.38);
+      // (out of his hand as he goes over, turning flat as it falls)
+      phoneInHand(1 - smooth(ph.since / 0.2)); const k = ease.in(ph.since / 0.38);
       const from = phone.position.clone(); phone.position.lerpVectors(from, phoneGround, k); phone.position.y += Math.sin(k * PI) * 0.15;
-      if (k > 0.98) phone.rotation.set(-PI / 2, 0, 0.7);
+      phone.quaternion.slerp(PHONE_DOWN, k);
     } else if (ph.mode === 'ground') {
       const buzz = (t > 42.4 && t < 44.3 && (t - 42.4) % 0.62 < 0.4) ? (Math.random() - 0.5) * 0.004 : 0;
-      phone.position.set(phoneGround.x + buzz, phoneGround.y, phoneGround.z); phone.rotation.set(-PI / 2, 0, 0.7);
+      phone.position.set(phoneGround.x + buzz, phoneGround.y, phoneGround.z); phone.quaternion.copy(PHONE_DOWN);
     } else if (ph.mode === 'pick') {
       // the get-up's right hand comes down on it: a reach to it, then it is in his hand
       const sh = B.upperarm01_R.getWorldPosition(V());
       reach(B.upperarm01_R, B.lowerarm01_R, B.wrist_R, phoneGround.clone().add(V(0, 0.05, 0)), sh.clone().add(V(0, 0, 1)), pickW(t));
-      if (t < T_PICK) { phone.position.copy(phoneGround); phone.rotation.set(-PI / 2, 0, 0.7); } else phoneInHand();
+      if (t < T_PICK) { shape('R', SHAPES.flat, pickW(t)); phone.position.copy(phoneGround); phone.quaternion.copy(PHONE_DOWN); } else phoneInHand(smooth((t - T_PICK) / 0.12));
     }
+    // the left hand round the lead while he has it
+    if (t > 11.1 && t < T_GRAB + 0.15) shape('L', SHAPES.lead, 1 - smooth((t - T_GRAB) / 0.15));
     if (phone.visible) phone.show(screenAt(t), t);
     // where he looks
     const lk = lookAt(t);
@@ -1122,13 +1215,17 @@ function buildScript(ctx) {
     // ZK's room: full frame in his shots, and on Quant's phone while the call is up
     const zc = api.zkCam || (!api.cam && s.zk ? s.zk(t) : null), feed = phone.visible && screenAt(t) === 'video';
     zk.full(zc); zk.phone(feed);
+    // (in his room the street goes quiet)
+    if (zc && playing) W.audio?.duck?.('amb', 0.85, 0.12);
     if (zc || feed) zk.pose(t, { lean: zkLean(t), tilt: zkTilt(t), palm: zkPalm(t) });
     // the words
     const L = lineAt(t);
     ui.sub(L ? L[0] : null, L ? L[4] : null, L ? L[1] : WHITE);
     const zkTalks = L && L[0] === 'ZK';
-    if (sound.voice) sound.voice.talk(zkTalks && playing);
-    if (zkTalks) { const lv = 0.6 + 0.4 * Math.random(); ui.phone.talk(lv); ui.zkTalk(lv); }
+    // (ZK's recorded voice, when his line has one: the meters follow it; else the buzzing babble)
+    const zkVoiced = zkTalks && W.voice?.has('ZK', L[4]);
+    if (sound.voice) sound.voice.talk(zkTalks && playing && !zkVoiced);
+    if (zkTalks) { const lv = zkVoiced ? Math.min(1, 0.12 + W.voice.level() * 1.2) : 0.6 + 0.4 * Math.random(); ui.phone.talk(lv); ui.zkTalk(lv); }
     cues(t, seek);
     lastT = t;
   }
@@ -1148,8 +1245,10 @@ function buildScript(ctx) {
     street.show(true);
     W.cutscene = true;
     W._holdCam?.release(0); W._holdCam = null;
-    W.directed = (dt) => { if (playing) { t = Math.min(END, t + dt * rate); if (t >= END) finish(); } D.framed = true; frame(dt); };
-    D.onFrame = (dt) => { if (playing) { t = Math.min(END, t + dt * rate); if (t >= END) finish(); } frame(dt); };
+    // (no frame once it has finished: one more would pose him again, phone grip and all, and wake the scene's clips
+    // under the game's own)
+    W.directed = (dt) => { if (playing) { t = Math.min(END, t + dt * rate); if (t >= END) return finish(); } D.framed = true; frame(dt); };
+    D.onFrame = (dt) => { if (playing) { t = Math.min(END, t + dt * rate); if (t >= END) return finish(); } frame(dt); };
     D.take();
     ui.cine(true);
     document.body.classList.add('wg-hidehint');
@@ -1159,7 +1258,7 @@ function buildScript(ctx) {
     if (skip) {
       skipped = true;
       await ui.fade(1, 0.35);
-      sfx.stopAll(0.4);
+      sfx.stopAll(0.4); W.voice?.stop(0.3);
       ui.phone.hide(); ui.caption(null); ui.sub(null); ui.gameTitle(false, true); ui.titleOff(); ui.placeOff(); ui.zk(false);
       t = END; lastT = -1; cueAt = CUES.length; frame(0);
     }
@@ -1168,6 +1267,9 @@ function buildScript(ctx) {
     for (const o of [moon.group, van.group, bagsy.root, stops.root, leash.mesh, phone]) o.visible = false;
     street.show(false);
     set.door(0);
+    // (his bones as the clip left them, not as the scene worked them: the gaits only write a bone when its value changes,
+    // so a hand closed round the phone would stay closed for the game)
+    qKeep.restore();
     qRig.stop();
     Qn.act('idle').setEffectiveWeight(1); Qn.body.rotation.x = 0;
     const q = quantAt(END);

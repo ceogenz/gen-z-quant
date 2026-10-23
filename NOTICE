@@ -32,3 +32,36 @@ Props (street fight)
     as a GLB with its textures reduced to 512 px. Both cans (galvanised, rusted) and their lids.
   - The bats and bottles are made in code (wagmi/combat/items.js); the fight's sounds are made in
     code with WebAudio (wagmi/combat/sfx.js). No recorded audio is used.
+
+
+Music (the car radio: wagmi/radio/stations.js)
+----------------------------------------------
+  - WAGMI FM: "We All Gonna Make It" (the theme), "Pump & Dump" and "Fifth Ave Glide"
+    (assets/music/wagmi-theme.m4a, wagmi-pump.m4a, wagmi-glide.m4a) are original to this game,
+    composed as code and rendered offline by wagmi/radio/build/music/ (no samples, no loops from
+    anyone else).
+  - The other stations play these CC0-1.0 tracks (https://creativecommons.org/publicdomain/zero/1.0/),
+    copied from the GameMog asset library (which measured their loudness and loop points and encoded
+    them to AAC); each from OpenGameArt:
+      assets/music/chill-lofi.m4a         "Chill Lofi Inspired (loop edit)" by omfgdude, loop edit by
+                                          qubodup  https://opengameart.org/content/chill-lofi-inspired-loop-edit
+      assets/music/midnight-cruiser.m4a   "Midnight Cruiser" by Zane Little
+                                          https://opengameart.org/content/midnight-cruiser
+      assets/music/funky-house.m4a        "Funky House" by Of Far Different Nature
+                                          https://opengameart.org/content/funky-house
+      assets/music/slampe.m4a             "Slampe (Synthwave House)" by Fupi
+                                          https://opengameart.org/content/slampe-synthwave-house
+      assets/music/vengeance-electro.m4a  "Vengeance Electro" by Of Far Different Nature
+                                          https://opengameart.org/content/vengeance-electro
+      assets/music/dance-field.m4a        "Dance Field" by Centurion_of_war
+                                          https://opengameart.org/content/dance-field
+
+
+Voices (assets/voice)
+---------------------
+  - PLACEHOLDERS: every spoken line in assets/voice/ was made with the macOS speech voices (the `say`
+    command: Eddy, Rocko, Reed, Samantha and Daniel; ZK's through a voice changer made in code).
+    Apple's macOS licence allows that output for personal, non-commercial use only. They must be
+    replaced by recordings (actors or a voice service with a commercial licence) before the game
+    is published. assets/voice/manifest.json records each line's source; docs/VOICE-LINES.md is the
+    line sheet and says how to drop the recordings in.

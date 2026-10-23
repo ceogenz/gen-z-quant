@@ -697,6 +697,18 @@ function buildLandmarks(scene) {
     bpGroup.updateMatrixWorld(true);
     const lb = new THREE.Box3().setFromObject(lawn);
     window.NYC.bryantParkLawn = { minX: lb.min.x, maxX: lb.max.x, minZ: lb.min.z, maxZ: lb.max.z, top: lb.max.y };
+    // Its raised ground (controllers.js getGroundHeight, see city-grid.js groundPatches): the terrace a metre up, people
+    // stepping up to it over its outer 1.4 m from the sidewalk, a wall to cars (`wall`); the lawn and the fountain on it
+    const tb = new THREE.Box3().setFromObject(lawnWall);
+    const fb = new THREE.Box3().setFromObject(fountainBasin);
+    const ground = (window.NYC.groundPatches = window.NYC.groundPatches || []);
+    ground.push(
+      { minX: tb.min.x, maxX: tb.max.x, minZ: tb.min.z, maxZ: tb.max.z, top: tb.max.y, base: 0.22, edge: 1.4, wall: true },
+      { minX: lb.min.x, maxX: lb.max.x, minZ: lb.min.z, maxZ: lb.max.z, top: lb.max.y }
+    );
+    const fr = Math.min(fb.max.x - fb.min.x, fb.max.z - fb.min.z) * 0.5;
+    const fcx = (fb.min.x + fb.max.x) * 0.5, fcz = (fb.min.z + fb.max.z) * 0.5;
+    ground.push({ minX: fcx - fr, maxX: fcx + fr, minZ: fcz - fr, maxZ: fcz + fr, top: fb.max.y, cx: fcx, cz: fcz, r: fr });
   }
 
   // =========================================================================

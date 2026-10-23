@@ -115,8 +115,8 @@ minimum. Phone calls show the caller card bottom-right (name, small avatar, "On 
 
 ### 2.8 Place names and counters
 - Entering a new neighbourhood (`districtAt`): its name bottom-right, Barlow Condensed 700 italic, 30 px, 3 s
-  ("Murray Hill", "Hell's Kitchen", "Chelsea"). Getting in a car: "Quant's Roadster". (The city's street-sign location
-  panel stays.)
+  ("Murray Hill", "Hell's Kitchen", "Chelsea"). Getting in his car: "Quant's car" (never "Roadster"). (The city's
+  street-sign location panel stays.)
 - Mission counters bottom-right above the speed cluster: label 14 px 700 letter-spaced, value 28 px:
   `DEGENS 2/5`, `RIGS 1/3`, `DISTANCE 84 m`, `0:45`.
 
@@ -234,8 +234,8 @@ back by crossing the whole city, and on the way the Degens find out who really t
   gendered pronoun.
 - **Juno**: Quant's friend from the group chat, an on-chain sleuth who reads wallets like gossip. Mostly a voice on the
   phone; in person at Bryant Park. Blip **J**.
-- **Gears**: big, gentle, an ex-pit-crew mechanic with an EV tuning garage in West Chelsea who built the roadster's
-  rocket package. Blip **G**.
+- **Gears**: big, gentle, an ex-pit-crew mechanic with an EV tuning garage in West Chelsea who built the rocket
+  package on Quant's car. Blip **G**.
 - **Coach Ruth**: a retired boxing champ with a gym on W 125th St; tough love; teaches the slams. Blip **C**.
 - **The Degens** (black and charcoal streetwear, acid-green #B6FF3B accents): **Bagsy** (Midtown crew lead, a duffel
   "bag" always slung), **Stops**, **Gwei**, **Wick**, **FOMO** (always late), **Lev** (Leverage Larry, runs Midtown),
@@ -259,8 +259,8 @@ that z (z < -1385 in Acts I-II, z > 1530 in Act I). Touching it, help: "The Smar
 City opens later in the story." The full map shades the locked area and labels it CLOSED. Act ends lift it, with the
 news radio: "The city has ended its Smart Barrier pilot after the barriers were found mining crypto."
 
-**Unlocks that make the car and the fists grow:** M1 fists and kicks, M2 trash cans and bottles, M3 bats and the
-roadster's **cold-gas thrusters** (a sideways hop to dodge), M5 the **rocket burst** (a short, huge speed burst), M6
+**Unlocks that make the car and the fists grow:** M1 fists and kicks, M2 trash cans and bottles, M3 bats and **cold-gas
+thrusters** for Quant's car (a sideways hop to dodge), M5 the **rocket burst** (a short, huge speed burst), M6
 **bodyslams** (Coach Ruth), after M8 Director Mode.
 
 **Time of day across the story:** Act I golden then twilight, Act II midday then golden, Act III golden, twilight,
@@ -269,9 +269,10 @@ midnight, then the epilogue back at golden hour on E 37th St.
 ### 4.4 The eight missions
 
 #### M1 · Dognapped (Act I) · Murray Hill -> 37th St crosstown -> Chelsea
-Golden hour. Giver: the game's opening (Q). The Degens snatch Moon outside Quant's building. Drive to Moon's tag in
-Chelsea Park, find the swap already done, fight Bagsy's crew, take the burner phone, take ZK's first call. Full detail
-in section 5.
+Golden hour. Giver: the game's opening (Q). The Degens snatch Moon outside Quant's building, and ZK video-calls him
+with his demand before he has got up off the pavement. Drive to Moon's tag in Chelsea Park, see Moon driven off in a
+black SUV, fight Bagsy's crew, search their van: Moon's collar and a burner with ZK's text on it. Full detail in
+section 5.
 - Locations: door (112, 0.22, 387.5); car (88, 0, 394.4) h -PI/2; arrival (-1139, 0, 1160); arena centre
   (-1200, 0, 1157); the van (-1240, 0, 1120.2) h PI/2.
 - Reward: FOLLOWERS +4,210; Juno becomes a contact. Hand-off: Juno's DM, **J** at Bryant Park.
@@ -301,11 +302,18 @@ Twilight (Times Square lights on). Juno traces the burner's twin to a Degens cou
 - Fails: spotted on the tail (from beat 2: branches into the chase; in beat 3: "You were spotted."), "Lev got away.",
   "Quant got rekt."
 - Reward: FOLLOWERS +9,800; trash cans and bottles. Hand-off: Act II opens; **G** at the Static Garage.
+- **As built** (wagmi/mission/m2*.js): Juno has no body yet, so she meets him by video call from "the library's
+  wifi" at the J (6th Ave entrance). W 47th St ends at 10th Ave and 12th Ave's east roadway between 49th and 52nd St
+  is a tree grove, so the tail runs W 47th St, 10th Ave north, W 55th St west to the yard, which stands on the 12th
+  Ave apron at W 54th-55th St (-1946..-1898, -1080..-1022; Pier 88/90's apron is past the shore limit). Spotted on the
+  tail, the van bolts and the yard is on alert. Lev's chase runs W 55th St, 11th Ave south past Javits, W 34th St
+  east to Greeley Square (or wherever the rams wreck his car). No "Get home" and no act-end scene yet: Mission
+  Passed, then Juno's call, Pete's DM and the **G** at Gears' garage ("Pete will DM you tomorrow.").
 
 #### M3 · Pump and Dump (Act II) · West Chelsea -> Washington Square -> West Village
 Midday. The Degens launch $MOON2, a copycat coin with Moon's photo on it, at a rally under the Washington Square arch.
 - Giver **G**: the Static Garage bay door (-1560, 0.22, 1611).
-- Opening cutscene: Gears under the roadster: "Cold-gas thrusters. Little puffs of nitrogen. Very safe. Mostly."
+- Opening cutscene: Gears under Quant's car: "Cold-gas thrusters. Little puffs of nitrogen. Very safe. Mostly."
   Juno on video call: the $MOON2 launch stream, Floor Price Fiona with a megaphone and Moon's face on a banner.
 - Beats:
   1. "Go to **Washington Square**." (the arch at the foot of 5th Ave (0, 0, 2806)).
@@ -319,6 +327,37 @@ Midday. The Degens launch $MOON2, a copycat coin with Moon's photo on it, at a r
 - Fails: "Quant got rekt.", "You left the fight."
 - Reward: FOLLOWERS +18,500; bats; cold-gas thrusters. Hand-off: a DM from an unknown number: "i want out. i know where
   the dog is going. sara roosevelt park. come alone. -P"
+- **As built** (22 Oct, `wagmi/mission/m3.js`, `m3-set.js`, `m3-scenes.js`, `m3-save.js`; `?nointro&m3=garage|square|rigs|escape|return`,
+  also `handoff` and `pete`; intro.js now starts `?m2=` / `?m3=` without `?nointro`):
+  - Mission 2's G is taken over by Mission 3's own (m3-save.js watches the story; m2.js is untouched). Into the corona:
+    a fade, "THE NEXT DAY", midday. The garage scene (~28 s, skippable): W 22nd St (the Static Garage sign, the roll-up
+    door half up), then the bay (a set built inside the building's shell): Gears' legs out from under the car on his
+    creeper, "Define mostly.", "I tested them on my van...", Juno's video call (Mission 2's call UI, her screen share
+    swapped for the $MOON2 stream: Fiona on the megaphone, Moon's face on the banner, the chart), "Go get your dog off
+    that screen."
+  - The set: a stage under the city's own arch, the $MOON2 LED screen in front of its opening (a live canvas chart,
+    both faces: seen through the arch from 5th Ave), Moon's face on a banner on the attic (a drawing of Moon), speaker
+    stacks, a crowd barrier, 18 of the city's own people as the crowd (they run when the fight starts), three rigs at
+    the doc's spots (a blow 1, a heavy 2, a bat or a bottle 3, a thrown can or bottle 3, the car 3; 2 hp: two punches).
+    Fiona is thug.glb repainted (white puffer, platinum hood, no mask) with hair, white shades and a megaphone (arm IK).
+    Gears is thug.glb repainted (navy overalls, a beard), a cap, a rag. No fiona.glb yet.
+  - Arrival scene (~11 s): the arch from 5th Ave, the crowd, Fiona close, Wick spots Quant. Fight: 3 grunts (2 bats) +
+    a brute, 2 more at 2/3 (a bat, a bottle); bats and cans laid out with their help; Fiona barks every ~10 s and when a
+    stream dies; the chart dips with each rig. 90 m: "Get back to the fight."; 150 m: "You left the fight."
+  - **Changed from the plan:** Fiona's SUV waits on **5th Ave at the arch** (6, 2782), not Washington Sq S: the city's
+    park block covers Washington Sq S and N (their lanes run over the park's lawn: the road at z 2951-2957 is grass).
+    The dump scene (~10.6 s): the chart crashes red (-99.8%), Fiona drops the megaphone, runs off the stage round the
+    arch's east pier to the SUV, which tears off north up 5th Ave; Quant's car is put beside it (-3.2, 2787) facing
+    north. Escape: `WAGMI.pursuit.start({ heat: 2, kind: 'degens', count: 2, from: (150, 2722) })`; 'lost' passes it,
+    'caught' fails it ("The Degens caught you."); the thrusters unlock 2 s in (`unlock('all', { announce: true })`: its
+    own help, Space hop, Q/E dash). Return: the GPS to the bay door, a corona; Juno calls. Home scene (~13 s): Gears at
+    the door, "...in one piece." "Mostly."
+  - Passed: TIME, RIGS SMASHED, DEGENS REKT, HITS TAKEN, FOLLOWERS +18,500, "NEW: bats · cold-gas thrusters"; the save;
+    Pete's DM; the **P** at Sara D. Roosevelt Park (925, 3560) with a corona and a "MISSION 4 · COMING SOON" sign.
+  - The progress save (m3-save.js): localStorage `wagmi.save.v1` = { done, unlocks, followers } after each pass (all
+    access in try/catch). The start gate with a save: CONTINUE (on foot by the next mission's blip, unlocks applied, no
+    opening) or NEW GAME. Pause menu: "Mission select" replays a passed mission from the top; the way on is put back to
+    the story's next blip afterwards.
 
 #### M4 · Paper Hands (Act II) · Lower East Side -> Chinatown -> Two Bridges -> the Seaport
 Golden hour. Paper Hands Pete wants out and will trade what he knows.
@@ -430,8 +469,8 @@ East Side, Chinatown, Two Bridges, the Seaport (M4); the Financial District, the
 
 ## 5. Mission 1 · Dognapped (build this now)
 
-**Length:** about 6 minutes: opening 42 s, drive ~110 s, arrival 13 s, fight ~90 s, the van and the call ~35 s,
-Mission Passed 6 s. **Time:** golden hour (the default preset), no change during the mission. **New mechanics:**
+**Length:** about 7 minutes: opening 81 s (ZK's call in it), drive ~110 s, arrival 19 s, fight ~90 s, the van and
+ZK's text ~20 s, Mission Passed 6 s. **Time:** golden hour (the default preset), no change during the mission. **New mechanics:**
 getting in the car (F), GPS, boost, fists and kicks.
 
 ### 5.1 Set and marks
@@ -442,10 +481,10 @@ getting in the car (F), GPS, boost, fists and kicks.
 | Quant, first mark (just out of the door) | (112, 0.22, 388.6) | 0 | |
 | Quant, walking mark | (109, 0.22, 390.8) | -PI/2 (west, toward his car) | He turns to PI/2 (east) to face the Degens. |
 | Moon | 0.9 m ahead of Quant on the leash, building side | follows Quant | |
-| Quant's roadster, parked | (88, 0, 394.4) | -PI/2 (west) | Against the north curb (z 393.25), 24 m west of the door. Mode: person, `person.inVehicle = false`. |
+| Quant's car, parked | (88, 0, 394.4) | -PI/2 (west) | Against the north curb (z 393.25), 24 m west of the door. Mode: person, `person.inVehicle = false`. |
 | Degens van stop | (116, 0, 394.6) | -PI/2 | At the curb in front of the door; sliding door on its right (curb) side. About 5.6 x 2.0 x 2.4 m, black with an acid-green stripe, "HODL Moving Co. · We never let go." |
 | Van entry path | (160, 0, 397.2) -> (130, 0, 396.0) -> (116, 0, 394.6) | | Turns in from Madison Ave (x 155), E 37th St runs one way west. |
-| Van exit path | (116, 0, 394.6) -> (100, 0, 397.5) -> (12, 0, 397.5) -> (3.6, 0, 405) -> (3.6, 0, 470) | | West past the roadster, left (south) onto 5th Ave, gone. |
+| Van exit path | (116, 0, 394.6) -> (100, 0, 397.5) -> (12, 0, 397.5) -> (3.6, 0, 405) -> (3.6, 0, 470) | | West past Quant's car, left (south) onto 5th Ave, gone. |
 | Bagsy | (113.5, 0.22, 391.4) | -PI/2 | Crew lead: charcoal hoodie, acid-green drawstrings, a duffel slung across his chest, sunglasses. |
 | Stops | (114.8, 0.22, 392.6) | -PI/2 | Lanky, acid-green beanie. He takes Moon. |
 | Clear zone during the opening | x 0..160, z 385..406 | | No traffic or pedestrians on this block while the cutscene runs; let traffic back when control returns. |
@@ -454,31 +493,39 @@ Street facts: E 37th St centreline z 398.6, 10.7 m roadway (curbs z 393.25 and 4
 sidewalk z 387.5..393.25 at y 0.22. The sun is low in the north-west, so the street is in warm shade and the upper floors
 across the street catch the light.
 
-### 5.2 Opening cutscene (42 s)
-Camera moves ease in-out (cubic). FOV is vertical, in degrees (the city's chase camera is 56). "->" is a move over the
-shot's duration. All shots checked as stills in the running city.
+### 5.2 Opening cutscene (81 s, built: wagmi/intro.js)
+The first plan (42 s) with ZK's first call moved up into it: a video call on Quant's phone as he gets up off the
+pavement, so the player meets the villain and hears his demand before the first drive. About 81 s is the owner's
+call: keep it. Skippable after 1 s (hold Space or Enter).
 
-| # | Dur | Camera position | Look-at | FOV | Move | What happens | Dialogue |
-|---|---|---|---|---|---|---|---|
-| 1 | 6.0 s | (260, 140, 250) -> (200, 120, 330) | (-80, 180, 686) -> (-80, 150, 686) | 50 | slow push in and down | Aerial over Murray Hill's rooftops at golden hour, the Empire State Building filling the frame. Title: **WAGMI CITY** (the game's title card, styled as 2.2 at 80 px). | Ambient city, a distant siren. |
-| 2 | 5.0 s | (152, 5.5, 397.5) -> (148, 3.2, 397.0) | (70, 3, 392) | 45 | crane down | E 37th St from the Madison end looking west: brick, AC units, the roadster parked at the right-hand curb. Place name bottom-right: *Murray Hill*. Title card: ACT I · BAGS / **DOGNAPPED**. | |
-| 3 | 4.0 s | (104, 1.0, 392.2) -> (104.3, 1.0, 391.9) | (112.5, 1.5, 388.6) | 50 | tiny push | Low 3/4 on the door. It opens; Moon trots out first, leash taut; Quant follows, phone in his free hand, eyes on the screen. He walks to his walking mark. | QUANT (reading, flat): "'Delete your account.' Good morning to you too." |
-| 4 | 3.5 s | hold shot 3 | | | | 2D phone overlay over a soft blur (a third of the screen, right side): the comments scroll. "@bagzzz: you rugged us kid", "@ngmi_420: we know where u live", "@moonfan: MOON IS SO FLUFFY". Moon tugs toward the car. | QUANT: "Okay, okay. Car, then the park, then we log off forever." (beat) "Kidding. Obviously." |
-| 5 | 3.5 s | (60, 0.7, 399.5) | (155, 1.6, 396) | 40 | static (long lens) | Road level looking east to Madison. The black van turns in from Madison and rolls toward camera, slowing, bass thumping. | Tyre squeal. |
-| 6 | 3.0 s | (96, 1.5, 390.8) | (116, 1.3, 393.0) | 48 | static | Sidewalk wide looking east: Quant (turning around, now h PI/2) and Moon in the foreground, the van pulling in at the curb; the sliding door rips open, Bagsy and Stops hop down. | BAGSY: "Yo! Coin kid! Huge fan. Sign my bags?" |
-| 7 | 4.0 s | (115.6, 1.75, 392.4) | (109, 1.6, 390.8) | 40 | slight handheld drift | Over Bagsy's left shoulder onto Quant's face; Moon at his feet. | QUANT: "I don't do autographs. I do 'please step back'." BAGSY: "You got rich. Our bags went to zero. So we're borrowing something." |
-| 8 | 2.5 s | (106, 0.45, 389.2) | (109.5, 0.5, 391) | 60 | quick pan with Moon | Moon's eye level. Stops lunges in from the right and scoops Moon up; the leash whips out of Quant's hand. Moon barks. | QUANT: "Moon!" |
-| 9 | 2.5 s | (104.5, 1.4, 392.5) | (109, 1.2, 390.8) | 45 | static | Behind Quant: he lunges; Bagsy shoves him hard and he goes down on the sidewalk. | BAGSY (backing into the van): "Want the dog? Check your DMs. Stay rich." |
-| 10 | 3.0 s | (135, 1.2, 397.0) | (60, 1.0, 397.5) | 50 | static, then a small pan left | Behind the van looking west: the door slams, the van pulls out, passes the roadster, brakes at 5th Ave and turns left. | Tyre squeal, horn from a taxi. |
-| 11 | 3.5 s | (106.5, 1.5, 393.0) | (109, 1.3, 390.8) | 40 | slow push in | Front close on Quant getting up (getup clip). His phone buzzes: 2D notification, "MoonTag · Moon is moving · 5th Ave", a little map pin. He looks at it, then down the street. | QUANT (quiet): "Okay. You took the wrong dog." |
-| 12 | 1.5 s | blend from shot 11 to the chase camera behind Quant (h -PI/2) | | 56 | 1.5 s ease | Bars slide out, HUD fades in. Control returns at (109, 0.22, 390.8) facing the roadster. | |
+| # | Time | What happens | Dialogue |
+|---|---|---|---|
+| 1 | 0-6 s | Aerial over Murray Hill's roofs to the Empire State Building. Title: **WAGMI CITY**. | Ambient city, a stinger. |
+| 2 | 6-11 s | E 37th St from the Madison end, craning down to Quant's car at the curb. Place: *Murray Hill* · E 37th St · Midtown · 5:45 PM. | |
+| 3 | 11-14.8 s | The door: Moon trots out first, Quant follows reading his phone. Captions *Moon* · very good dog, *Quant* · the coin kid. | QUANT: "'Delete your account.' Good morning to you too." |
+| 4 | 14.8-21 s | His phone over the right of the frame: the comments scroll. Then Moon's eye level: she looks up, wags, pulls for the car. | QUANT: "Okay, okay. Car, then the park, then we log off forever." "Kidding. Obviously." |
+| 5 | 21-24.5 s | Low on the street, a long lens: the van swings in from Madison and comes on, braking hard, tyres screaming. | |
+| 6 | 24.5-27.5 s | Behind Quant: the van's door rips open, Bagsy and Stops come at him up the sidewalk. Caption *The Degens* · Bagsy & Stops · down bad. | BAGSY: "Yo! Coin kid! Huge fan. Sign my bags?" |
+| 7 | 27.5-32.5 s | Over Bagsy's shoulder onto Quant, Moon at his feet. | QUANT: "I don't do autographs. I do 'please step back'." BAGSY: "Our bags went to zero. So we're borrowing something." |
+| 8 | 32.5-35.5 s | Stops scoops Moon up, holds her to his chest and runs for the van. | QUANT: "Moon!" |
+| 9 | 35.5-38.5 s | Quant goes after them; Bagsy shoves him down. | BAGSY: "Want the dog? Pick up your phone. Stay rich." |
+| 10 | 38.5-41.3 s | Behind the van: it tears off west past Quant's car toward 5th Ave. | |
+| 11 | 41.3-48.5 s | Down on the pavement, dazed, the phone buzzing by his hand; he gets up; it rings: UNKNOWN · *Video call...* He answers. | |
+| Call | 48.5-69.2 s | ZK's video call, cut shot and reverse: Quant with the phone, ZK full frame in his room (the call's frame over it: the caller's name, VIDEO CALL and the clock, VOICE CHANGER ON on a panel top left, ● LIVE and his voice's level top right), a lonely wide of Quant across the street, Quant's face, ZK leaning into the lens, ZK close with his right hand up, palm to the lens, for the demand, then over Quant's shoulder onto ZK on the phone. Caption *ZK* · on the phone. He hangs up. | ZK: "Quant. Big fan. Loved the coin. Loved it more on the way up." QUANT: "Who is this?" ZK: "Zero Knowledge. ZK. You don't know me. That's the brand." QUANT: "Give Moon back." ZK: "My community lost a lot of money. Moon is collateral." ZK: "You pay my community back. Terms by text. And stop posting." |
+| 11c | 69.2-77 s | Close on Quant. The MoonTag lands on his phone: *Moon is moving · 5th Ave*. | QUANT: "Did a guy with a voice changer just tell me to log off?" ... "Okay. You took the wrong dog." |
+| 12 | 77-81 s | Behind him, his car down the street: ACT I · BAGS / **DOGNAPPED**. The bars slide out, the chase camera, control at (109, 0.22, 390.8) facing his car. | |
 
-Total 42.0 s (shot 4 overlays shot 3's set; it is 3.5 s of its own). Skippable after 1 s (Hold Space).
+ZK on the call (wagmi/mission/zk.js, his own little scene drawn in place of the city's frame): tall, masked head to
+foot, never a face: a matte black balaclava under his hood, the mirrored chrome visor with two ring eyes, gloves, the
+black tracksuit with acid-green piping, the gold "0" on its chain. No skin anywhere. His hands rest steepled in front
+of his chest (in frame in his shots). Behind him a neon ring and four screens of red charts ($QUANT · 1D, BAGS · ALL
+TIME, MY COMMUNITY, $QUANT · 1H), kept below the call's corner labels in every shot.
 
 ### 5.3 Phase 1 · To the car (checkpoint 1)
-- Objective: "Get in your **car**." (car in #6CB8FF). The roadster is a blue blip.
-- Help: "Press F to get in a vehicle." (game.js's own F prompt "F · Get in" also shows beside the car).
-- In the car: vehicle name bottom-right, *Quant's Roadster*.
+- Objective: "Get in your **car**." (car in #6CB8FF). Quant's car is a blue blip.
+- Help: "Press F to get in a vehicle." (game.js's own F prompt "F · Get in" also shows beside the car). The car is
+  solid to Quant on foot; F gets him in from beside it.
+- In the car: vehicle name bottom-right, *Quant's car* (the speed panel says QUANT'S CAR too).
 
 ### 5.4 Phase 2 · The drive (~2.0 km, ~110 s)
 - Objective: "Follow Moon's tag to **Chelsea Park**." Destination blip and corona at **(-1139, 0, 1160)**: 9th Ave's
@@ -502,55 +549,55 @@ Total 42.0 s (shot 4 overlays shot 3's set; it is 3.5 s of its own). Skippable a
   - QUANT: "Then I'm already doing it."
 - Fail: none on the drive (a first mission is forgiving). Leaving the car: "Get back in your **car**."
 
-### 5.5 Arrival cutscene "The swap" (13 s, checkpoint 2 after it)
-Set when it starts: the van parked on W 28th St at the park's north edge **(-1240, 0, 1120.2) h PI/2** (W 28th St runs
-one way east; its sliding door faces the park); a black SUV with acid-green rims ahead of it at **(-1222, 0, 1120.2)
-h PI/2**, Moon's carrier going in through the back. Quant's car where he stopped (snap it to (-1139, 0, 1160) h 0 if
-he arrived crooked).
+### 5.5 Arrival cutscene "The swap" (19.4 s, checkpoint 2 after it; built: wagmi/mission/m1.js)
+Set when it starts: the van parked on W 28th St at the park's north edge **(-1240, 0, 1120.2) h PI/2** (its sliding
+door faces the park); a black SUV with acid-green rims ahead of it at **(-1222, 0, 1120.2) h PI/2**, Moon's head out
+of its back window (the park side). Quant's car where he stopped, snapped to **(-1139, 0, 1160) h 0**; Quant out of it
+on the park's sidewalk at **(-1145.5, 0.22, 1160)**. Traffic held on W 28th St, 9th Ave by the park and 9th Ave south.
 
-| # | Dur | Camera position | Look-at | FOV | What happens | Dialogue |
-|---|---|---|---|---|---|---|
-| A1 | 3.5 s | (-1133, 1.7, 1124) | (-1225, 1.4, 1120) | 38 | Long lens down W 28th St along the park: Gwei slams the SUV's back door; Moon's face at the rear window. | |
-| A2 | 3.0 s | (-1137.5, 1.2, 1168) | (-1140, 1.4, 1118) | 45 | Behind Quant by his car: the SUV comes round the corner of W 28th onto 9th Ave and whips past on his right (east), close. | QUANT: "MOON!" |
-| A3 | 2.0 s | (-1128, 1.6, 1150) | (-1133, 1.5, 1300) | 45 | The SUV's tail lights going away south down 9th Ave (despawn at z 1500). A bark, distant. | |
-| A4 | 4.5 s | (-1141.8, 1.75, 1161.2) | (-1190, 1.3, 1156) | 45 | Over Quant's shoulder (Quant at (-1145.5, 0.22, 1160) h -PI/2, the park sidewalk): Bagsy, Stops, Gwei and Wick walk out across the lawn toward him; Wick tips a trash can over, Stops picks up a bottle. | BAGSY: "Told you to check your DMs. You didn't check your DMs." QUANT: "Been a little busy getting robbed." BAGSY: "Nothing personal, kid. It's just extremely personal." |
+| # | Time | Camera | What happens | Dialogue |
+|---|---|---|---|---|
+| A1 | 0-3.2 s | (-1236, 1.35, 1129.5), the park's edge behind the SUV; FOV 14, following it | The getaway: Gwei slams the SUV's back door on Moon and walks off toward the van; the SUV swings out from the curb, tyres chirping, and tears off east down the block with her, shrinking (0 -> 21 m/s). | |
+| A2 | 3.2-6.4 s | (-1144.2, 1.6, 1166): 3/4 behind Quant, his car mid-right; FOV 40, then panning with the SUV | The SUV comes round the corner of W 28th onto 9th Ave and whips past him, Moon at the window. | QUANT: "MOON!" |
+| A3 | 6.4-8.6 s | (-1127.6, 1.45, 1166); FOV 32 -> 13 | After it: its tail lights going away south down 9th Ave (gone at z 1500). A bark, distant. | |
+| A4 | 8.6-11.4 s | over Quant's right shoulder (-1143.7, 1.74, 1159.3); FOV 26 | Bagsy's crew walks up across the lawn at him, Bagsy in front: four men in black and acid green, faces and masks readable. | BAGSY: "Told you to check your DMs. You didn't check your DMs." |
+| A5 | 11.4-13 s | beside Quant (-1146, 1.6, 1161.3), on Bagsy; FOV 30 | Bagsy walks up into a medium shot, shades and mask, the others behind him. | (Bagsy's line runs on) |
+| A6 | 13-15.5 s | the sidewalk (-1145.3, 1.55, 1164.9); FOV 30 | The two-shot: Bagsy three-quarters on, Stops behind him; Quant facing him 2.9 m off. | QUANT: "Been a little busy getting robbed." |
+| A7 | 15.5-19.4 s | over Quant's right shoulder (-1144.3, 1.7, 1159.05); FOV 26 -> 21, pushing in | Bagsy chest-up, Wick beside him; on his last words they put their fists up. | BAGSY: "Nothing personal, kid. It's just extremely personal." |
 
-SUV path: (-1222, 1120.2) -> (-1150, 1119.5) -> (-1136, 1128) -> (-1131, 1175) -> (-1131, 1500), about 16 m/s.
+Where the crew stops (and the fight picks them up): Bagsy (-1148.4, 1160.4), Stops (-1150.3, 1158.2), Gwei
+(-1150.6, 1162.6), Wick (-1152.3, 1159.8), all facing Quant.
+SUV path: (-1222, 1120.2) -> out from the curb -> (-1196, 1117.5) -> (-1150, 1119.6) -> round the corner ->
+(-1131, 1175) -> (-1131, 1500); A1 sees it to 26 m along, A2 picks it up at 70 m before the corner (~16 m/s through
+it) and it passes Quant at 27 m/s.
 
 ### 5.6 Phase 3 · The fight (checkpoint 2)
 - Objective: "Beat up the **Degens**." Counter: DEGENS 0/4 (becomes 0/5 when FOMO arrives). Help (first fight): the
   combat team's, plus "Degens are marked with a red dot on the Radar."
 - Arena: Chelsea Park's east end, centre **(-1200, 0, 1157)**, radius 45 m; the park runs x -1392..-1147, z
   1127..1188, with no colliders on the lawn; the north sidewalk at z 1122..1127.
-- Spawns: Bagsy (-1178, 0, 1150), Stops (-1185, 0, 1163), Gwei (-1192, 0, 1140), Wick (-1190, 0, 1172), all facing
-  east. Fists and kicks only for them (Bagsy hits 1.5x as hard and takes 1.5x the damage).
-- Props: a trash can at (-1160, 0, 1132), bottles at (-1205, 0, 1145) and (-1170, 0, 1175). (Pickups are taught in M2;
-  here they are just there.)
+- Spawns: the four in a loose ring round (-1153, 0, 1160), a few steps off Quant on the lawn's edge, where the
+  arrival leaves them, facing him, already coming. Fists and kicks only for them.
+- Props: the fight scatters two trash cans and three bottles round them. (Pickups are taught in M2; here they are
+  just there.)
 - Reinforcement: when 2 are down, FOMO runs in along W 28th St from (-1265, 0, 1121): "Wait! Did I miss the pump?"
   BAGSY: "You always miss the pump!"
-- Barks during the fight (Degens, 6-10 s apart): "This is for my margin call!" "I was up forty grand, kid!" "Buy high,
-  hit hard!" "Somebody record this!" Quant (on hits): "Read the whitepaper." "That's a dip." "Stop-loss."
+- Barks during the fight (not built yet; Degens, 6-10 s apart): "This is for my margin call!" "I was up forty
+  grand, kid!" "Buy high, hit hard!" "Somebody record this!" Quant (on hits): "Read the whitepaper." "That's a dip."
+  "Stop-loss."
 - Last hit: 0.6 s slow motion.
 - Leaving 90 m from the centre: "Get back to the **fight**."; 150 m: fail "You left the fight."
 
-### 5.7 Phase 4 · The van and the call (checkpoint 3)
+### 5.7 Phase 4 · The van and ZK's text (checkpoint 3)
 - Objective: "Search the **van**." (green). Marker on the park sidewalk at its sliding door: **(-1240, 0.22, 1123.6)**.
   Help: "Hold F to search." (1.2 s hold, a ring fills.)
-- Cutscene "The collar" (about 30 s):
-  - C1 (3 s): camera (-1239.2, 1.8, 1125.2), look (-1240.5, 1.0, 1120.5), FOV 45. Over Quant's shoulder: the door slides
-    open. On the seat: Moon's collar with the tag, chewed off, and a cheap burner phone. It rings.
-  - C2 (4 s): camera (-1236.8, 1.6, 1127.0), look (-1240, 1.55, 1123.6), FOV 40. Quant picks up the collar, then the
-    phone. He answers.
-  - Call (2D caller card: UNKNOWN, a chrome visor icon; ZK's voice pitched and buzzy). C3 holds a slow push on Quant's
-    face, camera (-1238.2, 1.6, 1126.2) -> (-1238.6, 1.6, 1125.6), look (-1240, 1.6, 1123.6), FOV 38:
-    - ZK: "Quant. Big fan. Loved the coin. Loved it more on the way up."
-    - QUANT: "Who is this?"
-    - ZK: "Zero Knowledge. ZK. You don't know me. That's the brand."
-    - QUANT: "Give Moon back."
-    - ZK: "My community lost a lot of money, Quant. Moon is collateral. Keep this phone on you. And maybe stop
-      posting."
-    - (click)
-    - QUANT (to the dead phone): "Did a guy with a voice changer just tell me to log off?"
+- Cutscene "The collar" (15.5 s; ZK's call is in the opening now, so here he texts):
+  - Low on the lip of the van's door as it slides open: Moon's collar with its tag, chewed through, and a cheap
+    burner phone.
+  - Quant steps up and picks the two up, one in each hand, and turns away from the van. QUANT: "Moon's collar. Chewed
+    right through."
+  - The burner buzzes: a text from ZK, on its screen: "nice moves. / moon says hi. / keep this phone on. / - ZK"
+  - Close on Quant. QUANT: "He's got my dog. And my number." QUANT: "Cool. Cool cool cool."
 - **MISSION PASSED** · Dognapped. TIME, DEGENS REKT 5/5, HITS TAKEN, **FOLLOWERS +4,210** ("#CoinKidFights is
   trending"). Unlock: Juno's contact.
 
@@ -563,8 +610,8 @@ library. try not to get mugged on the way." The **J** blip drops at Bryant Park,
 
 | Checkpoint | Restart state |
 |---|---|
-| 1 · after the opening | Quant (109, 0.22, 390.8) h -PI/2, person mode; roadster (88, 0, 394.4) h -PI/2. |
-| 2 · after the arrival | Quant (-1145.5, 0.22, 1160) h -PI/2, person mode; roadster (-1139, 0, 1160) h 0; the van and four Degens at their spawns; the SUV gone. |
+| 1 · after the opening | Quant (109, 0.22, 390.8) h -PI/2, person mode; Quant's car (88, 0, 394.4) h -PI/2. |
+| 2 · after the arrival | Quant (-1145.5, 0.22, 1160) h -PI/2, person mode; Quant's car (-1139, 0, 1160) h 0; the van, and the four Degens round (-1153, 0, 1160); the SUV gone. |
 | 3 · after the fight | Quant (-1240, 0.22, 1125) h PI, beside the van. |
 
 Fails: "Quant got rekt." (knocked out, any phase), "You left the fight." (phase 3). The drive cannot fail.

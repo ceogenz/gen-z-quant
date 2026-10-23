@@ -101,7 +101,7 @@ export function createHud(c) {
     <div class="wf-banner"></div><div class="wf-msg"></div>
     <div class="wf-offer"><div><kbd>E</kbd><span>PICK UP <b></b></span></div></div>
     <div class="wf-held"><b></b><span class="wf-pips"></span><small></small></div>
-    <div class="wf-hint"><span><b>FIGHT</b></span><span><kbd>LMB</kbd><kbd>J</kbd>Strike</span><span><kbd>RMB</kbd><kbd>K</kbd>Heavy · finish a man down</span><span><kbd>Q</kbd><kbd>L</kbd>Counter a yellow cue</span><span><kbd>C</kbd><kbd>Space</kbd>Dodge a red one</span><span><kbd>E</kbd>Grab a dazed one · pick up · throw</span><span><kbd>WASD</kbd>Move <kbd>Shift</kbd>Run</span><span><kbd>Mouse</kbd>Look <kbd>Esc</kbd>Free the mouse</span></div>
+    <div class="wf-hint"><span><b>FIGHT</b></span><span><kbd>LMB</kbd><kbd>J</kbd>Strike</span><span><kbd>RMB</kbd><kbd>K</kbd>Heavy · finish a man down</span><span><kbd>Q</kbd><kbd>L</kbd>Counter a yellow cue</span><span><kbd>C</kbd><kbd>Space</kbd>Dodge a red one</span><span><kbd>E</kbd>Grab a dazed one · pick up · throw</span><span><kbd>WASD</kbd>Move <kbd>Shift</kbd>Run</span><span><kbd>Mouse</kbd>Look <kbd>Esc</kbd>Pause</span></div>
     <div class="wf-keys"><span><b>FIGHT</b></span><span><kbd>LMB</kbd><kbd>J</kbd><i>Strike</i></span><span><kbd>RMB</kbd><kbd>K</kbd><i>Heavy</i></span><span><kbd>Q</kbd><i>Counter</i></span><span><kbd>C</kbd><kbd>Space</kbd><i>Dodge</i></span><span><kbd>E</kbd><i>Grab</i></span><span><kbd>WASD</kbd><i>Move</i></span><span><kbd>Shift</kbd><i>Run</i></span></div>`;
   document.body.appendChild(root);
   const $ = (s) => root.querySelector(s);
