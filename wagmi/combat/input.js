@@ -4,7 +4,8 @@
 //   Q or L    counter (while a man's cue shows over his head)
 //   C         dodge (a roll, or a back flip away); Space dodges too while fighting (it jumps otherwise)
 //   E         grab (a dazed man: lift him and slam him), pick up a bat, a bottle or a trash can, throw what he holds
-// Presses are buffered for a moment of fight time (slow motion stretches the buffer with the action).
+// Presses are buffered for a moment of fight time (slow motion stretches the buffer with the action), and counted (n:
+// how many of a key so far, so a move can tell a beat from a mash).
 // In a fight the mouse looks round GTA style: the first click locks the pointer to the view, so moving it turns the
 // camera with no button held and a click is only ever a blow (no more punches thrown by a drag to look round). Esc
 // lets it go; so does the end of the fight.
@@ -13,9 +14,9 @@ const KEYS = { KeyJ: 'strike', KeyK: 'heavy', KeyQ: 'counter', KeyL: 'counter', 
 export const ACTIONS = ['strike', 'heavy', 'counter', 'dodge', 'grab'];
 
 export function createInput({ canvas, live, fighting, near, now, look }) {
-  const pressed = new Map();
+  const pressed = new Map(), count = {};
   const typing = (e) => /^(INPUT|TEXTAREA|SELECT)$/.test(e.target?.tagName || '') || e.target?.isContentEditable;
-  const press = (k) => pressed.set(k, now());
+  const press = (k) => { pressed.set(k, now()); count[k] = (count[k] || 0) + 1; };
   addEventListener('keydown', (e) => {
     if (e.repeat || typing(e) || e.ctrlKey || e.metaKey || e.altKey || !live()) return;
     const k = KEYS[e.code] || (e.code === 'Space' && fighting() ? 'dodge' : null);
@@ -46,6 +47,7 @@ export function createInput({ canvas, live, fighting, near, now, look }) {
     press, // (also the debug API's)
     has(k) { const t = pressed.get(k); if (t == null) return false; if (now() - t > BUFFER) { pressed.delete(k); return false; } return true; },
     take(k) { const ok = this.has(k); pressed.delete(k); return ok; },
+    n(k) { return count[k] || 0; },
     clear() { pressed.clear(); },
   };
 }

@@ -1,8 +1,11 @@
 // Gen Z Quant: the fight's overlays (DOM, no pointer events), in the game's shared style: Barlow Condensed, white with a
 // soft shadow, yellow #FFC93C for the cues and key words, health green #4ADE80, danger red #EF4444, dark glass panels.
 //  - Quant's health: a GTA bar under the minimap (above it when there is no room), a white chunk trailing what he lost
-//  - over each Degen in the fight: his health, and his cue as he winds up (yellow: counter it; red: dodge it); dazed, the
-//    grab prompt
+//  - over each Degen in the fight: his health, and his cue as he winds up (yellow: counter it; red: dodge it); under the
+//    full rules a counterable one shows white first, a ring closing on it, and turns yellow when the counter's window
+//    opens (only the yellow one is .wf-cue.wf-on: touch.js flips its DODGE / COUNTER button by it); dazed, the grab
+//    prompt
+//  - Mission 1's lesson card (top middle): STRIKE, COUNTER, DODGE, one at a time (index.js), its keys as key caps
 //  - edge arrows toward a man winding up off screen; and a white one (his distance under it) toward every man of the fight
 //    still in it but out of the view, the last one standing's pulsing
 //  - the combo: a floating hit count and the takedown meter
@@ -47,6 +50,20 @@ const CSS = `
 #wf .wf-tag .wf-cue.wf-dodge{background:${R};color:#fff;box-shadow:0 0 0 3px rgba(239,68,68,.35),0 0 22px rgba(239,68,68,.85)}
 #wf .wf-tag .wf-cue.wf-now{animation:wfCue .14s ease-in-out infinite alternate}
 @keyframes wfCue{to{transform:scale(1.18)}}
+#wf .wf-tag .wf-tell{position:absolute;left:-17px;top:-42px;width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;font:800 22px/1 'Barlow Condensed',system-ui,sans-serif;color:#fff;background:rgba(12,13,16,.55);box-shadow:inset 0 0 0 2px rgba(255,255,255,.9);opacity:0;transition:opacity .08s}
+#wf .wf-tag .wf-tell.wf-on{opacity:1}
+#wf .wf-tag .wf-tell i{position:absolute;inset:-1px;border-radius:50%;border:2px solid rgba(255,201,60,.95);box-shadow:0 0 8px rgba(255,201,60,.6);will-change:transform}
+#wf .wf-lesson{position:fixed;left:50%;top:max(64px,9vh);transform:translate(-50%,-6px);padding:11px 18px 13px;border-radius:12px;background:${PANEL};box-shadow:inset 0 0 0 1px rgba(255,201,60,.35),0 6px 24px rgba(0,0,0,.35);display:flex;flex-direction:column;align-items:center;gap:7px;max-width:calc(100vw - 32px);text-align:center;opacity:0;transition:opacity .25s,transform .25s}
+#wf .wf-lesson.wf-on{opacity:1;transform:translate(-50%,0)}
+@media (max-width:640px){#wf .wf-lesson{top:max(108px,14vh);padding:9px 12px 10px}#wf .wf-lesson .wf-lt{font-size:28px}#wf .wf-lesson .wf-ll{font-size:15px}}
+#wf .wf-lesson.wf-pop .wf-lt{animation:wfPop .22s ease-out}
+#wf .wf-lesson .wf-ls{font:700 12px/1 'Barlow Condensed',system-ui,sans-serif;letter-spacing:.3em;color:rgba(255,255,255,.7)}
+#wf .wf-lesson .wf-lt{font:italic 800 34px/.9 'Barlow Condensed',system-ui,sans-serif;letter-spacing:.12em;color:${Y}}
+#wf .wf-lesson .wf-ll{display:flex;flex-wrap:wrap;justify-content:center;align-items:center;gap:6px;font:600 17px/1.25 'Barlow Condensed',system-ui,sans-serif;letter-spacing:.04em}
+#wf .wf-lesson kbd{font:700 13px/1 'Barlow Condensed',system-ui,sans-serif;border:1.5px solid rgba(255,255,255,.8);border-radius:4px;padding:3px 6px;background:rgba(0,0,0,.25)}
+#wf .wf-lesson b{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;font:800 15px/1 'Barlow Condensed',system-ui,sans-serif;text-shadow:none;margin:0 2px}
+#wf .wf-lesson b.y{background:${Y};color:#15171C}
+#wf .wf-lesson b.r{background:${R};color:#fff}
 #wf .wf-tag .wf-daze{position:absolute;left:-40px;top:-30px;width:80px;text-align:center;font:700 13px/1 'Barlow Condensed',system-ui,sans-serif;letter-spacing:.12em;color:${Y};opacity:0;transition:opacity .15s}
 #wf .wf-tag .wf-daze.wf-on{opacity:1}
 #wf .wf-tag .wf-daze kbd{font:800 11px/1 'Barlow Condensed',system-ui,sans-serif;border:1.5px solid ${Y};border-radius:4px;padding:2px 4px;margin-right:4px}
@@ -109,6 +126,7 @@ export function createHud(c) {
     <div class="wf-combo"><div class="wf-n">0</div><div class="wf-t">HITS</div><div class="wf-m"><i></i></div><div class="wf-td">TAKEDOWN READY &middot; <kbd>RMB</kbd><kbd>K</kbd></div></div>
     <div class="wf-tags"></div><div class="wf-foes"></div><div class="wf-arrows"></div>
     <div class="wf-banner"></div><div class="wf-msg"></div>
+    <div class="wf-lesson"><div class="wf-ls"></div><div class="wf-lt"></div><div class="wf-ll"></div></div>
     <div class="wf-offer"><div><kbd>E</kbd><span>PICK UP <b></b></span></div></div>
     <div class="wf-held"><b></b><span class="wf-pips"></span><small></small></div>
     <div class="wf-hint"><span><b>FIGHT</b></span><span><kbd>LMB</kbd><kbd>J</kbd>Strike</span><span><kbd>RMB</kbd><kbd>K</kbd>Heavy · finish a man down</span><span><kbd>Q</kbd><kbd>L</kbd>Counter a yellow cue</span><span><kbd>C</kbd><kbd>Space</kbd>Dodge a red one</span><span><kbd>E</kbd>Grab a dazed one · pick up · throw</span><span><kbd>WASD</kbd>Move <kbd>Shift</kbd>Run</span><span><kbd>Mouse</kbd>Look <kbd>Esc</kbd>Pause</span></div>
@@ -119,6 +137,8 @@ export function createHud(c) {
   const combo = $('.wf-combo'), comboN = $('.wf-combo .wf-n'), meter = $('.wf-combo .wf-m i');
   const vig = $('.wf-vig'), slow = $('.wf-slow'), banner = $('.wf-banner'), msg = $('.wf-msg'), hint = $('.wf-hint'), tags = $('.wf-tags'), arrows = $('.wf-arrows'), foes = $('.wf-foes');
   const tagEls = new Map(), arrowEls = [], foeEls = new Map();
+  const lessonEl = $('.wf-lesson'), lessonS = $('.wf-lesson .wf-ls'), lessonT = $('.wf-lesson .wf-lt'), lessonL = $('.wf-lesson .wf-ll');
+  let lessonKey = '';
   const offer = $('.wf-offer'), offerName = $('.wf-offer b'), held = $('.wf-held'), heldName = $('.wf-held b'), pips = $('.wf-held .wf-pips'), heldKeys = $('.wf-held small');
   let heldKey = '';
   let trailV = 1, hold = 0, lastHp = 100, vigV = 0, bannerT = 0, msgT = 0, hintT = 0, hinted = false, lastN = 0, fightKeys = false;
@@ -128,7 +148,17 @@ export function createHud(c) {
     hurt(k) { vigV = Math.min(1, vigV + 0.45 + k); },
     banner(text, color = Y) { banner.textContent = text; banner.style.color = color; bannerT = 1.0; },
     flash(text, kind = '') { msg.textContent = text; msg.className = 'wf-msg wf-on ' + (kind ? 'wf-' + kind : ''); msgT = 1.6; },
-    fightStarted() { if (!hinted) { hinted = true; hintT = 10; } },
+    // (the first fight: the full key card for 10 s, unless Mission 1's lesson card teaches them one at a time)
+    fightStarted({ lesson = false } = {}) { if (!hinted && !lesson) { hinted = true; hintT = 10; } },
+    // the lesson card: { step, of, title, line (html, key caps in it) } or null
+    lesson(L) {
+      const key = L ? L.title + L.step : '';
+      if (key === lessonKey) return; lessonKey = key;
+      if (!L) { lessonEl.classList.remove('wf-on'); return; }
+      lessonS.textContent = L.of ? `FIGHT BASICS ${L.step}/${L.of}` : 'FIGHT BASICS';
+      lessonT.textContent = L.title; lessonL.innerHTML = L.line;
+      lessonEl.classList.add('wf-on'); lessonEl.classList.remove('wf-pop'); void lessonEl.offsetWidth; lessonEl.classList.add('wf-pop');
+    },
     hide() { root.style.display = 'none'; }, show() { root.style.display = ''; },
     update(rdt, S) {
       const me = c.me, cam = c.camera, W = innerWidth, H = innerHeight;
@@ -165,8 +195,8 @@ export function createHud(c) {
         if (!vis) { if (el) el.style.display = 'none'; continue; }
         if (!el) {
           el = document.createElement('div'); el.className = 'wf-tag' + (e.type === 'brute' ? ' wf-brute' : '');
-          el.innerHTML = '<div class="wf-bar"><i></i></div><div class="wf-cue">!</div><div class="wf-daze"><kbd>E</kbd>GRAB</div><div class="wf-fin"><kbd>RMB</kbd><span>FINISH</span></div>';
-          tags.appendChild(el); tagEls.set(e, el); el._bar = el.querySelector('.wf-bar i'); el._cue = el.querySelector('.wf-cue'); el._daze = el.querySelector('.wf-daze'); el._fin = el.querySelector('.wf-fin'); el._finT = el.querySelector('.wf-fin span');
+          el.innerHTML = '<div class="wf-bar"><i></i></div><div class="wf-tell">!<i></i></div><div class="wf-cue">!</div><div class="wf-daze"><kbd>E</kbd>GRAB</div><div class="wf-fin"><kbd>RMB</kbd><span>FINISH</span></div>';
+          tags.appendChild(el); tagEls.set(e, el); el._bar = el.querySelector('.wf-bar i'); el._cue = el.querySelector('.wf-cue'); el._tell = el.querySelector('.wf-tell'); el._ring = el.querySelector('.wf-tell i'); el._daze = el.querySelector('.wf-daze'); el._fin = el.querySelector('.wf-fin'); el._finT = el.querySelector('.wf-fin span');
         }
         shown.add(e);
         el.style.display = 'block';
@@ -175,8 +205,12 @@ export function createHud(c) {
         el._bar.style.transform = `scaleX(${clamp(e.hp / e.maxHp, 0, 1)})`;
         // (his health only over the man Quant is on, or one just hurt)
         el._bar.parentNode.style.opacity = e === me.target && c.time - me.lastAttackT < 3 || e === me.focus || e.lastHitT > c.time - 3 ? 1 : 0;
-        const t = S.threats.find((x) => x.e === e), lead = t ? t.at - c.time : 9;
-        el._cue.classList.toggle('wf-on', !!t && lead > -0.1);
+        const t = S.threats.find((x) => x.e === e), lead = t ? t.at - c.time : 9, open = !!t && c.cueOpen(t);
+        el._cue.classList.toggle('wf-on', !!t && lead > -0.1 && open);
+        // (winding up, the window not open yet: white, the ring closing on it as the window comes)
+        const tell = !!t && lead > -0.1 && !open;
+        el._tell.classList.toggle('wf-on', tell);
+        if (tell) el._ring.style.transform = `scale(${(1 + 1.3 * clamp((lead - t.win) / Math.max(0.05, t.lead - t.win), 0, 1)).toFixed(3)})`;
         el._cue.classList.toggle('wf-dodge', !!t && t.kind === 'dodge');
         el._cue.classList.toggle('wf-now', !!t && lead < 0.3);
         el._cue.textContent = t && t.kind === 'dodge' ? '‼' : '!';
@@ -197,7 +231,7 @@ export function createHud(c) {
         const lvl = clamp(1 - (t.at - c.time) / 0.9, 0, 1);
         if (onScreen || lvl <= 0) { el.style.display = 'none'; return; }
         const a = Math.atan2(y, x), rr = Math.max(Math.abs(Math.cos(a)) / 0.9, Math.abs(Math.sin(a)) / 0.82);
-        el.style.display = 'block'; el.style.color = t.kind === 'dodge' ? R : Y; el.style.opacity = (0.4 + 0.6 * lvl).toFixed(2);
+        el.style.display = 'block'; el.style.color = t.kind === 'dodge' ? R : c.cueOpen(t) ? Y : '#fff'; el.style.opacity = (0.4 + 0.6 * lvl).toFixed(2);
         el.style.transform = `translate(${((Math.cos(a) / rr * 0.5 + 0.5) * W).toFixed(1)}px,${((1 - (Math.sin(a) / rr * 0.5 + 0.5)) * H).toFixed(1)}px) rotate(${-a}rad) scale(${0.8 + 0.5 * lvl})`;
       });
       // the men of the fight still in it but out of the view: a white arrow at the edge of the screen toward each (his

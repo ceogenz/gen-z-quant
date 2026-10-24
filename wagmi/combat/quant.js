@@ -8,8 +8,12 @@
 //   heavy   a kick or a rising uppercut that puts a man down; with the combo meter full, the takedown (a flying kick that
 //           lays him out, then a fist from overhead into him on the ground); at a man on the ground (or still falling)
 //           within 4.5 m, the ground finisher
-//   counter while a man's cue shows: his blow is stopped dead, a moment of slow motion, and he is put down; two men
-//           swinging together: both stopped, put down one after the other (the double counter)
+//   counter while a man's cue shows yellow: his blow is stopped dead, a moment of slow motion, and he is put down; two
+//           men swinging together: both stopped, put down one after the other (the double counter). The full rules
+//           (index.js c.rules): thrown with no yellow cue up (none, too early, or a red one) it whiffs: a swing at the
+//           air and 0.42 s open (presses meanwhile are lost)
+//   (strikes mashed ahead of the beat under the full rules: two or more presses before a blow lands and it ends in an
+//   overswing, 0.45 s open)
 //   dodge   a roll the way the stick points, or a back flip away; in the last moment before a blow (perfect) time slows
 //           and his next blow is a counter's; a brute's slam dodged leaves the brute stunned
 //   grab    a dazed man (three blows in a row) or a stunned brute (run in to from up to 5 m): lifted overhead and slammed;
@@ -64,6 +68,8 @@ const ARMED = { bat: [['batRise'], ['batSmash']], bottle: [['bottleSmash']] };
 const DASH = { leap: 4.4, max: 7.2, lunge: 0.3 };      // run in up to `leap` m of gap, a flying kick beyond (to `max`)
 const FIGHT = { near: 12, far: 16, step: 2.3, run: 5.6 }; // the fight's footwork: in it within `near` m, out past `far`
 const DODGE = { safe: 0.5, perfect: 0.3, late: 0.05, counter: 1.4, mult: 1.6 };
+// the full rules' price of a guess: a counter whiffed (no yellow cue) and a mashed combo's overswing, open this long
+const OPEN = { whiff: 0.42, over: 0.45, mash: 2 };
 // the combo meter (full: the takedown): what each blow that lands adds, and the pause that loses the run
 const METER = { light: 1 / 8, heavy: 1 / 6, counter: 1 / 5, perfect: 1 / 4, lapse: 3.2 };
 const REGEN = { delay: 6, rate: 7 }; // (out of a fight only)
@@ -281,6 +287,24 @@ export function createQuant(c) {
     others.forEach((o, i) => { const e2 = o.e; e2.disarm(_v2.set(e2.pos.x - pos.x, 0, e2.pos.z - pos.z).normalize().multiplyScalar(3).setY(3)); e2.parry(_v2.set(e2.pos.x - pos.x, 0, e2.pos.z - pos.z).normalize()); e2.stagT = 1.1 + 0.45 * i; });
     if (others.length) M.then = others.map((o) => o.e);
     c.onCounter(e, took, others.length + 1);
+  }
+  // a counter with no yellow cue to answer (the full rules): a swing at the air, off balance a moment. t: the cue up
+  // (a white one: too early; a red one: dodge that), for the word
+  let toldT = -9;
+  function counterWhiff(t) {
+    const T = t ? t.e : pickTarget(null, 4);
+    if (T) face(yawTo(pos, T.pos));
+    start('cwhiff', { end: OPEN.whiff }); M.track = Q.play('ffCross', { from: 0.06, until: 0.36, ts: 1.15, fade: 0.06 });
+    c.sfx('whoosh', 0.7); c.sfx('deny');
+    if (c.time - toldT > 3) { toldT = c.time; c.hud.flash(!t ? 'Nothing to counter: wait for the yellow' : t.kind === 'counter' ? 'Too early: counter on the yellow' : 'Red: dodge it, don’t counter', 'danger'); }
+    me.comboStep = 0;
+  }
+  // a combo mashed ahead of its beat: the last blow carries him past his man, off balance a moment
+  function overswing() {
+    start('overswing', { end: OPEN.over }); M.track = Q.play('ffHook', { from: 0.29, until: 0.6, ts: 0.85, fade: 0.08 });
+    c.sfx('whoosh', 0.5);
+    if (c.time - toldT > 3) { toldT = c.time; c.hud.flash('Too fast: one press a blow', 'danger'); }
+    me.comboStep = 0;
   }
   // a way he is thrown or flips (unit, on the ground) turned off the camera's line when it would take him straight at
   // the lens (k: how square on counts), to the side with room to land
@@ -726,6 +750,7 @@ export function createQuant(c) {
         break;
       }
       case 'whiff': if (M.t > M.end) free(0.25); break;
+      case 'cwhiff': case 'overswing': if (M.t > M.end) free(0.22); break;
       case 'pickup': pickupMotion(dt); break;
       case 'throw': throwMotion(dt); break;
       case 'canSlam': canSlamMotion(dt); break;
@@ -854,23 +879,31 @@ export function createQuant(c) {
     // what the grab key would pick up (the overlay's prompt)
     me.offer = !me.holding && M.name === 'free' ? c.items.nearest(pos, 1.9, p.heading) : null;
     const threat = c.nearestThreat();
+    // (open after a guess: what he presses meanwhile is lost)
+    if (M.name === 'cwhiff' || M.name === 'overswing') for (const k of ['strike', 'heavy', 'counter', 'dodge', 'grab']) inp.take(k);
     // --- dodge: any time on foot, out of most moves
-    if (inp.has('dodge') && !['down', 'getup', 'slam', 'ground', 'canSlam'].includes(M.name) && !(M.name === 'throw' && M.released) && !(M.name === 'dodge' && M.t < 0.4) && pos.y - cm.getGroundHeight(pos.x, pos.z, 'person') < 0.3) {
+    if (inp.has('dodge') && !['down', 'getup', 'slam', 'ground', 'canSlam', 'cwhiff', 'overswing'].includes(M.name) && !(M.name === 'throw' && M.released) && !(M.name === 'dodge' && M.t < 0.4) && pos.y - cm.getGroundHeight(pos.x, pos.z, 'person') < 0.3) {
       inp.take('dodge');
       if (M.name === 'slam') releaseSlam(false);
       if (M.name === 'pickup' && M.item && M.item.claim === me) M.item.claim = null;
-      const perfect = !!threat && threat.at - c.time <= DODGE.perfect && threat.at - c.time > -DODGE.late;
+      const perfect = !!threat && !threat.quake && threat.at - c.time <= DODGE.perfect && threat.at - c.time > -DODGE.late;
       dodge(threat, perfect, stick(keys, stickV));
       c.onDodge(threat, perfect);
     }
     // --- counter: while a cue shows
-    if (inp.has('counter') && !['down', 'getup', 'slam', 'canSlam', 'pickup'].includes(M.name) && !(M.name === 'throw' && !M.released)) {
+    if (inp.has('counter') && !['down', 'getup', 'slam', 'canSlam', 'pickup', 'cwhiff', 'overswing'].includes(M.name) && !(M.name === 'throw' && !M.released)) {
       inp.take('counter');
-      const t = c.counterable();
+      const t = c.counterable(), open = t && t.kind === 'counter' && c.cueOpen(t);
       const others = [];
-      if (t && t.kind === 'counter') for (const x of c.threats) if (x !== t && x.e !== t.e && x.kind === 'counter' && !x.item && x.at - c.time > -0.1 && x.at - c.time < x.lead + 0.05 && !others.some((o) => o.e === x.e) && others.length < 2) others.push(x);
-      if (t && t.kind === 'counter') counter(t, others);
-      else if (t) { c.hud.flash('Can’t counter that: dodge!', 'danger'); c.sfx('deny'); }
+      if (open) for (const x of c.threats) if (x !== t && x.e !== t.e && x.kind === 'counter' && !x.item && x.at - c.time > -0.1 && c.cueOpen(x) && !others.some((o) => o.e === x.e) && others.length < 2) others.push(x);
+      if (open) counter(t, others);
+      else if (c.rules.whiff && M.name !== 'dodge' && (t || nearest(4.5))) counterWhiff(t); // (nobody near: nothing happens)
+      else if (t && t.kind !== 'counter') { c.hud.flash('Can’t counter that: dodge!', 'danger'); c.sfx('deny'); }
+    }
+    // (the full rules: strike presses ahead of the blow landing, counted; two or more and the combo ends in an overswing)
+    if ((M.name === 'strike' || M.name === 'heavy') && c.rules.mash && !M.isCounter && !M.long) {
+      const n = inp.n('strike') + inp.n('heavy');
+      if (M.seq == null) M.seq = n; else if (n > M.seq) { if (!M.hitDone) M.early = (M.early || 0) + n - M.seq; M.seq = n; }
     }
     // --- buffered blows: when free or inside a move's cancel window
     const clipT = M.track ? M.track.t : 0;
@@ -878,7 +911,8 @@ export function createQuant(c) {
       || (M.name === 'strike' || M.name === 'heavy') && M.hitDone && (M.recoil ? c.time - M.recoil > 0.05 : clipT >= M.hit + 0.05)
       || M.name === 'dodge' && (M.perfect ? M.t > 0.08 : M.t > 0.42)
       || M.name === 'hit' && M.t > 0.3;
-    if (cancel) for (const k of ['grab', 'heavy', 'strike']) { if (!inp.has(k)) continue; inp.take(k); if (act(k, keys)) break; }
+    if (cancel && (M.early || 0) >= OPEN.mash && (M.name === 'strike' || M.name === 'heavy')) { inp.take('strike'); inp.take('heavy'); overswing(); }
+    else if (cancel) for (const k of ['grab', 'heavy', 'strike']) { if (!inp.has(k)) continue; inp.take(k); if (act(k, keys)) break; }
     // the takedown's second half: he lies still, the fist from overhead
     const fu = me.followUp;
     if (fu && M.name === 'free') { if (c.time > fu.until || !fu.target.alive && !fu.target.grounded) me.followUp = null; else if (fu.target.grounded && hdist(pos, fu.target.pos) < 3.5) { me.followUp = null; groundFinisher(fu.target); } }

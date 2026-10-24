@@ -122,7 +122,7 @@ Mission 2 (wagmi/mission/m2*.js).
 | 9 | `m2-quant-follow-the-van-got` | Quant | Follow the van. Got it. |  |  |
 | 10 | `m2-juno-youre-late-sit-burner` | Juno | You're late. Sit. Burner, please. |  |  |
 | 11 | `m2-quant-hi-juno-great-to` | Quant | Hi, Juno. Great to see you too. |  |  |
-| 12 | `m2-juno-plugging-it-in-same` | Juno | Plugging it in. Same batch, same buyer. It has a twin. |  |  |
+| 12 | `m2-juno-plugging-it-in-look` | Juno | Plugging it in. Look: two SIMs, one sale, switched on the same minute. Yours, and its twin. |  |  |
 | 13 | `m2-lev-my-car-my-beautiful` | Lev | My car! My beautiful leveraged car! |  |  |
 | 14 | `m2-lev-not-financial-advice-none` | Lev | Not financial advice! None of it! Ever! |  |  |
 | 15 | `m2-quant-that-is-my-door` | Quant | That is my door. |  |  |
@@ -143,6 +143,7 @@ Mission 2 (wagmi/mission/m2*.js).
 | 30 | `m2-juno-i-saw-the-chat` | Juno | I saw the chat. They know where you live, so you're not sleeping there tonight. |  |  |
 | 31 | `m2-quant-where-am-i-sleeping` | Quant | Where am I sleeping? |  |  |
 | 32 | `m2-juno-gears-has-a-room` | Juno | Gears has a room over his garage. West Chelsea. He builds rockets for cars. He's nice. Mostly. |  |  |
+| 33 | `m2-quant-pete-the-its-a` | Quant | Pete. The 'it's a dog' guy. |  |  |
 
 ## Mission 3
 
@@ -164,24 +165,26 @@ Mission 3 (wagmi/mission/m3*.js).
 | 12 | `m3-fiona-wait-why-is-it` | Fiona | Wait. Why is it red? Why is it going down? |  |  |
 | 13 | `m3-fiona-its-a-healthy-correction` | Fiona | It's a healthy correction! Bye! |  |  |
 | 14 | `m3-quant-pump-and-dump` | Quant | Pump. And dump. |  |  |
-| 15 | `m3-gears-youre-back-and-the` | Gears | You're back. And the car's in one piece. |  |  |
-| 16 | `m3-quant-mostly` | Quant | Mostly. |  |  |
-| 17 | `m3-gears-mostly` | Gears | Mostly? |  |  |
-| 18 | `m3-quant-the-thrusters-work-great` | Quant | The thrusters work great. Very safe. Mostly. |  |  |
-| 19 | `m3-gears-ha-rooms-upstairs-kid` | Gears | Ha. Room's upstairs, kid. Get some sleep. |  |  |
-| 20 | `m3-fiona-buy-the-dip-there` | Fiona | Buy the dip! There is no dip! |  |  |
-| 21 | `m3-fiona-diamond-hands-everybody-diamond` | Fiona | Diamond hands, everybody! Diamond hands! |  |  |
-| 22 | `m3-fiona-dont-look-at-the` | Fiona | Don't look at the kid! Look at the chart! |  |  |
-| 23 | `m3-fiona-moon-two-to-the` | Fiona | Moon two! To the moon! |  |  |
-| 24 | `m3-fiona-we-lost-a-stream` | Fiona | We lost a stream! Keep pumping! |  |  |
-| 25 | `m3-fiona-two-streams-down-this` | Fiona | Two streams down! This is fine! Pump harder! |  |  |
-| 26 | `m3-wick-backup-protect-the-last` | Wick | Backup! Protect the last stream! |  |  |
-| 27 | `m3-juno-the-stream-runs-off` | Juno | The stream runs off three ring lights in the park. Kill the rigs, the stream dies. |  |  |
-| 28 | `m3-quant-and-no-stream-no` | Quant | And no stream, no pump. |  |  |
-| 29 | `m3-juno-and-no-pump-fionas` | Juno | And no pump, Fiona's just a lady shouting at a fountain. |  |  |
-| 30 | `m3-juno-two-degens-cars-on` | Juno | Two Degens cars on you. The Village is all crooked streets. Use them. |  |  |
-| 31 | `m3-quant-gears-said-the-thrusters` | Quant | Gears said the thrusters were very safe. |  |  |
-| 32 | `m3-juno-gears-says-that-about` | Juno | Gears says that about everything. |  |  |
-| 33 | `m3-juno-moon-two-is-down` | Juno | Moon two is down ninety-nine point eight percent. The stream died mid-sentence. |  |  |
-| 34 | `m3-quant-good` | Quant | Good. |  |  |
-| 35 | `m3-juno-everyone-who-bought-it` | Juno | Everyone who bought it is furious. At ZK, for once. Go get some sleep. |  |  |
+| 15 | `m3-quant-pete-the-guy-who` | Quant | Pete. The guy who wants out. |  |  |
+| 16 | `m3-gears-youre-back-and-the` | Gears | You're back. And the car's in one piece. |  |  |
+| 17 | `m3-quant-mostly` | Quant | Mostly. |  |  |
+| 18 | `m3-gears-mostly` | Gears | Mostly? |  |  |
+| 19 | `m3-quant-moon-sleeps-on-my` | Quant | Moon sleeps on my feet. Every night. Except last night. |  |  |
+| 20 | `m3-quant-the-thrusters-work-great` | Quant | The thrusters work great. Very safe. Mostly. |  |  |
+| 21 | `m3-gears-ha-rooms-upstairs-kid` | Gears | Ha. Room's upstairs, kid. Get some sleep. |  |  |
+| 22 | `m3-fiona-buy-the-dip-there` | Fiona | Buy the dip! There is no dip! |  |  |
+| 23 | `m3-fiona-diamond-hands-everybody-diamond` | Fiona | Diamond hands, everybody! Diamond hands! |  |  |
+| 24 | `m3-fiona-dont-look-at-the` | Fiona | Don't look at the kid! Look at the chart! |  |  |
+| 25 | `m3-fiona-moon-two-to-the` | Fiona | Moon two! To the moon! |  |  |
+| 26 | `m3-fiona-we-lost-a-stream` | Fiona | We lost a stream! Keep pumping! |  |  |
+| 27 | `m3-fiona-two-streams-down-this` | Fiona | Two streams down! This is fine! Pump harder! |  |  |
+| 28 | `m3-wick-backup-protect-the-last` | Wick | Backup! Protect the last stream! |  |  |
+| 29 | `m3-juno-the-stream-runs-off` | Juno | The stream runs off three ring lights in the park. Kill the rigs, the stream dies. |  |  |
+| 30 | `m3-quant-and-no-stream-no` | Quant | And no stream, no pump. |  |  |
+| 31 | `m3-juno-and-no-pump-fionas` | Juno | And no pump, Fiona's just a lady shouting at a fountain. |  |  |
+| 32 | `m3-juno-two-degens-cars-on` | Juno | Two Degens cars on you. The Village is all crooked streets. Use them. |  |  |
+| 33 | `m3-quant-gears-said-the-thrusters` | Quant | Gears said the thrusters were very safe. |  |  |
+| 34 | `m3-juno-gears-says-that-about` | Juno | Gears says that about everything. |  |  |
+| 35 | `m3-juno-moon-two-is-down` | Juno | Moon two is down ninety-nine point eight percent. The stream died mid-sentence. |  |  |
+| 36 | `m3-quant-good` | Quant | Good. |  |  |
+| 37 | `m3-juno-everyone-who-bought-it` | Juno | Everyone who bought it is furious. At ZK, for once. Go get some sleep. |  |  |

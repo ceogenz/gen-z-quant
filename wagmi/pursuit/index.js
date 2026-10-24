@@ -11,15 +11,19 @@
 //   - They see him within 55 + 15h m (85 m) with no building between, and always within 22 m (they hear him). Seen, the
 //     search circle (90 + 55h m: 200 m) is centred on him; out of sight, it stays where they last saw him and they
 //     search round there.
-//   - Out of sight and out of that circle, the escape runs: 4h s (8 s), the circle shrinking with it and the HEAT pips
-//     going out one by one; seen again, it starts over. Hiding unseen inside the circle works too, three times as slowly.
-//     Run down: 'lost', and the cars drive off and are gone once out of view.
+//   - Out of sight, the escape fills (0..1, view().progress): out of that circle in 4h s (8 s), hiding inside it three
+//     times as slowly; the circle shrinks with it and the HEAT pips go out one by one. Seen again, it drains (empty in
+//     RULE.drain s), so a glimpse costs a little and a long look all of it. Full: 'lost', and the cars drive off and are
+//     gone once out of view. The HUD says which: SEEN (break their line of sight), SEARCHING with the escape's bar (get
+//     out of the circle, or stay out of sight), and the radar marks where they last saw him and which car sees him.
 //   - Every hit is the crash's (wagmi/crash: boxes that never overlap, impulses by the weights, the city's cars knocked
 //     out of their lanes); a car takes damage by how hard it is hit, mostly when he rams it (100 hp: one ram from him at
 //     ~20 m/s, or a few smaller; its own rams, the traffic and the walls cost it little, and never below a quarter: only
 //     he wrecks them) and is wrecked: smoking, out of
 //     the chase ('wrecked'). At heat 3 and up more come to replace the wrecked. One stuck or left far behind out of view,
-//     while they still have him, is put back in a lane behind him (GTA does).
+//     while they still have him, is put back in a lane behind him (GTA does). Held up behind the city's traffic (a queue
+//     at a light, a jam) it noses through it as the traffic's own jammed cars do (js/traffic.js v.ghost): a few seconds
+//     passing through the city's cars, at a crawl while the camera sees it, so the pressure doesn't drop in a jam.
 //   - Quant on foot: with a clear line to him (or close), they pull up in the lane next to him, just past him, so the
 //     car stands in his view; the Degens' crew jumps out at the door on his side (W.combat.spawnCrew: 2 men, 3 from heat
 //     3; a bat from heat 2, a bottle too from heat 3, a brute once from heat 4; never more than 2 + 2h of them up at once)
@@ -63,7 +67,12 @@ const RULE = {
   hear: 22,                     // m: this close they know where he is, walls or not
   vmax: (h) => 24 + 3 * h,      // m/s on a straight (Quant's car: 34, 56 on the boost)
   count: (h) => clamp(Math.round(h), 1, 5),
+  drain: 3,                     // s seen to empty a full escape bar
+  hide: 3,                      // how much slower the escape fills hiding inside the circle
 };
+// held up behind the city's traffic this long (s), a chase car noses through it for GHOST.t s (at most GHOST.vView m/s
+// while the camera sees it)
+const GHOST = { after: 1.0, t: 2.6, vView: 9 };
 // Quant on foot: the pull-up (m past his level, in the lane next to him; how far off the lane he may be for it), the
 // jump-out (stopped within m of him), the run-down (him within m of a lane; the car facing him, dot, from m to m; the
 // tell s; its time out s; the next one after s; the blow by speed, at least and at most)
@@ -96,7 +105,7 @@ export function install(W) {
       path: null, pi: 0, planT: rnd(0, 0.6), planTo: null, goal: null, search: null, mode: 'chase', sees: true, seeT: rnd(0, 0.25),
       stuck: 0, back: 0, backSteer: 0, stucks: 0, ramCool: 0, hitCool: 0, horn: rnd(3, 7), smoke: 0, t: 0,
       side: i % 2 ? 1 : -1, leaveTo: null, hum: null, siren: null, dmg: {}, prog: { t: 0, want: 0, x: at.x, z: at.z }, farT: 0, blockT: 0,
-      los: false, pull: null, pullT: 0, crew: null, crewOut: false, ram: null, ramNext: 0,
+      los: false, pull: null, pullT: 0, crew: null, crewOut: false, ram: null, ramNext: 0, ghost: 0, ghosts: 0,
       blocker: { x: at.x, z: at.z, yaw: at.h, halfW: c.hw, halfL: c.hl, vx: 0, vz: 0 },
     });
     c.group.position.set(P.x, P.y, P.z); c.group.rotation.y = P.h;
@@ -243,7 +252,7 @@ export function install(W) {
     const fx = Math.sin(P.h), fz = Math.cos(P.h), look = 10 + Math.abs(P.speed) * 0.9;
     let best = null, bd = look;
     near.length = 0;
-    const test = (x, z, hw, vx, vz) => {
+    const test = (x, z, hw, vx, vz, city) => {
       const dx = x - P.x, dz = z - P.z;
       if (dx * dx + dz * dz < 900) near.push(x, z);
       const ah = dx * fx + dz * fz;
@@ -253,13 +262,14 @@ export function install(W) {
       // (going its way as fast as this one: no matter)
       const along = vx * fx + vz * fz;
       if (along > Math.abs(P.speed) - 2 && along > 3) return;
-      bd = ah; best = { x, z, lat, hw, sp: Math.max(0, along) };
+      bd = ah; best = { x, z, lat, hw, sp: Math.max(0, along), city };
     };
     const wk = W.crash?.wrecks;
-    for (const v of wk ? wk.vehicles : TS.cars) {
+    // (nosing through the traffic: the city's cars aren't in its way)
+    if (!(P.ghost > 0)) for (const v of wk ? wk.vehicles : TS.cars) {
       if (!v.edge || Math.abs(v.x - P.x) > 40 || Math.abs(v.z - P.z) > 40) continue;
       const vel = wk ? wk.velOf(v) : [v.tx * v.speed, v.tz * v.speed];
-      test(v.x, v.z, dims(v)[0], vel[0], vel[1]);
+      test(v.x, v.z, dims(v)[0], vel[0], vel[1], true);
     }
     for (const O of chase ? chase.cars : []) if (O !== P && !O.gone) test(O.x, O.z, O.hw, Math.sin(O.h) * O.speed, Math.cos(O.h) * O.speed);
     if (!best) { P.blockT = Math.max(0, P.blockT - dt); return null; }
@@ -276,6 +286,8 @@ export function install(W) {
     if (!free(side)) side = free(-side) ? -side : 0;
     const cap = Math.sqrt(best.sp * best.sp + 2 * 12 * Math.max(0, bd - 5));
     if (cap < 6 && Math.abs(P.speed) < 5) P.blockT += dt; else P.blockT = Math.max(0, P.blockT - dt * 0.5);
+    // (held up behind the city's cars with no way by: it noses on through them, the traffic's way)
+    if (best.city && side === 0 && P.blockT > GHOST.after) { P.ghost = GHOST.t; P.ghosts++; P.blockT = 0; return null; }
     if (P.blockT > 3.5) P.blockT = 0;
     _av.v = P.blockT > 1.5 ? 99 : cap;
     // (no way by, or still far off: on along its way, slowing)
@@ -287,13 +299,15 @@ export function install(W) {
   // the car itself: steering, throttle and brakes; moved in steps of at most a metre against the buildings (the city's
   // own wall test on a stand-in, as the crash's wrecks are)
   function drive(P, ch, dt, T) {
-    P.t += dt; P.ramCool -= dt; P.hitCool -= dt;
+    P.t += dt; P.ramCool -= dt; P.hitCool -= dt; if (P.ghost > 0) P.ghost -= dt;
     let st = 0, vt = 0;
     // (parked: standing where it was put, brakes on: a roadblock, or a test's)
     if (!P.wrecked && P.mode !== 'parked') {
       const g = steerFor(P, ch, dt, T);
       const err = wrap(Math.atan2(g.ax - P.x, g.az - P.z) - P.h);
       st = clamp(err * 1.8, -0.62, 0.62); vt = g.vt;
+      // (nosing through the traffic where the camera sees it: at a crawl, as the traffic's own do)
+      if (P.ghost > 0 && inView(P.x, P.z, 4)) vt = Math.min(vt, GHOST.vView);
       // (stood waiting for its crew, or in the tell before a run at him: no backing about)
       if (T.onFoot && (P.crew?.alive() > 0 || (P.ram && !P.ram.go))) { P.back = 0; P.stuck = 0; P.prog.want = 0; }
       // turned away from where it must go, and slow: back up turning, so the nose comes round (a J-turn)
@@ -450,6 +464,7 @@ export function install(W) {
     // the city's cars and buses: shoved, and knocked out of their lanes when hit hard (the crash's wrecks)
     const wk = W.crash?.wrecks;
     if (wk) for (const P of cars) {
+      if (P.ghost > 0) continue;
       for (const v of wk.vehicles) {
         if (!v.edge || Math.abs(v.x - P.x) > 9 || Math.abs(v.z - P.z) > 9) continue;
         const [vw, vl] = dims(v), yaw = v.wreck && v._wreck ? v._wreck.yaw : v.yaw + v.yawOffset;
@@ -556,7 +571,7 @@ export function install(W) {
     const { kind = 'degens', from = null, target = null, lose = true } = opts;
     const listeners = {};
     const ch = {
-      kind, cars: [], state: 'on', seen: true, lastSeen: { x: 0, z: 0 }, esc: 0, hideT: 0, t: 0, lose, target,
+      kind, cars: [], state: 'on', seen: true, lastSeen: { x: 0, z: 0 }, esc: 0, hideT: 0, prog: 0, inCircle: true, hidT: 0, t: 0, lose, target,
       reinforce: opts.reinforce, want: 0, refill: 0, caughtT: 0, caughtSent: false, _heat: clamp(opts.heat ?? 2, 1, 5),
       crews: [], ramNext: 0, brute: false, escN: opts.escape ?? null, vmaxN: opts.vmax ?? null,
       on(ev, cb) { (listeners[ev] || (listeners[ev] = [])).push(cb); return ch; },
@@ -633,12 +648,17 @@ export function install(W) {
       const seen = ch.t < ch.grace || live.some((P) => P.sees);
       if (seen !== ch.seen) { ch.seen = seen; if (seen) for (const P of live) P.search = null; ch.emit(seen ? 'spotted' : 'hidden', { x: T.x, z: T.z }); }
       const N = escOf(ch), R = RULE.radius(ch._heat);
-      if (seen) { ch.lastSeen.x = T.x; ch.lastSeen.z = T.z; ch.esc = 0; ch.hideT = 0; }
+      // the escape's bar: draining while they see him; filling while they don't, out of the circle (shrinking as it
+      // fills) in N s, hiding inside it RULE.hide times as slowly
+      if (seen) { ch.lastSeen.x = T.x; ch.lastSeen.z = T.z; ch.prog = Math.max(0, ch.prog - dt / RULE.drain); ch.inCircle = true; ch.hidT = 0; }
       else if (ch.lose) {
-        // out of the circle (shrinking as the escape runs), the escape runs; inside it, the slow way (hiding)
-        if (Math.hypot(T.x - ch.lastSeen.x, T.z - ch.lastSeen.z) > R * (1 - ch.esc / N)) ch.esc += dt; else ch.hideT += dt;
-        if (ch.esc >= N || ch.hideT >= N * 3) return lost(ch);
+        ch.hidT += dt;
+        ch.inCircle = Math.hypot(T.x - ch.lastSeen.x, T.z - ch.lastSeen.z) <= R * (1 - ch.prog);
+        ch.prog = Math.min(1, ch.prog + dt / (N * (ch.inCircle ? RULE.hide : 1)));
+        if (ch.inCircle) ch.hideT += dt; else ch.esc += dt;
+        if (ch.prog >= 1) return lost(ch);
       }
+      if (seen) { ch.esc = 0; ch.hideT = 0; }
       // caught: they've stopped by him on foot; or in his car, he's sat stopped with them on him (ramming him or pulled
       // up by him: the time adds up through their back-off-and-ram, and only driving off clears it)
       let held;
@@ -764,14 +784,19 @@ export function install(W) {
     ch.state = 'stopped';
     if (chase === ch) { chase = null; hud.show(null); }
   }
+  // what the HUD shows: seen or searching (and, searching, inside their circle or out of it), the escape's bar
+  // (progress 0..1), the pips, the circle, where they last saw him, and each car (sees: it has him)
   function view(ch) {
-    const N = escOf(ch), R = RULE.radius(ch._heat), on = ch.state === 'on', T = tgtState;
-    const escaping = on && !ch.seen && ch.esc > 0;
+    const R = RULE.radius(ch._heat), on = ch.state === 'on', T = tgtState, prog = on ? ch.prog : 0;
+    const searching = on && !ch.seen, escaping = searching && !ch.inCircle;
     return {
-      on, kind: ch.kind, seen: on && ch.seen, escaping, heat: ch._heat,
-      pips: !on ? 0 : escaping ? Math.max(1, Math.ceil(ch._heat * (1 - ch.esc / N) - 1e-6)) : ch._heat,
-      circle: ch.seen ? { x: T.x, z: T.z, r: R } : { x: ch.lastSeen.x, z: ch.lastSeen.z, r: R * (1 - ch.esc / N) },
-      cars: on ? ch.cars.filter((P) => !P.gone).map((P) => ({ x: P.x, z: P.z, i: P.i, wrecked: P.wrecked })) : [],
+      on, kind: ch.kind, seen: on && ch.seen, searching, escaping, inCircle: searching && ch.inCircle, heat: ch._heat,
+      progress: prog, lose: ch.lose, hidT: searching ? ch.hidT : 0, grace: on && ch.t < ch.grace,
+      pips: !on ? 0 : Math.max(1, Math.ceil(ch._heat * (1 - prog) - 1e-6)),
+      circle: ch.seen ? { x: T.x, z: T.z, r: R * (1 - prog) } : { x: ch.lastSeen.x, z: ch.lastSeen.z, r: R * (1 - prog) },
+      last: searching ? { x: ch.lastSeen.x, z: ch.lastSeen.z } : null,
+      seers: on ? ch.cars.filter((P) => !P.gone && !P.wrecked && P.sees).length : 0,
+      cars: on ? ch.cars.filter((P) => !P.gone).map((P) => ({ x: P.x, z: P.z, i: P.i, wrecked: P.wrecked, sees: !P.wrecked && ch.seen && P.sees })) : [],
     };
   }
 
@@ -859,8 +884,8 @@ export function install(W) {
     debug: {
       cost: () => ({ msPerFrame: cost.frames ? +(cost.ms / cost.frames).toFixed(3) : 0, frames: cost.frames, ms: +cost.ms.toFixed(1) }),
       state: () => chase && {
-        state: chase.state, seen: chase.seen, esc: +chase.esc.toFixed(2), hide: +chase.hideT.toFixed(2), heat: chase._heat, last: chase.lastSeen, view: view(chase),
-        cars: chase.cars.map((P) => ({ i: P.i, x: +P.x.toFixed(1), z: +P.z.toFixed(1), h: +P.h.toFixed(2), speed: +P.speed.toFixed(1), hp: Math.round(P.hp), mode: P.mode, sees: P.sees, wrecked: P.wrecked, gone: P.gone, d: +Math.hypot(P.x - tgtState.x, P.z - tgtState.z).toFixed(1), path: P.path ? P.path.length : 0, dmg: P.dmg })),
+        state: chase.state, seen: chase.seen, esc: +chase.esc.toFixed(2), hide: +chase.hideT.toFixed(2), prog: +chase.prog.toFixed(3), heat: chase._heat, last: chase.lastSeen, view: view(chase),
+        cars: chase.cars.map((P) => ({ i: P.i, x: +P.x.toFixed(1), z: +P.z.toFixed(1), h: +P.h.toFixed(2), speed: +P.speed.toFixed(1), hp: Math.round(P.hp), mode: P.mode, sees: P.sees, wrecked: P.wrecked, gone: P.gone, d: +Math.hypot(P.x - tgtState.x, P.z - tgtState.z).toFixed(1), path: P.path ? P.path.length : 0, ghost: +Math.max(0, P.ghost).toFixed(1), ghosts: P.ghosts, dmg: P.dmg })),
       },
       vapor, nav, target: tgtState,
       // (a chase car stood still at x, z facing h: a test's obstacle)

@@ -1,7 +1,9 @@
 // Gen Z Quant: Mission 2's scenes, on the cutscene machinery (cine.js) the way Mission 1's are: a clock, the shots as
 // functions of it, the cast posed from it, cues fired as it passes them; Space held skips.
 //   meet     (burnerMeet) Bryant Park at twilight: Juno in person at one of the park's tables with her laptop; Quant hands
-//            her the burner, she plugs it in and traces its twin to a van idling in Times Square (a cut to it), ~30 s
+//            her the burner, she plugs it in and shows him the one thing she found (evidence(): the carrier's record of
+//            its sale, a second SIM on the same sale, both switched on the same minute), then traces that twin to a van
+//            idling in Times Square (a cut to it), ~30 s
 //   burner   (the old one, kept as a fallback) the same beats as a video call from the library's wifi
 //   crash    Greeley Square: Lev's car smoking against the plaza, Lev climbing out, dropping his phone, running off
 //   phone    Quant with Lev's phone: the Degens' group chat, a photo of his own front door
@@ -102,6 +104,45 @@ function holdPhone(W, phone, h, k) {
   phone.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(x, y, z)); phone.position.copy(P);
 }
 
+/* --------------------------------------------------- Juno's evidence -- */
+// what she found, on screen (23 Oct, the review: she reads capable, not all-knowing, when the one thing she found is
+// there to see): the carrier's record of the burner's sale, a second SIM sold with it and switched on the same minute
+// ('sale'), then that twin's last ping ('trace'); null hides it. A card over the shot of her screen, the place's styles
+// (ui.js); on a phone it keeps to the safe edges, under the top bar.
+const EVID_CSS = `
+#wg .d-evid { position: absolute; left: 5vw; top: calc(var(--bar) + 3vh); width: 320px; padding: 11px 14px 12px; background: rgba(6,10,18,.86); border: 1px solid rgba(108,184,255,.35); border-radius: 10px; box-shadow: 0 18px 50px rgba(0,0,0,.5); opacity: 0; transform: translateY(8px); transition: opacity .35s, transform .45s cubic-bezier(.2,.7,.2,1); z-index: 4; pointer-events: none; }
+#wg .d-evid.on { opacity: 1; transform: none; }
+#wg .d-evid .hd { font: 700 12px/1 'Barlow Condensed'; letter-spacing: 2.5px; color: #6CB8FF; }
+#wg .d-evid .sale { margin-top: 7px; font: 600 14px/1.2 'Barlow Condensed'; letter-spacing: .5px; color: rgba(255,255,255,.72); }
+#wg .d-evid .row { display: flex; gap: 10px; align-items: baseline; margin-top: 7px; font: 600 17px/1.15 'Barlow Condensed'; }
+#wg .d-evid .sim { min-width: 78px; font-variant-numeric: tabular-nums; }
+#wg .d-evid .t b { margin-left: 3px; padding: 0 4px; border-radius: 3px; font-weight: 800; color: #FFC93C; background: rgba(255,201,60,.14); box-shadow: 0 0 0 1px rgba(255,201,60,.75); }
+#wg .d-evid .s { margin-left: auto; font: 700 12px/1 'Barlow Condensed'; letter-spacing: 1.5px; color: rgba(255,255,255,.55); white-space: nowrap; }
+#wg .d-evid .tw .s { color: #fff; }
+#wg .d-evid.trace .tw .s { color: #EF4444; }
+#wg .d-evid .ping { max-height: 0; margin-top: 0; overflow: hidden; opacity: 0; transition: max-height .4s, opacity .3s, margin .3s; font: 700 13px/1.25 'Barlow Condensed'; letter-spacing: 1.5px; color: #EF4444; }
+#wg .d-evid.trace .ping { max-height: 44px; margin-top: 8px; opacity: 1; }
+#wg .d-evid .ping b { font-size: 16px; letter-spacing: .5px; color: #fff; }
+body.touch-enabled #wg .d-evid { left: var(--wg-l); top: calc(var(--bar) + 10px); width: auto; max-width: min(320px, calc(100vw - var(--wg-l) - var(--wg-r))); }
+`;
+export function evidence(W, mode) {
+  const root = W.ui?.root; if (!root) return;
+  if (!document.getElementById('d-evid-css')) { const st = document.createElement('style'); st.id = 'd-evid-css'; st.textContent = EVID_CSS; document.head.appendChild(st); }
+  let el = root.querySelector('.d-evid');
+  if (!mode) { el?.classList.remove('on', 'trace'); return; }
+  if (!el) {
+    el = document.createElement('div'); el.className = 'd-evid';
+    el.innerHTML = `<div class="hd">JUNO'S SCREEN · CARRIER LOG</div><div class="sale">ONE PREPAID SALE · CANAL ST KIOSK · PAID CASH</div>
+      <div class="row me"><span class="sim">SIM ··4471</span><span class="t">ON<b>WED 9:41</b></span><span class="s">THIS BURNER</span></div>
+      <div class="row tw"><span class="sim">SIM ··4472</span><span class="t">ON<b>WED 9:41</b></span><span class="s">THE TWIN</span></div>
+      <div class="ping">● LAST PING 20 MIN AGO · <b>7 AV &amp; W 47 ST</b></div>`;
+    root.appendChild(el);
+  }
+  el.querySelector('.tw .s').textContent = mode === 'trace' ? '● STILL ON' : 'THE TWIN';
+  el.classList.toggle('trace', mode === 'trace');
+  requestAnimationFrame(() => el.classList.add('on'));
+}
+
 /* ------------------------------------------------------------ burner -- */
 // Bryant Park, twilight, paced by its lines (~45 s). U: the mission's overlays (m2-ui.js), van: the HODL van (at its
 // start for the cutaway), say(lines, st, onLine): the mission's lines (subtitles and voices)
@@ -155,7 +196,8 @@ export function burnerScene(W, { U, say, van }) {
         say(LINES, st, (who, i) => {
           const now = W.sceneClock?.t ?? 0;
           for (const sh of def.shots) if (sh.line === i) sh.t = now;
-          if (i === 4) U.call.share(true);
+          if (i === 3) evidence(W, 'sale');
+          if (i === 4) { evidence(W, null); U.call.share(true); }
           if (i === 6) { U.call.hide(); ui.place('Times Square', '7th Ave & W 47th St', 3); }
           if (i === 7) { U.call.show(); U.call.share(false); }
         }).finally(() => { const now = W.sceneClock?.t; if (now != null) { def.END = now + 1.6; downAt = now + 0.2; sfx?.play('hangup', { gain: 0.12 }); U.call.hide(); } });
@@ -175,7 +217,7 @@ export function burnerScene(W, { U, say, van }) {
       // (his left hand talking as he does; the right is held up by holdPhone)
       C.qRig.set([[0, 'idle'], [T.call, ['idle/noArmL', ['talk/armL', { from: 0.6, speed: 0.7 }]], { fade: 0.5 }]]);
     },
-    cleanup() { U.call.hide(); C.phone.visible = false; },
+    cleanup() { U.call.hide(); C.phone.visible = false; evidence(W, null); },
   };
   return def;
 }
@@ -188,7 +230,7 @@ export function burnerScene(W, { U, say, van }) {
 const MEET_LINES = [
   ['Juno', BLUE, "You're late. Sit. Burner, please."],
   ['Quant', WHITE, 'Hi, Juno. Great to see you too.'],
-  ['Juno', BLUE, 'Plugging it in. Same batch, same buyer. It has a twin.'],
+  ['Juno', BLUE, 'Plugging it in. Look: two SIMs, one sale, switched on the same minute. Yours, and its twin.'],
   ['Juno', BLUE, 'The twin pinged twenty minutes ago. A van, idling in Times Square. Seventh and Forty-Seventh.'],
   ['Juno', BLUE, "Don't run up to it. Follow it. It'll take us to the rest of them."],
   ['Quant', WHITE, 'Follow the van. Got it.'],
@@ -270,8 +312,9 @@ export async function burnerMeet(W, { U, say, van, at = J_AT }) {
           const now = W.sceneClock?.t ?? 0; speaking = who; lineText = MEET_LINES[i]?.[2] || '';
           for (const sh of def.shots) if (sh.line === i) sh.t = now;
           if (i === 1) hand = now + 0.4;                       // he hands it over as he answers
-          if (i === 2) { plug = now + 0.3; scrMode = 'scan'; }
-          if (i === 3) { scrMode = 'trace'; sfx?.play('ding', { gain: 0.08 }); for (const sh of def.shots) if (sh.line === 3.5) sh.t = now + 2.6; setTimeout(() => ui.place('Times Square', '7th Ave & W 47th St', 3), 2600); }
+          // (the sale on her screen as she says it, the twin's ping on it as she traces it; gone with the cut to the van)
+          if (i === 2) { plug = now + 0.3; scrMode = 'scan'; setTimeout(() => { if (!st.dead) evidence(W, 'sale'); }, 900); }
+          if (i === 3) { scrMode = 'trace'; evidence(W, 'trace'); sfx?.play('ding', { gain: 0.08 }); for (const sh of def.shots) if (sh.line === 3.5) sh.t = now + 2.6; setTimeout(() => { evidence(W, null); ui.place('Times Square', '7th Ave & W 47th St', 3); }, 2600); }
         }).finally(() => { const now = W.sceneClock?.t; speaking = null; if (now != null) def.END = now + 1.4; });
       }],
     ],
@@ -314,7 +357,7 @@ export async function burnerMeet(W, { U, say, van, at = J_AT }) {
       J.rig.set([[0, J.clips.includes('sit') ? 'sit' : 'idle', { speed: 0.6 }]]);
     },
     cleanup(st) {
-      C.phone.visible = false; lap.userData.screen('off'); J.jaw(0); J.face.set({ blink: 0, brow: 0 });
+      C.phone.visible = false; lap.userData.screen('off'); J.jaw(0); J.face.set({ blink: 0, brow: 0 }); evidence(W, null);
       // (where play goes on: Quant at the table, facing the avenue and his car; Juno stays at her table until he's
       // well away, then she's packed up)
       ps?.at(QM[0], QM[2], H + PI + PI);

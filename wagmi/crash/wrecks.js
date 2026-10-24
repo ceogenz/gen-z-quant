@@ -2,7 +2,7 @@
 // and moved here as a body on the ground: it slides (its tyres scrubbing sideways far harder than rolling on), spins down,
 // rocks on its springs and stops; it bounces off the buildings and the others, shoving and wrecking those it hits hard
 // enough (a pile-up), and knocks the street furniture over. Its driver leans on the horn. Stopped a while, square enough
-// to its lane, it is handed back (traffic.unwreck) and the driver pulls away; turned round or up on the sidewalk, it
+// to its lane and with Quant's car not in its way, it is handed back (traffic.unwreck) and the driver pulls away; turned round or up on the sidewalk, it
 // stays until it is out of view.
 import * as THREE from 'three/webgpu';
 
@@ -47,7 +47,7 @@ function near(px, pz, bx, bz, by, bw, bl, out) {
 export function createWrecks({ TS, cm, fx, play, props, camera }) {
   const vehicles = [...(TS.cars || []), ...(TS.buses || [])];
   const live = new Set();
-  const stats = { taken: 0, square: 0, backed: 0, away: 0, backing: 0, waiting: 0 }; // (handed back how, for a test)
+  const stats = { taken: 0, square: 0, backed: 0, away: 0, backing: 0, waiting: 0, inWay: 0 }; // (handed back how, for a test)
   const frustum = new THREE.Frustum(), _pm = new THREE.Matrix4(), _s = new THREE.Sphere();
   let clock = 0;
   const seen = (x, z) => { _s.center.set(x, 0.8, z); _s.radius = 3; return frustum.intersectsSphere(_s); };
@@ -180,6 +180,10 @@ export function createWrecks({ TS, cm, fx, play, props, camera }) {
       const gap = L ? Math.hypot(L.x - R.x, L.z - R.z) : 0, dy = wrap((L ? L.yaw : R.laneYaw) - R.yaw);
       const square = Math.abs(dy) < 0.6 && gap < 2.4;
       const away = !seen(R.x, R.z) && Math.hypot(R.x - camera.position.x, R.z - camera.position.z) > 40;
+      // (not while Quant's car stands in its way: handed back nose to nose with him, it could never pull away (the lanes
+      // never drive into his car) nor could he shove it (a car in its lane is moved by its lane): the two stood there
+      // for good. It stays a wreck, his to push, until he has backed off)
+      if (square && !away && inWay(R, L ? L.yaw : R.laneYaw, hw, hl)) { stats.inWay++; R.retry = R.t + 0.25; }
       if ((square && !(R.retry > R.t)) || away) {
         const close = TS.unwreck ? TS.unwreck(v, R.x, R.z, R.yaw) : false;
         if (close || away) { stats[close ? (R.moved ? 'backed' : 'square') : 'away']++; return drop(R); }
@@ -218,6 +222,16 @@ export function createWrecks({ TS, cm, fx, play, props, camera }) {
     }
     R.x = x; R.z = z; R.yaw = yaw; R.moved = true; stats.backing++;
     v.x = x; v.z = z; v.yaw = yaw; v.tx = Math.sin(yaw); v.tz = Math.cos(yaw);
+  }
+  // Quant's car (driven or parked, on the ground) where a wreck handed back would drive: alongside its front half or up
+  // to 3 m on past its nose, on its lane's way (yaw)
+  function inWay(R, yaw, hw, hl) {
+    const Q = cm.entities.car, QB = Q && Q.body;
+    if (!QB || !Q.mesh || !Q.mesh.visible || Q.position.y > 2.6) return false;
+    const qh = Q.heading, qcz = (QB.z1 + QB.z0) / 2, qx = Q.position.x + Math.sin(qh) * qcz, qz = Q.position.z + Math.cos(qh) * qcz;
+    if (Math.abs(qx - R.x) > 14 || Math.abs(qz - R.z) > 14) return false;
+    const k = (hl + 3) / 2;
+    return boxes(R.x + Math.sin(yaw) * k, R.z + Math.cos(yaw) * k, yaw, hw + 0.3, k, qx, qz, qh, QB.hx, (QB.z1 - QB.z0) / 2, hit);
   }
   function drop(R) { live.delete(R); R.v._wreck = null; return false; }
   // the wreck as a mover for the furniture

@@ -4,6 +4,13 @@
 // body travels with the feet, never slides or snaps back.
 // Types: grunt (a street thug) and brute (big, armoured: light blows only make him flinch until he is stunned; his slam
 // can't be countered, only dodged, and a dodged slam leaves him stunned).
+// Under the full rules (everywhere but Mission 1, the lesson: index.js c.rules) they mix it up, each with its own tell:
+//   a grunt's feint: the fist cocked, a hitch at the top of the wind-up (his shoulders twitch, the cue's ring keeps
+//   closing), then the real punch: a counter thrown at the hitch whiffs; the cue only turns yellow for the real one
+//   a grunt's red kick: a long wind-up, everything behind it: dodge it
+//   a brute's ground slam (bruteQuake): both fists up, a red ring on the street round him filling as it comes: inside
+//   it when it lands, Quant is put down whatever he does (a roll's moment of safety doesn't save him); outside it, the
+//   brute is left winded (stunned) for a grab
 // Armed (items.js): a bat brought down overhead from a held wind-up (a glint on it: the telegraph), now and then with
 // everything behind it (a red cue: no counter, dodge it, or it puts Quant down); a bottle broken over Quant from close
 // (sometimes red too) or thrown from further (it is in the air while the cue counts down: dodge it). Hit by Quant's
@@ -43,7 +50,14 @@ export const BLOWS = {
   batSmash: { clip: 'bruteSlam', hit: 0.51, tele: 1.05, range: 1.1, dmg: 2.3, counter: false, weapon: 'bat', glint: 0.36, down: true },
   bottleBash: { clip: 'bruteSlam', hit: 0.49, tele: 0.9, range: 0.88, dmg: 1.9, counter: false, weapon: 'bottle' },
   bottleThrow: { clip: 'bruteSlam', hit: 0.45, tele: 0.72, range: 0, dmg: 1.4, counter: false, weapon: 'bottle', thrown: true, end: 0.66 },
+  // (the full rules' variety: the feint holds its wind-up at clip time `at` for `hold` s, the window only opening for
+  // the real swing; the red kick; the brute's ground slam, its reach a ring of `quake` m round him at scale 1)
+  thugFeint: { clip: 'thugPunch1', hit: 0.33, tele: 1.2, range: 0.82, dmg: 1.1, counter: true, feint: { at: 0.15, hold: 0.42 } },
+  thugKickRed: { clip: 'thugKick', hit: 0.30, tele: 0.95, range: 0.9, dmg: 1.3, counter: false },
+  bruteQuake: { clip: 'bruteSlam', hit: 0.57, tele: 1.3, range: 1.15, dmg: 1.3, counter: false, heavy: true, quake: 2.5 },
 };
+// the full rules' picks (a list to pick from: a blow twice is twice as likely)
+const VARIETY = { grunt: ['thugPunch1', 'thugPunch2', 'thugKick', 'thugFeint', 'thugFeint', 'thugKickRed'], brute: ['bruteSlam', 'thugPunch1', 'bruteQuake', 'bruteQuake'] };
 const clipOfBlow = (atk) => BLOWS[atk].clip || atk;
 const STUMBLE = { back: 'thugStumbleBack', left: 'thugStumbleLeft', right: 'thugStumbleRight' };
 const LOCO = { walk: 1.25, jog: 3.2, run: 5.8, sprint: 9.0 };
@@ -425,7 +439,15 @@ export class Enemy {
         if (B.weapon && !this.weapon && !this.swung) { this.set('hold'); this.play('thugIdle', { fade: 0.2 }); c.releaseToken(this); c.clearThreats(this); break; }
         // the wind-up (to hitT - 0.06) stretched to fill the telegraph, then he snaps through the blow
         const k0 = hitT - 0.06;
-        if (a) a.timeScale = a.time < k0 ? k0 / Math.max(0.05, tele - 0.06) : this.type === 'brute' ? 0.9 : 1.05;
+        if (a && B.feint) {
+          // (the feint: up to the top of the wind-up fast, held there (a twitch of the shoulders), then the rest of it)
+          const F = B.feint, tW = tele - 0.06, t1 = Math.max(0.12, (tW - F.hold) * 0.4), t2 = t1 + F.hold;
+          if (this.st < tW) { a.timeScale = 0; a.time = this.st < t1 ? F.at * this.st / t1 : this.st < t2 ? F.at - 0.02 * Math.abs(Math.sin((this.st - t1) * 22)) : F.at + (k0 - F.at) * (this.st - t2) / Math.max(0.05, tW - t2); }
+          else a.timeScale = 1.05;
+          if (this.st > t1 && this.st < t2) this.flinch = Math.max(this.flinch, 0.18 + 0.12 * Math.sin((this.st - t1) * 22));
+        } else if (a) a.timeScale = a.time < k0 ? k0 / Math.max(0.05, tele - 0.06) : this.type === 'brute' ? 0.9 : 1.05;
+        // (the ground slam: his ring on the street, filling as it comes)
+        if (B.quake && !this.swung) c.fx.ring(this.pos, B.quake * this.T.scale, clamp(this.st / tele, 0, 1));
         // the weapon raised: a glint off it, the swing's telegraph
         if (B.glint && !this.glinted && a && a.time >= B.glint && this.weapon) { this.glinted = true; const tp = c.items.tip(this); if (tp) { c.fx.glint(tp); c.sfx('glint'); } }
         if (B.thrown) {
@@ -434,14 +456,16 @@ export class Enemy {
           if (this.swung && a && a.time >= B.end) { this.set('hold'); this.play('thugIdle', { fade: 0.3 }); this.cd = rnd(1.4, 2.6); c.releaseToken(this); }
           break;
         }
-        // (a slam is committed for its last 0.4 s: it comes down where he aimed it, so a dodge on the cue gets clear)
-        if (!this.swung && !(B.heavy && tele - this.st < 0.4)) {
+        // (a slam is committed for its last 0.4 s: it comes down where he aimed it, so a dodge on the cue gets clear; the
+        // ground slam comes down where he stands, so he only turns to him)
+        if (B.quake && !this.swung) this.yaw = dampAngle(this.yaw, faceP, 6, dt);
+        else if (!this.swung && !(B.heavy && tele - this.st < 0.4)) {
           this.yaw = dampAngle(this.yaw, faceP, this.st < tele * 0.6 ? 10 : 3, dt); // tracks him through the wind-up, then commits
           const left = Math.max(0.06, tele - this.st), gap = dist - range;
           if (gap > 0.02) { const st = Math.min(gap, gap / left * dt, 3.6 * dt); const d = _v.set(P.x - this.pos.x, 0, P.z - this.pos.z).normalize(); this.moveXZ(d.x * st, d.z * st); }
           else if (gap < -0.25) { const d = _v.set(P.x - this.pos.x, 0, P.z - this.pos.z).normalize(); this.moveXZ(-d.x * 1.5 * dt, -d.z * 1.5 * dt); }
         }
-        if (!this.swung && a && a.time >= hitT) { this.swung = true; c.enemyStrike(this); }
+        if (!this.swung && a && a.time >= hitT) { this.swung = true; if (B.quake) c.fx.ring(null); c.enemyStrike(this); }
         if (this.swung && a && a.time >= a.getClip().duration - 0.12) {
           this.set('hold'); this.play('thugIdle', { fade: 0.25 }); this.cd = rnd(1.0, 2.2) * (this.type === 'brute' ? 1.3 : 1) * c.crowdK(); c.releaseToken(this);
         }
@@ -507,7 +531,7 @@ export class Enemy {
     const B = BLOWS[atk];
     // (a throw's cue counts down to the bottle reaching him: the wind-up and the flight)
     if (B.thrown) { this.threatRef = this.c.threat(this, B.tele + this.flightTime(), 'dodge'); return; }
-    this.c.threat(this, B.tele, B.counter ? 'counter' : 'dodge');
+    this.c.threat(this, B.tele, B.counter ? 'counter' : 'dodge', { feint: !!B.feint, quake: !!B.quake });
   }
   flightTime() { return clamp(hdist(this.pos, this.c.playerFeet) / 13, 0.38, 0.85); }
   // the bottle leaves his hand on an arc that comes down on Quant (where he is going, a little)
@@ -526,7 +550,8 @@ export class Enemy {
   chooseBlow(dist = 9) {
     const w = this.weapon;
     if (w && this.type === 'grunt') { this.atk = this.lastAtk = w.kind === 'bat' ? (Math.random() < 0.35 ? 'batSmash' : 'batChop') : dist > 3.2 ? 'bottleThrow' : Math.random() < 0.4 ? 'bottleBash' : 'bottleChop'; return; }
-    let a = pick(this.T.attacks); if (a === this.lastAtk && Math.random() < 0.6) a = pick(this.T.attacks); this.atk = this.lastAtk = a;
+    const pool = this.c.rules.variety ? VARIETY[this.type] : this.T.attacks;
+    let a = pick(pool); if (a === this.lastAtk && Math.random() < 0.6) a = pick(pool); this.atk = this.lastAtk = a;
   }
   // ------------------------------------------------------------------ over the clip (after the mixer)
   late(dt) {

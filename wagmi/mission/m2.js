@@ -25,7 +25,8 @@
 //   crash     (a scene) Lev climbs out, drops his phone, runs; 'Take Lev's phone.' hold F    checkpoint 'phone'
 //   phone     (a scene) the Degens' group chat: a photo of Quant's own door
 //   then MISSION PASSED (TIME, DEGENS REKT, QUIET TAKEDOWNS, HITS TAKEN, FOLLOWERS +9,800), Juno's call, Pete's DM
-//   ('i'll DM you tomorrow'), and the G at Gears' garage in West Chelsea: 'Pete will DM you tomorrow.'
+//   (he knows where the dog is going, but Lev is checking all their phones tonight: 'i'll DM you tomorrow'), Quant
+//   placing him ("The 'it's a dog' guy", from the chat), and the G at Gears' garage: 'Pete will DM you tomorrow.'
 // Fails: 'Quant got rekt.', 'The van got away.', 'You left the fight.', 'Lev got away.' Retry, Quit, Skip (after three).
 // URL: ?m2=handoff|start|go|tail|yard|fight|chase|phone (with ?nointro until intro.js knows ?m2 the way it knows ?m1).
 import * as THREE from 'three/webgpu';
@@ -736,8 +737,12 @@ function createMission(W, { keep = false } = {}) {
     ui.caller(null);
     await gsleep(1200);
     sfx?.play('buzz', { gain: 0.18, times: 2 }); sfx?.play('ding', { gain: 0.14 }); W.audio?.play?.('phoneBuzz');
-    ui.dm('Unknown number', "this is pete. from lev's chat. i want out. i know where they're taking the dog. i'll DM you tomorrow. -P", 12);
-    await gsleep(2500);
+    // (why not tonight: Lev lost his phone to Quant, so tonight he goes through everyone else's)
+    ui.dm('Unknown number', "this is pete. from lev's chat. i want out. i know where they're taking the dog. lev's checking all our phones tonight, so not yet. i'll DM you tomorrow. -P", 12);
+    await gsleep(1800);
+    // (the name from the chat on Lev's phone: "guys it's a dog. this is getting weird")
+    await say([['Quant', WHITE, "Pete. The 'it's a dog' guy."]], { dead: false }).catch(() => {});
+    await gsleep(700);
     W.progress = { ...(W.progress || {}), m2: true };
     between(W, {
       letter: 'G', at: G_AT, name: "Gears' garage · W 22nd St", objective: ['Go to ', { "Gears' garage": 'yellow' }, '.'],

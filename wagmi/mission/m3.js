@@ -4,6 +4,9 @@
 //           thrusters..."), Juno's video call: the $MOON2 launch stream, Fiona on the megaphone, Moon on the banner
 //                                                                                              checkpoint 'garage'
 //   square  'Go to Washington Square.'  the GPS to the arch at the foot of 5th Ave; Juno calls  checkpoint 'square'
+//           first, in the car outside the garage: TRY THE THRUSTERS, Gears' cold-gas fitted (unlocked as the garage ends),
+//           a short practice on W 22nd St (its traffic held off while it runs): HOP and SIDE DASH, each ticked off on use,
+//           THRUSTERS READY when both are; optional: driving off down the street (90 m) puts it away. Juno calls after
 //   rally   (a scene) the stage under the arch, the chart pumping, Fiona hyping; a Degen spots him
 //   rigs    'Smash the livestream rigs.'  RIGS 0/3 (the job's card over the rally's last shot, which shows the three
 //           rigs from the lawn; each rig marked: a green column, a chevron, its tag with its health; J in reach of one;
@@ -12,9 +15,11 @@
 //           at 2/3; health 130 for it, a slow regen out of reach, +25 a rig; Fiona on the megaphone; the crowd runs;
 //           100 m from the fight: 'Get back to the fight.', 160 m: 'You left the fight.'   checkpoint 'rigs' (a retry
 //           keeps the rigs smashed and starts by the next one standing)
-//   dump    (a scene) the chart goes red, Fiona drops the megaphone and runs for her SUV on 5th Ave
+//   dump    (a scene) the chart goes red, Fiona drops the megaphone and runs for her SUV on 5th Ave; Lev's phone: ZK
+//           moves the dog out of the city at dawn, Pete driving
 //   escape  'Lose the Degens.'  HEAT 2: two Degens cars (WAGMI.pursuit), the car in Washington Mews facing away from
-//           them; 'Turn corners and break their line of sight'; the cold-gas thrusters unlock (their help)
+//           them; 'Turn corners and break their line of sight'; the thrusters' keys again (unlocked here on a fresh
+//           restart that missed the garage); the HEAT meter says SEEN or SEARCHING and fills the escape's bar
 //                                                                                              checkpoint 'escape'
 //   return  'Go back to the garage.'  Juno calls                                               checkpoint 'return'
 //   home    (a scene) Gears at the door: "in one piece." "Mostly."
@@ -109,6 +114,25 @@ const O_CSS = `
 #wg .wg-count.m3pop .v { animation: m3pop .7s cubic-bezier(.2,.7,.2,1); }
 @keyframes m3pop { 0% { transform: scale(2.1); color: #4ADE80; } 60% { color: #4ADE80; } 100% { transform: scale(1); color: #fff; } }
 #wg .wg-count .v { transform-origin: 100% 60%; }
+#m3o .coach { position: absolute; left: 50%; top: 17vh; width: min(440px, calc(100vw - 32px)); transform: translate(-50%, -8px); opacity: 0; transition: opacity .3s, transform .35s cubic-bezier(.2,.7,.2,1);
+  padding: 11px 16px 10px; border-radius: 12px; background: rgba(8,10,14,0.7); border-top: 3px solid #FFC93C; text-align: center; text-shadow: 0 1px 3px rgba(0,0,0,.7); backdrop-filter: blur(6px); }
+#m3o .coach.on { opacity: 1; transform: translate(-50%, 0); }
+#m3o .coach .h { font: italic 800 clamp(22px, 2.6vw, 30px)/1 'Barlow Condensed'; letter-spacing: 1px; }
+#m3o .coach .h b { color: #FFC93C; }
+#m3o .coach .ss { display: flex; justify-content: center; flex-wrap: wrap; gap: 8px 14px; margin-top: 9px; }
+#m3o .coach .s { display: inline-flex; align-items: center; gap: 4px; padding: 5px 10px 4px 7px; border-radius: 8px; background: rgba(255,255,255,.08); box-shadow: 0 0 0 1.5px rgba(255,201,60,.55); font: 700 clamp(16px, 1.6vw, 19px)/1 'Barlow Condensed'; letter-spacing: .5px; text-transform: uppercase; white-space: nowrap; transition: background .2s, box-shadow .2s, color .2s; }
+#m3o .coach .s .ok { display: none; color: #4ADE80; font-weight: 800; margin-left: 2px; }
+#m3o .coach .s.done { box-shadow: 0 0 0 1.5px #4ADE80; background: rgba(74,222,128,.14); color: rgba(255,255,255,.75); }
+#m3o .coach .s.done .ok { display: inline; }
+#m3o .coach .s.tick { animation: m3cpop .45s cubic-bezier(.2,.7,.2,1); }
+@keyframes m3cpop { 0% { transform: scale(1.22); } 100% { transform: scale(1); } }
+#m3o .coach .x { margin-top: 8px; font: 600 clamp(13px, 1.3vw, 15px)/1.25 'Barlow Condensed'; color: rgba(255,255,255,.7); }
+#m3o .coach.ready .h b { color: #4ADE80; }
+body.wg-cine #m3o .coach { opacity: 0 !important; }
+/* (the thrusters' own key chips say what the practice says: away while it is up) */
+body:has(#m3o .coach.on) #wg-thr { visibility: hidden; }
+/* (a phone on its side: under the objective, clear of the thrusters' chips and the car's pills; the line under it put away) */
+@media (max-height: 500px) { #m3o .coach { top: 76px; width: min(300px, calc(100vw - 32px)); padding: 7px 10px 7px; } #m3o .coach .h { font-size: 19px; } #m3o .coach .ss { margin-top: 6px; gap: 6px 8px; } #m3o .coach .s { font-size: 14px; padding: 4px 7px 3px 5px; } #m3o .coach .x { display: none; } }
 #m3n { position: fixed; inset: 0; pointer-events: none; z-index: 31; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; opacity: 0; transition: opacity .45s;
   font-family: 'Barlow Condensed', system-ui, sans-serif; color: #fff; }
 #m3n.on { opacity: 1; }
@@ -126,6 +150,7 @@ function overlay(W) {
   const card = document.createElement('div'); card.className = 'card'; root.appendChild(card);
   const prompt = document.createElement('div'); prompt.className = 'prompt'; root.appendChild(prompt);
   const pop = document.createElement('div'); pop.className = 'pop'; pop.innerHTML = '<div class="a"></div><div class="b"></div>'; root.appendChild(pop);
+  const coach = document.createElement('div'); coach.className = 'coach'; root.appendChild(coach);
   const tags = [];
   const timers = {};
   const later = (k, ms, f) => { clearTimeout(timers[k]); timers[k] = setTimeout(f, ms); };
@@ -196,7 +221,23 @@ function overlay(W) {
       };
       f();
     },
-    clear() { O.card(false); O.prompt(null); O.tags(null); pop.classList.remove('on'); O.night(false); },
+    // the thrusters' practice: its steps ([id, html]) and which are done (a Set); null puts it away; ready: all done
+    coach(steps, done = null, { ready = false } = {}) {
+      if (!steps) { coach.classList.remove('on'); coach.dataset.k = ''; return; }
+      if (coach.dataset.k !== steps.map((x) => x[0]).join()) {
+        coach.dataset.k = steps.map((x) => x[0]).join();
+        coach.innerHTML = `<div class="h">TRY THE <b>THRUSTERS</b></div><div class="ss">${steps.map(([id, html]) => `<span class="s" data-id="${id}">${html}<span class="ok">✓</span></span>`).join('')}</div><div class="x">Gears' cold-gas, fitted. Try it here, or just drive off.</div>`;
+      }
+      for (const el of coach.querySelectorAll('.s')) {
+        const d = !!done?.has(el.dataset.id);
+        if (d && !el.classList.contains('done')) { el.classList.remove('tick'); void el.offsetWidth; el.classList.add('tick'); }
+        el.classList.toggle('done', d);
+      }
+      coach.classList.toggle('ready', ready);
+      if (ready) { coach.querySelector('.h').innerHTML = 'THRUSTERS <b>READY</b>'; coach.querySelector('.x').textContent = "You're good to go."; }
+      coach.classList.add('on');
+    },
+    clear() { O.card(false); O.prompt(null); O.tags(null); pop.classList.remove('on'); O.night(false); O.coach(null); },
   };
   return (W._m3o = O);
 }
@@ -501,6 +542,50 @@ function createMission(W, { keep = false } = {}) {
   function inTheCar(x, z, h) { place(W, { car: [x, z, h] }); P.inVehicle = true; P.mesh.visible = false; P.speed = 0; app.selectMode('car'); }
   const blipCar = () => gps.blip('car', { x: car.position.x, z: car.position.z, kind: 'car', edge: true, name: car.label || "Quant's car" });
 
+  /* ------------------------------------------- the thrusters' practice -- */
+  // after the garage (Gears has just fitted them), in the car outside it: HOP and SIDE DASH, each ticked off as it is
+  // used (keys, pad or the touch buttons: all of them fire the thrusters' own events), THRUSTERS READY when both are.
+  // Optional: driving 90 m off from where it began, or walking off from the garage, puts it away. W 22nd St's traffic
+  // held off while it runs (the garage scene's own hold, kept on)
+  const PRACTICE_HOLD = { minX: G_AT.x - 45, maxX: G_AT.x + 45, minZ: 1590, maxZ: 1612 };
+  function practice() {
+    const th = W.thrusters, Pr = { over: false, overAt: now(), done: new Set(), began: false, stop: () => {} };
+    if (!th?.on || !th.unlocked?.hop || !th.unlocked?.dash) { Pr.over = true; return Pr; }
+    const STEPS = [['hop', '<kbd>SPACE</kbd> hop'], ['dash', '<kbd>Z</kbd> <kbd>C</kbd> side dash']];
+    holds([PRACTICE_HOLD]);
+    let from = null, readyT = 0;
+    const mark = (id) => {
+      if (Pr.over || !from || Pr.done.has(id)) return;
+      Pr.done.add(id); sfx?.play('ding', { gain: 0.12 });
+      const all = Pr.done.size === STEPS.length;
+      O.coach(STEPS, Pr.done, { ready: all });
+      if (all) readyT = now() + 2400;
+    };
+    const offs = [th.on('hop', () => mark('hop')), th.on('dash', () => mark('dash'))];
+    let off = null;
+    const end = () => {
+      if (Pr.over) return; Pr.over = true; Pr.overAt = now();
+      off?.(); for (const f of offs) f(); O.coach(null);
+      holds(S.R?.shown ? [STAGE_HOLD] : []);
+    };
+    off = hook(() => {
+      if (W.cutscene) return;
+      const p = me();
+      if (!from) {
+        if (dist(p, G_AT.x, G_AT.z) > 120) return end();
+        // (on foot by the garage: it waits for him in the car)
+        if (!inCar()) return;
+        from = { x: car.position.x, z: car.position.z }; Pr.began = true;
+        O.coach(STEPS, Pr.done);
+        return;
+      }
+      if (readyT && now() > readyT) return end();
+      if (dist(p, from.x, from.z) > 90 || dist(p, G_AT.x, G_AT.z) > 150) end();
+    });
+    Pr.stop = end;
+    return Pr;
+  }
+
   /* --------------------------------------------------------- the phases -- */
   const PHASES = {
     // the next day: the garage, Gears, Juno's call
@@ -532,6 +617,8 @@ function createMission(W, { keep = false } = {}) {
       holds([]);
       S.Gar.show(true); S.Gar.inside(false);
       place(W, { car: SPOT.out.car, quant: SPOT.out.quant });
+      // (Gears has fitted the cold-gas thrusters: the square's drive starts with a try of them)
+      W.thrusters?.unlock?.('all', { announce: false });
     },
     // to Washington Square (the rally goes up on the way)
     async square(fresh) {
@@ -539,8 +626,11 @@ function createMission(W, { keep = false } = {}) {
       // own start in its golden hour)
       // (a restart: at the wheel outside the garage, the drive ahead of him)
       if (fresh) { midday(); inTheCar(...SPOT.out.car); }
+      W.thrusters?.unlock?.('all', { announce: false });
       await sets(); midday();
       if (fresh) S.Gar.show(true);
+      // (outside the garage: the thrusters' practice, optional)
+      const pr = dist(me(), G_AT.x, G_AT.z) < 60 ? practice() : { over: true, overAt: now(), stop: () => {} };
       // (the blip on the arch; the route down 5th Ave to its last lane, and on foot near the square, to the arch; in the
       // car on that last stretch, no line: the stage is in sight. still: a place, for the stall watch)
       const dest = { ...SQ, still: true, follow: () => (inCar() || dist(me(), SQ.x, SQ.z) > 140 ? FIFTH : SQ) };
@@ -556,11 +646,13 @@ function createMission(W, { keep = false } = {}) {
         if (!up && d < 900) { up = true; spawnRally().catch((e) => console.warn('[m3]', e)); }
         if (dist(me(), G_AT.x, G_AT.z) > 300) S.Gar.show(false);
         if (S.R?.shown) S.R.update(dt, app.cameraSystem.camera.position);
-        if (!called && now() - t0 > 7000 && (moving() || now() - t0 > 10000)) { called = true; junoDrive(); }
+        // (Juno's call once the practice is over or put away: a few seconds after it, 7 s in at the soonest)
+        const callAt = pr.over ? Math.max(t0 + 7000, pr.overAt + 2500) : Infinity;
+        if (!called && now() > callAt && (moving() || now() > callAt + 3000)) { called = true; junoDrive(); }
       });
       // (there: by the arch, or stopped on 5th Ave's last stretch in front of it, or on foot near it)
       try { await wait(() => { const p = me(), d = dist(p, ARCH.x, ARCH.z); return d < 26 || ((d < 60 || at5th(p)) && (!inCar() || Math.abs(car.speed) < 6)); }); }
-      finally { off(); drive.stop(); }
+      finally { off(); drive.stop(); pr.stop(); }
       if (!up) await spawnRally();
     },
     // the launch, seen; a Degen spots him
@@ -805,11 +897,13 @@ function createMission(W, { keep = false } = {}) {
       objective(['Lose the ', { Degens: 'red' }, '.'], null);
       W.audio?.play?.('horn', { pos: [car.position.x - 40, 1, car.position.z] });
       // how: break their line of sight (the pursuit loses him once they haven't seen him for a while)
-      delay(0.5).then(() => ui.help(['Turn corners and break their ', { 'line of sight': 'yellow' }, ' to lose them.'], 6.5)).catch(() => {});
-      // the thrusters: Gears' cold-gas, unlocked now (their own help, after the line above has had its time)
+      delay(0.5).then(() => ui.help(['Turn corners to break their ', { 'line of sight': 'yellow' }, '. Out of sight, the escape bar under HEAT fills.'], 6.5)).catch(() => {});
+      // the thrusters: Gears' cold-gas (practised outside the garage; unlocked now on a restart that skipped it), their
+      // keys again after the line above has had its time
       delay(7.2).then(() => {
-        if (W.thrusters?.unlock) W.thrusters.unlock('all', { announce: true });
-        else ui.help(['Cold-gas thrusters: [Space] hops the car, [Z] / [C] dash it sideways.'], 9);
+        const th = W.thrusters;
+        if (!th?.unlock) { ui.help(['Cold-gas thrusters: [Space] hops the car, [Z] / [C] dash it sideways.'], 9); return; }
+        if (!th.unlock('all', { announce: true }).length) ui.help('Thrusters: [SPACE] hop over a car · [Z] [C] dash a lane.', 7);
       }).catch(() => {});
       delay(9).then(() => junoEscape()).catch(() => {});
       // (they come out of W 8th St onto 5th Ave, ~80 m up from him, out of sight until they turn the corner: from just
@@ -926,7 +1020,7 @@ function createMission(W, { keep = false } = {}) {
     markDone(W, 'm3');
     await gsleep(4500);
     sfx?.play('buzz', { gain: 0.18, times: 2 }); sfx?.play('ding', { gain: 0.14 }); W.audio?.play?.('phoneBuzz');
-    ui.dm('Unknown number', 'i want out. i know where the dog is going. sara roosevelt park. come alone. -P', 12);
+    ui.dm('Unknown number', "it's pete. you saw the chat. i'm driving the dog at dawn. meet me tonight at sara roosevelt park. come alone. -P", 12);
     // (the DM read, then the end of the episode: its card, and free roam after it)
     await gsleep(5500);
     await endEpisode(W);

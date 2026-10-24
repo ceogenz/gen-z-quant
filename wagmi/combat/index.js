@@ -1,6 +1,6 @@
 // Gen Z Quant: street fighting: Quant against the Degens, freeflow, inside the open city. Fists, kicks, counters, rolls and
 // slams; bats, bottles and trash cans off the street (items.js). No guns, no knives. Installed by game.js.
-//   enemy.js  a Degen: thug.glb dressed in the gang's black and acid green, his clips, his AI (circle, step in, swing)
+//   enemy.js  a Degen: thug.glb dressed in the gang's black and acid green, his clips, how he fights (circle, step in, swing)
 //   quant.js  Quant's moves and his footwork in a fight (through the control hook in js/controllers.js updatePerson)
 //   camera.js the fight's camera, over the city's chase camera
 //   items.js  bats, bottles, trash cans: their models, in a hand, thrown, breaking, lying about the street
@@ -9,8 +9,16 @@
 // three with five or more, sooner the bigger the crowd: about a blow a second against six); a follower's blow lands at
 // least 0.35 s after the one before, or with it (a gang-up: a double or triple counter), and a man with a bottle hanging
 // back throws it outside the tokens. Each swing is telegraphed (his cue over his head and a slowed wind-up); yellow is
-// countered, red (a brute's slam, a bat or a bottle swung with everything) must be dodged, and a dodge made while a cue
-// shows always clears that blow. Hit-stop and slow motion run on the fight's own clock (Quant, the Degens, the effects,
+// countered, red (a brute's slam, a bat or a bottle swung with everything) must be dodged.
+// The rules (c.rules): Mission 1 (Chelsea Park) is the lesson, forgiving: a counter takes the whole cue, a dodge on the
+// cue always clears it, nothing punishes a mash, and a lesson card teaches STRIKE, then COUNTER on the yellow cue, then
+// DODGE on a red one, one at a time (the men wait their turn for it). Everywhere else the full rules: his cue shows
+// white with a ring closing on it while he winds up and only turns yellow for the last 0.42 s (the counter's window);
+// a counter thrown outside it (no cue, too early, or at a red one) whiffs and leaves Quant open for 0.42 s; strikes
+// mashed ahead of the combo's beat (two or more presses before the blow lands) end in an overswing, open for 0.45 s; a
+// roll only clears a blow landing within 0.62 s of it (he re-aims at an early one); and the men mix it up: feints, red
+// kicks, the brute's ground slam (a red ring: be outside it), two men at once from either side (the pincer).
+// Hit-stop and slow motion run on the fight's own clock (Quant, the Degens, the effects,
 // and the street's traffic), real time for the camera and the overlays. The fight lasts while any man of it lives near
 // him (on his feet or not) and a beat after the last one.
 // The street: Quant's parked car is solid to it all (the men walk round it, nobody attacks across it, his moves don't go
@@ -61,6 +69,14 @@ export async function install(W) {
     fixed: false, steps: 0, stepNow: false, debugScale: 1, quiet: false, cost: 0, frames: 0,
   };
   c.playerFeet = new THREE.Vector3().copy(P.position);
+  // the rules (see the top): Mission 1's lesson, or the full ones; ?fightrules=lesson|full, or debug.rules(), pins them
+  const RULES = {
+    lesson: { name: 'lesson', window: 9, whiff: false, mash: false, dodgeClear: 9, variety: false, pincer: false },
+    full: { name: 'full', window: 0.42, whiff: true, mash: true, dodgeClear: 0.62, variety: true, pincer: true },
+  };
+  let rulesPin = RULES[new URLSearchParams(location.search).get('fightrules')] || null, rulesT = 0;
+  const rulesNow = () => { if (rulesPin) return rulesPin; let m = null; try { m = W.missions?.active?.(); } catch (e) { /* (none) */ } return m && m.id === 'm1' ? RULES.lesson : RULES.full; };
+  c.rules = rulesNow();
   c.thug = { gltf, ...prepareClips(gltf) };
   // Quant's car parked in the street is solid to the fight (the city's own collision only knows the buildings): a box
   // (its half width, half length and roof) the men are kept out of and walk round, and the camera won't look through
@@ -199,12 +215,15 @@ export async function install(W) {
   }
 
   // ------------------------------------------------------------------ threats (the cues)
-  c.threat = (e, lead, kind) => { const t = { e, at: c.time + lead, lead, kind }; c.threats.push(t); return t; };
+  // (win: the last part of a yellow one the counter takes; before it the cue shows white, its ring closing)
+  c.threat = (e, lead, kind, o = {}) => { const t = { e, at: c.time + lead, lead, kind, win: kind === 'counter' ? Math.min(lead, c.rules.window) : lead, ...o }; c.threats.push(t); if (c.lessonThreat) c.lessonThreat(t); return t; };
+  c.cueOpen = (t) => t.kind !== 'counter' || t.at - c.time <= t.win + 0.001;
   c.clearThreats = (e) => { c.threats = c.threats.filter((t) => t.e !== e); };
   // the blow landing soonest (for a perfect dodge: within its last moments)
   c.nearestThreat = () => { let b = null; for (const t of c.threats) { const r = t.at - c.time; if (r < -0.08 || r > 0.8) continue; if (!b || t.at < b.at) b = t; } return b; };
   // a cue showing now (a counter answers it)
-  c.counterable = () => { let b = null; for (const t of c.threats) { const r = t.at - c.time; if (r < -0.1 || r > t.lead + 0.05) continue; if (!b || t.at < b.at) b = t; } return b; };
+  // (and one winding up, its window not open yet: early, a counter whiffs; c.cueOpen tells)
+  c.counterable = () => { let b = null; for (const t of c.threats) { const r = t.at - c.time; if (r < -0.1 || r > t.lead + 0.05) continue; if (!b || (c.cueOpen(t) && !c.cueOpen(b)) || (c.cueOpen(t) === c.cueOpen(b) && t.at < b.at)) b = t; } return b; };
   // the right to attack: one man at a time with up to three on their feet; with four or five a second may follow the
   // first in, with six or more a third, and the bigger the crowd the sooner the next goes (about a blow a second at six).
   // A follower's blow lands at least 0.35 s after the one before it, or (a gang-up, now and then) with it: a double or
@@ -220,6 +239,8 @@ export async function install(W) {
   };
   c.swingOk = (e, lead) => {
     const at = c.time + lead;
+    // (the pincer's second man: his blow 0.3 s after his partner's, once the partner is swinging)
+    if (e.pincer) { const p = e.pincer, t = c.threats.find((x) => x.e === p); if (p.alive && (p.state === 'approach' || p.state === 'attack')) { if (!t) return false; const d = at - t.at; if (d > 0.22 && d < 0.4) { e.pincer = null; e.gang = true; return true; } return false; } e.pincer = null; }
     for (const t of c.threats) {
       if (t.e === e || t.item) continue;
       const d = at - t.at;
@@ -266,6 +287,7 @@ export async function install(W) {
     else c.sfx(foot ? 'kick' : 'punch', heavy);
     if (ko && Math.random() < 0.6) c.sfx('grunt', 0.6);
     if (!r.armored) { c.combo.n++; me.lastHitT = c.time; me.addMeter(h.kind === 'counter' ? 'counter' : heavy > 0.5 ? 'heavy' : 'light'); }
+    if (c.lesson?.step === 0 && ++c.lesson.n >= LESSON[0].need) c.lessonDone('strike');
     if (r.dead) c.hud.flash(['Down he goes', 'He’s done', 'Lights out'][Math.floor(Math.random() * 3)]);
     emit('hit', { enemy: e, kind: h.kind, dmg: h.dmg, weapon: h.weapon || null });
   };
@@ -312,7 +334,7 @@ export async function install(W) {
   };
   // a fist (or a body) into the street: dust and a shake
   c.groundPound = (p, k = 0.8, sound = 'bodyfall') => { c.fx.dust(p, { amount: 0.9 + k }); c.shake(0.3 + 0.3 * k); if (sound) c.sfx(sound, k); };
-  c.onCounter = (e, took, n = 1) => { c.hud.banner(n >= 3 ? 'TRIPLE COUNTER' : n === 2 ? 'DOUBLE COUNTER' : took ? 'DISARMED' : 'COUNTER'); c.sfx('counter'); if (took) c.hud.flash(`Took his ${took.def.name.toLowerCase()}`); for (let i = 1; i < n; i++) c.me.addMeter('counter'); };
+  c.onCounter = (e, took, n = 1) => { if (c.lesson?.step === 1) c.lessonDone('counter'); c.hud.banner(n >= 3 ? 'TRIPLE COUNTER' : n === 2 ? 'DOUBLE COUNTER' : took ? 'DISARMED' : 'COUNTER'); c.sfx('counter'); if (took) c.hud.flash(`Took his ${took.def.name.toLowerCase()}`); for (let i = 1; i < n; i++) c.me.addMeter('counter'); };
   // a dodge made while a man's cue shows: that blow misses him, wherever it lands (a dodge on the cue is never punished);
   // a brute's slam dodged in its last 0.6 s (or perfectly) leaves the brute stunned when it hits nothing; a bottle in
   // the air can't touch him until it has passed
@@ -320,7 +342,9 @@ export async function install(W) {
     for (const t of c.threats) {
       const r = t.at - c.time; if (r < -0.08 || r > t.lead + 0.05) continue;
       if (t.item) { c.me.invulnUntil = Math.max(c.me.invulnUntil, t.at + 0.12); continue; }
-      t.e.dodged = true;
+      // (the full rules: a roll too early is seen coming, he re-aims; the ground slam is only cleared by distance)
+      if (t.quake || r > c.rules.dodgeClear) continue;
+      t.e.dodged = true; if (c.lesson?.step === 2 && t.lesson) c.lessonDone('dodge');
       if (t.e.type === 'brute' && BLOWS[t.e.atk]?.heavy && (r <= 0.6 || perfect)) t.e.stunOnWhiff = true;
     }
     if (!perfect) return;
@@ -344,6 +368,17 @@ export async function install(W) {
   c.enemyStrike = (e) => {
     c.clearThreats(e);
     const me = c.me, B = BLOWS[e.atk], w = e.weapon, pf = P.position;
+    if (B.quake) {
+      // the ground slam: everything inside his ring goes down (a roll doesn't save him there); outside it, he's winded
+      const R = B.quake * e.scale, at = _v.copy(e.pos).addScaledVector(fwd(e.yaw, _v2), 0.5 * e.scale);
+      c.groundPound(at, 1.3, 'slam'); c.fx.dust(at, { amount: 1.6 }); c.shake(0.8); c.sfx('whoosh', 1.2);
+      const inside = hdist(e.pos, pf) <= R + 0.2 && Math.abs(pf.y - e.pos.y) < 1.2 && c.live() && !me.down() && !(me.moveName() === 'slam' && me.invuln());
+      if (!inside) { e.stun = 2.6; c.hud.flash('He’s winded: E to slam him'); c.sfx('grunt', 1); return; }
+      me.invulnUntil = 0; me.takeHit(e, e.T.dmg * B.dmg, true);
+      c.hitStop(0.09, 0.04); camx.punch(0.9); c.hud.hurt(0.4); c.combo.n = 0; c.sfx('hurt', 1);
+      if (!c.quakeTold) { c.quakeTold = true; c.hud.flash('Inside the red ring: get out of it, a roll won’t save you', 'danger'); }
+      return;
+    }
     const range = e.blowRange();
     const d = hdist(e.pos, pf), dy = Math.abs(pf.y - e.pos.y);
     const facing = Math.abs(angWrap(yawTo(e.pos, pf) - e.yaw)) < 1.0;
@@ -381,6 +416,7 @@ export async function install(W) {
     for (const e of cr.enemies) if (e.alive && e.state === 'idle') { e.set('hold'); e.engagedOnce = true; e.cd = rnd(0.8, 2.2); }
   }
   function spawnCrew({ x, z, count = 4, brute = 0, weapons = [], aggro = true, props = true } = {}) {
+    if (!fightOn) c.rules = rulesNow(); // (the rules its men pick their blows by)
     if (x == null || z == null) { const f = fwd(P.heading, _v); x = P.position.x + f.x * 8; z = P.position.z + f.z * 8; }
     const crew = { id: 'crew' + (++crewSeq), enemies: [], aggro, awake: false, cleared: false, _cleared: [],
       alive() { return this.enemies.filter((e) => e.alive).length; },
@@ -414,8 +450,9 @@ export async function install(W) {
   function clearAll() {
     for (const e of c.enemies) e.dispose();
     c.enemies.length = 0; c.crews.length = 0; c.threats.length = 0; c.tokens.length = 0; c.ranged = null; c.linger = null;
-    c.items.clear();
+    c.items.clear(); c.fx.ring(null);
     c.me.reset(); c.combo.n = 0;
+    if (c.lesson && c.lesson.step < LESSON.length) { c.lesson = null; c.hud.lesson(null); }
   }
 
   // ------------------------------------------------------------------ the director: slots, the token
@@ -458,6 +495,7 @@ export async function install(W) {
     });
     if (cm.activeMode === 'car' && car && !W.cutscene) siege(standing);
     if (!c.attackable()) return;
+    if (c.lesson && c.lesson.step < 3) { lessonDirector(dt, standing, pf); return; }
     // the nearest rested man with a clear way to him (with a little chance; a brute counts nearer, so he gets his turns)
     // goes; with five or more up, a second follows once the first is swinging
     const pickNext = () => {
@@ -481,7 +519,8 @@ export async function install(W) {
       if (th) { th.atk = 'bottleThrow'; th.set('approach'); c.ranged = th; }
     }
     if (c.globalCd <= 0 && c.tokens.length < max) {
-      if (!last) { const e = pickNext(); if (e) c.tokens.push(e); }
+      if (!last && c.rules.pincer && standing.length >= 2 && c.time > pincerT && ((pincerT = c.time + rnd(5, 9)), Math.random() < 0.6) && pincer(standing, pf)) { /* (two at once) */ }
+      else if (!last) { const e = pickNext(); if (e) c.tokens.push(e); }
       else {
         // (a gang-up or not: decided once for each man who goes first)
         if (gangFor !== last) { gangFor = last; gangOn = standing.length >= 3 && Math.random() < 0.5; }
@@ -489,9 +528,63 @@ export async function install(W) {
       }
     }
   }
+  // the pincer (the full rules): two rested grunts on either side of him (at least ~115 deg apart round him) go in
+  // together, the second's blow landing 0.3 s after the first's (two yellow windows that overlap: a counter in both
+  // takes both, the double counter)
+  function pincer(standing, pf) {
+    const ok = standing.filter((e) => e.type === 'grunt' && e.state === 'hold' && e.cd <= 0 && !c.hasToken(e) && !e.weapon && hdist(e.pos, pf) < 8 && !c.lineBlocked(e.pos, pf));
+    let a = null, b = null, bs = 2.0;
+    for (let i = 0; i < ok.length; i++) for (let j = i + 1; j < ok.length; j++) {
+      const d = Math.abs(angWrap(yawTo(pf, ok[i].pos) - yawTo(pf, ok[j].pos))); if (d > bs) { bs = d; a = ok[i]; b = ok[j]; }
+    }
+    if (!a) return false;
+    for (const e of [a, b]) { e.chooseBlow(hdist(e.pos, pf)); if (BLOWS[e.atk].feint || !BLOWS[e.atk].counter) e.atk = 'thugPunch1'; e.set('approach'); c.tokens.push(e); }
+    b.pincer = a; a.pincer = null; c.globalCd = 0.15;
+    return true;
+  }
   const TAU = Math.PI * 2, room = new Array(16).fill(4.8), roomAt = new THREE.Vector3(1e9, 0, 0);
-  let gangFor = null, gangOn = false;
+  let gangFor = null, gangOn = false, pincerT = 0;
   let roomT = 0;
+
+  // ------------------------------------------------------------------ the lesson (Mission 1): one thing at a time
+  // 0 STRIKE: three blows landed (nobody swings at him meanwhile); 1 COUNTER: one man swings a plain punch, a beat of
+  // slow motion on its cue, until a counter lands (or three tries); 2 DODGE: one man's red kick, until a roll clears it
+  // (or three tries); then a last word and the fight as it is. Once a session: a restart of the checkpoint picks up at
+  // the step it reached
+  const LESSON = [
+    { key: 'strike', need: 3, title: 'STRIKE', line: '<kbd>LMB</kbd><kbd>J</kbd><span>Hit the Degens</span>' },
+    { key: 'counter', need: 1, title: 'COUNTER', line: '<span>When his <b class="y">!</b> turns yellow</span><kbd>Q</kbd><kbd>L</kbd><span>Counter</span>' },
+    { key: 'dodge', need: 1, title: 'DODGE', line: '<span>A red <b class="r">‼</b> can’t be countered</span><kbd>C</kbd><kbd>Space</kbd><span>Dodge</span>' },
+  ];
+  let lessonAt = 0, lessonEnd = 0;
+  c.lesson = null;
+  function lessonShow() { const L = c.lesson; if (!L) return c.hud.lesson(null); const S = LESSON[L.step]; if (S) c.hud.lesson({ step: L.step + 1, of: LESSON.length, title: S.title, line: S.line }); }
+  c.lessonDone = (key, skipped = false) => {
+    const L = c.lesson; if (!L || LESSON[L.step]?.key !== key) return;
+    L.step++; L.n = 0; L.tries = 0; L.t = 0; lessonAt = L.step; c.globalCd = Math.max(c.globalCd, 1.1);
+    if (!skipped) c.sfx('counter');
+    if (L.step >= LESSON.length) { c.hud.lesson({ step: 0, of: 0, title: 'NOW TAKE THEM DOWN', line: '<span>Strike, counter on yellow, dodge the red</span>' }); lessonEnd = c.rtime + 3; }
+    else lessonShow();
+  };
+  // (the lesson's blow: its cue held a beat in slow motion, to read it)
+  c.lessonThreat = (t) => { if (!t.e.lessonBlow) return; t.e.lessonBlow = false; t.lesson = true; c.slowmo(t.lead / 0.45, 0.45, 0.25); }; // (real time: the whole cue slowed)
+  function lessonTick() {
+    const want = fightOn && c.rules.name === 'lesson' && lessonAt < LESSON.length;
+    if (want && !c.lesson) { c.lesson = { step: lessonAt, n: 0, tries: 0, t: 0 }; lessonShow(); }
+    else if (!want && c.lesson && c.lesson.step < LESSON.length) { c.lesson = null; c.hud.lesson(null); }
+    if (c.lesson && c.lesson.step >= LESSON.length && c.rtime > lessonEnd) { c.lesson = null; c.hud.lesson(null); }
+  }
+  function lessonDirector(dt, standing, pf) {
+    const L = c.lesson; L.t += dt;
+    for (let i = c.tokens.length - 1; i >= 0; i--) { const e = c.tokens[i]; if (!e.alive || (e.state !== 'approach' && e.state !== 'attack')) c.releaseToken(e); }
+    if (L.step === 0) { if (L.t > 16) c.lessonDone('strike', true); return; } // (nobody swings while he learns to hit)
+    if (c.tokens.length || c.globalCd > 0) return;
+    if (L.tries >= 3 || L.t > 25) { c.lessonDone(LESSON[L.step].key, true); return; }
+    let best = null, bd = 9;
+    for (const e of standing) { if (e.type !== 'grunt' || e.state !== 'hold' || e.weapon) continue; const d = hdist(e.pos, pf); if (d < bd && !c.lineBlocked(e.pos, pf)) { bd = d; best = e; } }
+    if (!best) return;
+    best.atk = L.step === 1 ? 'thugPunch1' : 'thugKickRed'; best.lessonBlow = true; best.set('approach'); c.tokens.push(best); L.tries++;
+  }
 
   // ------------------------------------------------------------------ in his car, stopped, the gang round it
   // they beat on it, one at a time (a fist or a boot into its side: a thud and a shake), and after a few blows the man
@@ -560,10 +653,14 @@ export async function install(W) {
     c.items.update(dt);
     // (a thrown bottle's cue lasts while it flies, whatever its thrower does)
     c.threats = c.threats.filter((t) => t.at > c.time - 0.15 && (t.item ? t.item.state === 'fly' && t.item.thrower : t.e.alive && t.e.state === 'attack'));
+    if (c.fx.ringOn() && !c.threats.some((t) => t.quake)) c.fx.ring(null);
     c.fx.update(dt);
     // the fight starting and ending (for the overlays and the mission team)
     const on = (c.me.fighting || c.lingering()) && c.live();
-    if (on !== fightOn) { fightOn = on; if (on) c.hud.fightStarted(); else c.input.release(); emit('fight', { on }); }
+    if (on !== fightOn) { fightOn = on; if (on) c.hud.fightStarted({ lesson: c.rules.name === 'lesson' && lessonAt < LESSON.length }); else c.input.release(); emit('fight', { on }); }
+    // (the rules: Mission 1's lesson or the full ones, looked up now and then, never mid-fight)
+    if ((rulesT -= rdt) <= 0 && !fightOn) { rulesT = 0.5; c.rules = rulesNow(); }
+    lessonTick();
     // (the street's clock this frame: the fight's in a fight (a hit-stop holds the traffic too) or a debug step)
     c.worldDt = fightOn || c.fixed ? dt : rdt0;
     // the next frame's clock (and the sound's: muffled in slow motion)
@@ -741,6 +838,9 @@ export async function install(W) {
       step(n = 1) { c.steps += n; },
       slow(k = 1) { c.debugScale = k; },
       quiet(on = true) { c.quiet = !!on; },
+      // the rules pinned ('lesson' | 'full'), or null: by the mission again; lesson(step) restarts the lesson there
+      rules(name) { rulesPin = RULES[name] || null; c.rules = rulesNow(); return c.rules.name; },
+      lesson(step = 0) { lessonAt = step; c.lesson = null; },
       view(o) { camx.debugView(o); },
       spawn(type = 'grunt', dist = 3, deg = 0, o = {}) {
         const a = P.heading + deg * Math.PI / 180, pos = new THREE.Vector3(P.position.x + Math.sin(a) * dist, 0, P.position.z + Math.cos(a) * dist);
@@ -762,7 +862,7 @@ export async function install(W) {
         return { t: +c.time.toFixed(2), ts: +c.ts.toFixed(2), fighting: c.me.fighting, move: c.me.moveName(), hp: Math.round(c.me.hp), meter: +c.me.meter.toFixed(2), combo: c.combo.n,
           holding: c.me.holding ? c.me.holding.kind + ':' + c.me.holding.hits : null, items: c.items.list.length,
           pos: [+P.position.x.toFixed(2), +P.position.y.toFixed(2), +P.position.z.toFixed(2)], heading: +P.heading.toFixed(2), contact: c.me.contact,
-          threats: c.threats.length, enemies: c.enemies.map((e) => `${e.type[0]}:${e.state}:${Math.max(0, Math.round(e.hp))}@${hdist(e.pos, P.position).toFixed(2)}`).join(' ') };
+          rules: c.rules.name, lesson: c.lesson ? c.lesson.step : null, threats: c.threats.length, enemies: c.enemies.map((e) => `${e.type[0]}:${e.state}:${Math.max(0, Math.round(e.hp))}@${hdist(e.pos, P.position).toFixed(2)}`).join(' ') };
       },
     },
   };

@@ -104,12 +104,40 @@ class Particles {
   }
 }
 
+// a red ring on the street round a brute winding up a ground slam (his reach: be outside it when it lands), and a
+// fill in it that grows to the ring as the slam comes (the cue's clock, on the ground)
+function groundRing(scene) {
+  const mk = (geo, op) => {
+    const m = new THREE.MeshBasicNodeMaterial({ transparent: true, depthWrite: false, depthTest: true, side: THREE.DoubleSide, fog: false, blending: THREE.AdditiveBlending });
+    m.color.setRGB(1.5, 0.1, 0.07); m.opacity = op; // (kept under the bloom: it reads red, not white)
+    const o = new THREE.Mesh(geo, m); o.rotation.x = -Math.PI / 2; o.renderOrder = 18; o.frustumCulled = false; o.visible = false; scene.add(o);
+    return o;
+  };
+  const ring = mk(new THREE.RingGeometry(0.93, 1, 64), 0.9), fill = mk(new THREE.CircleGeometry(1, 48), 0.22);
+  let on = null;
+  return {
+    meshes: [ring, fill],
+    // show(at, r, k): k 0..1 how near the slam is (null hides it)
+    set(at, r, k) {
+      if (k == null) { if (on) { ring.visible = fill.visible = false; on = null; } return; }
+      on = true; ring.visible = fill.visible = true;
+      ring.position.set(at.x, at.y + 0.04, at.z); fill.position.set(at.x, at.y + 0.035, at.z);
+      ring.scale.setScalar(r); fill.scale.setScalar(Math.max(0.05, r * clamp(k, 0, 1)));
+      const pulse = 0.75 + 0.25 * Math.sin(k * 26);
+      ring.material.opacity = 0.55 + 0.4 * pulse * k; fill.material.opacity = 0.1 + 0.2 * k;
+    },
+    on: () => !!on,
+  };
+}
+
 export function createFx(scene) {
   const atlas = atlasTex();
   const add = new Particles(scene, atlas, true, 900);
   const alpha = new Particles(scene, atlas, false, 300);
+  const gr = groundRing(scene);
   const fx = {
     add, alpha,
+    ring: gr.set, ringOn: gr.on,
     // a blow landing: a bright flash, a star, streak sparks; a heavy one a ring and a puff of sweat too
     hit(pos, dir, { heavy = 0, color = [6, 4.6, 2.6] } = {}) {
       const s = 1 + heavy;
@@ -190,7 +218,7 @@ export function createFx(scene) {
     },
     clear() { add.list.length = 0; alpha.list.length = 0; },
     update(dt) { add.update(dt); alpha.update(dt); },
-    meshes: [add.mesh, alpha.mesh],
+    meshes: [add.mesh, alpha.mesh, ...gr.meshes],
   };
   return fx;
 }

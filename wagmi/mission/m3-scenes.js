@@ -6,8 +6,10 @@
 //           Quant's car ("Cold-gas thrusters..."), Juno's video call: the $MOON2 launch stream (Fiona, Moon's face)
 //   rally   Washington Square: the stage under the arch, the chart pumping, Fiona on the megaphone, a Degen spots Quant;
 //           then over his shoulder on the lawn, the three rigs ahead of him (the job's card up over it)
-//   dump    the third rig down: the chart goes red, Fiona drops the megaphone and runs for her SUV on 5th Ave
-//   home    back at the garage: Gears at the door, the car "in one piece"
+//   dump    the third rig down: the chart goes red, Fiona drops the megaphone and runs for her SUV on 5th Ave; then
+//           what the rigs bought him: Lev's phone (still in the Degens' chat) buzzes, ZK changes the plan for Moon
+//           (out of the city at dawn) and names the driver: Pete, who DMed Quant last night (Mission 4's lead)
+//   home    back at the garage: Gears at the door, the car "in one piece", one line from Quant about Moon
 // Each is paced by its lines (a shot starts with its line) or fixed, and returns when it ends (or is skipped).
 import * as THREE from 'three/webgpu';
 import { upright, UPRIGHT_BONES, place } from '../intro.js';
@@ -378,10 +380,20 @@ export function rallyScene(W, { say, fiona, rally, spotter, lawn = null, onRigs 
 }
 
 /* --------------------------------------------------------------- dump -- */
-// ~11.5 s: the chart red, Fiona off the stage and away in her SUV
+// ~19 s: the chart red, Fiona off the stage and away in her SUV; then the stage left empty, the red chart over it, as
+// Lev's phone (Quant took it in Mission 2, and nobody kicked it from their chat) shows ZK's new plan for Moon: out of
+// the city at dawn, Pete driving (23 Oct, the review: smashing the rigs gains him something concrete toward Moon; Pete's
+// DM at the end of the mission and Mission 4 start from it). Back on his car for his read of it
+export const DUMP_CHAT = [
+  ['wick', '#B6FF3B', 'STREAM IS DEAD. coin kid smashed all 3 rigs'],
+  ['zk', '#E9EEF5', 'Then no more streams. The dog leaves the city at dawn.'],
+  ['zk', '#E9EEF5', 'Pete drives.'],
+  ['pete', '#6CB8FF', 'ok'],
+];
 export function dumpScene(W, { say, fiona, rally, suv }) {
   const sfx = W.sfx, cm = W.app.controllerManager, [FX, FZ] = FIONA_AT, top = STAGE.top;
-  const T = { drop: 3.0, run: 3.6, cut: 6.0, inCar: 8.4, go: 8.7, end: 11.4 };
+  // (gone: the SUV out of sight by 11.4, as before the chat was added)
+  const T = { drop: 3.0, run: 3.6, cut: 6.0, inCar: 8.4, go: 8.7, gone: 11.4, car: 9.8, stage: 11.6, chat: 11.9, back: 16.4, end: 19.0 };
   const [SX, SZ, SH] = SUV_AT;
   // her run: along the stage to its east end, down, round the arch's east pier (cut), then the last steps to the SUV
   // (the second leg at the pace that gets her to its door as it opens)
@@ -390,7 +402,7 @@ export function dumpScene(W, { say, fiona, rally, suv }) {
   const run2 = spline([[10.7, 2797], [10.2, 2792], [doorAt[0] + 0.4, doorAt[1] + 2.5], [doorAt[0], doorAt[1]]]);
   const v2 = run2.length / (T.inCar - T.cut);
   const r1 = travel([[T.run, 0], [T.run + 0.5, 5.4], [T.cut, 5.4]]), r2 = travel([[T.cut, v2], [T.inCar, v2]]);
-  const way = spline([[SX, SZ], [SX - 0.5, SZ - 22], [SX - 2, SZ - 70], [SX - 3, SZ - 160]]), go = travel([[T.go, 0], [T.go + 1.4, 12], [T.end, 18]]);
+  const way = spline([[SX, SZ], [SX - 0.5, SZ - 22], [SX - 2, SZ - 70], [SX - 3, SZ - 160]]), go = travel([[T.go, 0], [T.go + 1.4, 12], [T.gone, 18]]);
   const onStage = (p) => p.x < STAGE.x1 && p.z < STAGE.z1;
   let megaT = null;
   return {
@@ -401,8 +413,12 @@ export function dumpScene(W, { say, fiona, rally, suv }) {
       { t: 0, cam: (t) => ({ pos: keys([[0, [-4.4, 2.0, 2814.0]], [2.6, [-4.0, 2.1, 2813.4]]], 'linear')(t), look: keys([[0, [0.6, 4.6, SCREEN_Z]], [2.6, [0.4, 4.2, SCREEN_Z + 1]]], 'linear')(t), fov: 50, shake: 0.4 }) },
       // east of her, low by the stage's edge: the megaphone dropped, and her run past the camera to the steps
       { t: 2.6, cam: (t) => ({ pos: keys([[2.6, [4.2, 1.85, 2813.2]], [T.cut, [4.7, 1.8, 2813.0]]], 'linear')(t), look: (() => { const p = t < T.run ? { x: FX, z: FZ } : run1.at(Math.min(run1.length, r1(t))); return [p.x, onStage(p) ? top + 1.0 : 1.3, p.z]; })(), fov: 46, shake: 0.7 }) },
-      { t: T.cut, cam: (t) => ({ pos: [16.8, 1.8, 2789.5], look: keys([[T.cut, [10, 1.2, 2794]], [T.go + 0.4, [SX + 0.5, 1.1, SZ]], [T.end, [SX - 1, 1.2, SZ - 30]]])(t), fov: 44, shake: 0.6 }) },
-      { t: T.end - 1.6, cam: () => { const [cx, cz, ch] = ESCAPE_CAR; return { pos: [cx - Math.sin(ch) * 7.5, 2.3, cz - Math.cos(ch) * 7.5], look: [cx + Math.sin(ch) * 6, 1.1, cz + Math.cos(ch) * 6], fov: 52, shake: 0.4 }; } },
+      { t: T.cut, cam: (t) => ({ pos: [16.8, 1.8, 2789.5], look: keys([[T.cut, [10, 1.2, 2794]], [T.go + 0.4, [SX + 0.5, 1.1, SZ]], [T.gone, [SX - 1, 1.2, SZ - 30]]])(t), fov: 44, shake: 0.6 }) },
+      { t: T.car, cam: () => { const [cx, cz, ch] = ESCAPE_CAR; return { pos: [cx - Math.sin(ch) * 7.5, 2.3, cz - Math.cos(ch) * 7.5], look: [cx + Math.sin(ch) * 6, 1.1, cz + Math.cos(ch) * 6], fov: 52, shake: 0.4 }; } },
+      // the stage left empty under the red chart, the megaphone where she dropped it, while the chat comes in
+      { t: T.stage, cam: (t) => ({ pos: keys([[T.stage, [-3.2, 1.65, 2817.2]], [T.back, [-2.5, 1.75, 2815.6]]], 'linear')(t), look: keys([[T.stage, [0.6, 3.6, SCREEN_Z]], [T.back, [0.4, 3.3, SCREEN_Z]]], 'linear')(t), fov: 46, shake: 0.35 }) },
+      // back on his car, from its other side, for his read of it
+      { t: T.back, cam: (t) => { const [cx, cz, ch] = ESCAPE_CAR, f = [Math.sin(ch), Math.cos(ch)], r = [-Math.cos(ch), Math.sin(ch)]; const p = keys([[T.back, [cx - f[0] * 6.2 - r[0] * 3.2, 1.9, cz - f[1] * 6.2 - r[1] * 3.2]], [T.end, [cx - f[0] * 5.4 - r[0] * 2.8, 1.8, cz - f[1] * 5.4 - r[1] * 2.8]]], 'linear')(t); return { pos: p, look: [cx + f[0] * 3, 1.0, cz + f[1] * 3], fov: 48, shake: 0.4 }; } },
     ],
     cues: [
       [0.1, () => { rally.screen.mode('dump'); sfx?.play('squeal', { gain: 0.2, dur: 0.6 }); }],
@@ -411,7 +427,14 @@ export function dumpScene(W, { say, fiona, rally, suv }) {
       [T.run - 0.2, (st) => say([['Fiona', PINK, "It's a healthy correction! Bye!"]], st)],
       [T.inCar - 0.1, () => W.audio?.play?.('doorOpen', { pos: [doorAt[0], 1, doorAt[1]] })],
       [T.go, () => { sfx?.play('squeal', { gain: 0.45, dur: 1.2 }); W.audio?.play?.('engineStart', { pos: [SX, 0.8, SZ] }); }],
-      [T.end - 1.4, (st) => say([['Quant', WHITE, 'Pump. And dump.']], st)],
+      [T.car + 0.2, (st) => say([['Quant', WHITE, 'Pump. And dump.']], st)],
+      // Lev's phone: the Degens' chat, ZK's new plan
+      [T.chat, (st) => {
+        if (st.dead || !W.m2ui) return;
+        sfx?.play('buzz', { gain: 0.16, times: 2 }); sfx?.play('ding', { gain: 0.1 }); W.audio?.play?.('phoneBuzz');
+        W.m2ui.chat(DUMP_CHAT, { every: 1150, sub: "Lev's phone · 14 members" }).catch(() => {});
+      }],
+      [T.back + 0.3, (st) => say([['Quant', WHITE, 'Pete. The guy who wants out.']], st)],
     ],
     pose(t, dt) {
       rally.update(dt, W.app.cameraSystem.camera.position);
@@ -437,12 +460,13 @@ export function dumpScene(W, { say, fiona, rally, suv }) {
       fiona.rig.set([[0, 'thugIdle'], [T.run, fiona.clips.includes('run') ? 'run' : 'jog', { fade: 0.2, speed: 1.1 }]]);
       suv.group.visible = true;
     },
-    cleanup() { fiona.root.visible = false; fiona.mega.visible = false; suv.group.visible = false; },
+    cleanup() { fiona.root.visible = false; fiona.mega.visible = false; suv.group.visible = false; W.ui?.phone?.hide?.(); },
   };
 }
 
 /* --------------------------------------------------------------- home -- */
-// ~12 s: Gears at the bay door, Quant back, the car at the curb
+// ~16 s: Gears at the bay door, Quant back, the car at the curb. (23 Oct, the review: one line from Quant about Moon
+// before the joke, the cool cracking; "in one piece" / "Mostly." is him as much as the car)
 export function homeScene(W, { say, gears, garage }) {
   const C = W.cast;
   const [gx, gz] = SPOT.door.gears, [qx, qz] = SPOT.door.quant;
@@ -453,6 +477,7 @@ export function homeScene(W, { say, gears, garage }) {
     ['Gears', GOLD, "You're back. And the car's in one piece."],
     ['Quant', WHITE, 'Mostly.'],
     ['Gears', GOLD, 'Mostly?'],
+    ['Quant', WHITE, 'Moon sleeps on my feet. Every night. Except last night.', 0.6],
     ['Quant', WHITE, 'The thrusters work great. Very safe. Mostly.'],
     ['Gears', GOLD, "Ha. Room's upstairs, kid. Get some sleep."],
   ];
@@ -463,7 +488,8 @@ export function homeScene(W, { say, gears, garage }) {
       { line: 1, t: Infinity, cam: () => ({ pos: [gx - 0.5, G + 1.65, gz - 0.9], look: [qx, G + 1.55, qz], fov: 34, shake: 0.3 }) },
       // (his whole cap in, with room over it)
       { line: 2, t: Infinity, cam: () => ({ pos: [qx + 0.35, G + 1.62, qz + 0.8], look: [gx, G + 1.72, gz], fov: 36, shake: 0.3 }) },
-      { line: 3, t: Infinity, cam: () => ({ pos: [gx - 0.6, G + 1.6, gz - 1.0], look: [qx, G + 1.5, qz], fov: 30, shake: 0.3 }) },
+      // (Moon: in on him, slowly; then wide for the joke, Gears' laugh in it too)
+      { line: 3, t: Infinity, cam: (t, t0) => ({ pos: drift([gx - 0.6, G + 1.6, gz - 1.0], [gx - 0.5, G + 1.58, gz - 0.86], 4)(t, t0), look: [qx, G + 1.5, qz], fov: 28, shake: 0.25 }) },
       { line: 4, t: Infinity, cam: (t, t0) => ({ pos: drift([GX - 6, 1.8, 1599], [GX - 6.5, 2.4, 1597.5], 4)(t, t0), look: [GX - 0.2, 1.6, 1609], fov: 38, shake: 0.4 }) },
     ],
     cues: [
