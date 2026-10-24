@@ -13,7 +13,7 @@
 //   buildLaptop()                    her laptop (open, the trace on its screen: .screen(on))
 // W.juno = { build, portrait, spawn(at) } is set the first time this module sees WAGMI.
 import * as THREE from 'three/webgpu';
-import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { loadGLB } from '../glb.js';
 import { clone as skClone } from 'three/addons/utils/SkeletonUtils.js';
 import { positionLocal, normalLocal, positionView, normalViewGeometry, mx_worley_noise_float, float, vec3, mix, smoothstep, dFdx, dFdy, cross, dot, sign, abs, normalize } from 'three/tsl';
 import { rig, clamp } from './cine.js';
@@ -25,11 +25,11 @@ const PI = Math.PI;
 // each of her head's poses (0 straight to the camera, 1 a little tilt and turn, 2 turned toward her screens, 3 chin up
 // with her brows raised: a question), a column for each face in it: her mouth shut, half open, open, a blink, a glance
 // off the camera (her mouth shut). (23 Oct, round 2: lip-sync; before it, pairs of shut / open per gesture)
-export const SHEET = { url: 'assets/characters/juno-call.jpg', cols: 5, rows: 4, w: 360, h: 640 };
+export const SHEET = { url: 'assets/characters/juno-call.webp', cols: 5, rows: 4, w: 360, h: 640 };
 export const FACE = { shut: 0, half: 1, open: 2, blink: 3, glance: 4 };
 
 let junoP = null;
-const junoGLB = () => junoP || (junoP = new GLTFLoader().loadAsync('assets/characters/juno.glb'));
+const junoGLB = () => junoP || (junoP = loadGLB('assets/characters/juno.glb'));
 const MH_ARM = ['upperarm01_', 'lowerarm01_', 'wrist_'];
 
 /* ------------------------------------------------------------- her model -- */

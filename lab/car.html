@@ -36,6 +36,7 @@ import * as THREE from 'three/webgpu';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { buildRoadster, createDriver } from '../wagmi/roadster.js';
 
 const q = new URLSearchParams(location.search), view = q.get('view') || 'front34';
@@ -97,7 +98,7 @@ for (const sd of ['L', 'R']) car.setDoor(sd, num('door' + sd, num('door', V.door
 // Quant (?k=0..1: on his way in, 0 standing at the driver's door, 1 at the wheel; ?play=1 in and out on a loop, ?steer)
 let driver = null, kPlay = 0;
 if (q.has('k') || q.has('play') || V.k != null || V.play) {
-  const gltf = await new GLTFLoader().loadAsync('../assets/characters/quant.glb');
+  const gltf = await new GLTFLoader().setMeshoptDecoder(MeshoptDecoder).loadAsync('../assets/characters/quant.glb');
   const body = gltf.scene; body.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; o.frustumCulled = false; } });
   scene.add(body);
   const mixer = new THREE.AnimationMixer(body), A = {}, bones = {};

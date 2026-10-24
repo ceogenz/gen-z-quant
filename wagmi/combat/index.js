@@ -40,7 +40,7 @@
 //   and a brute in front of Quant, on foot, cans and bottles about. debug: press(action), fixed(on) / step(n)
 //   (deterministic frames), slow(k), spawn(), give(kind), prop(kind, dist, deg), state()
 import * as THREE from 'three/webgpu';
-import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { loadGLB } from '../glb.js';
 import { Enemy, BLOWS, prepareClips } from './enemy.js';
 import { createQuant } from './quant.js';
 import { createInput } from './input.js';
@@ -57,7 +57,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 export async function install(W) {
   const app = W.app, cm = app.controllerManager, scene = app.scene, P = W.person, Q = W.quant;
-  const gltf = await new GLTFLoader().loadAsync('assets/characters/thug.glb');
+  const gltf = await loadGLB('assets/characters/thug.glb');
   // the Degens' looks: a (baked into the model), b, c, brute (textures riding in the same file)
   const looks = {};
   gltf.scene.traverse((o) => { if (o.isMesh && !looks.a) looks.a = o.material.map; });

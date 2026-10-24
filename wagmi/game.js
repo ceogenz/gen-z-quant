@@ -5,7 +5,7 @@
 //  - lets him get in and out of it, GTA style: F beside the car walks him to its door, which swings up, and in; F in it
 //    stops it and gets him out at its door (fast: he dives out). See 'in and out of it'.
 import * as THREE from 'three/webgpu';
-import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { loadGLB } from './glb.js';
 import { buildRoadster, createDriver } from './roadster.js';
 import { createStand } from './stand.js';
 import { drive, installDriveMode } from './audio/drivemode.js';
@@ -370,7 +370,7 @@ installDriveMode(WAGMI);
 //  - hands: a reach for each hand (quant.reach), two-bone IK over the pose (holding, lifting, grabbing).
 // The fight sets quant.loco, quant.timeScale (hit-stop, slow motion) and the pre / post hooks it runs around the pose.
 {
-  const gltf = await new GLTFLoader().loadAsync('assets/characters/quant.glb');
+  const gltf = await loadGLB('assets/characters/quant.glb');
   const body = gltf.scene;
   // (the export's armature node, the parent of the bone 'root', carries a fixed turn of 12.8 deg that no clip moves: 11
   // deg forward and 6 deg over to his right. Every clip stood him on it, his hips 24 cm ahead of his feet and 12 cm to
@@ -1012,6 +1012,10 @@ let last = performance.now();
 })();
 WAGMI.ready = true;
 console.log('[wagmi] Quant and the car are in');
+// the cold open's music (wagmi/trailer.js) asked for from here, alongside the rest of the game, not once the intro is in:
+// on a first visit it is the last thing the trailer waits for. The intro takes it (intro.js: WAGMI.trailerEarly; null
+// where there is no trailer: ?trailer=0, ?nointro, ?nogate, a mission switch)
+WAGMI.trailerEarly = import('./trailer.js').then((m) => m.createTrailer(WAGMI)).catch((err) => { console.warn('[wagmi] trailer', err); return null; });
 
 // the rest of the game, a module each (one that fails to load leaves the others running)
 for (const m of ['./pad.js', './audio/index.js', './combat/index.js', './street/index.js', './crash/index.js', './pursuit/index.js', './radio/index.js', './intro.js', './mission/m2.js', './mission/m3.js']) {

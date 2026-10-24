@@ -1,4 +1,4 @@
-# Gen Z Quant credits
+# GEN Z QUANT: Unfinished Business credits
 
 Gen Z Quant is MIT-licensed (see `LICENSE`). Some of what it uses is not ours and comes under its own licence. This file
 lists those works, and `NOTICE` has the full notices. In the game, the pause menu's **Credits** page shows the same list

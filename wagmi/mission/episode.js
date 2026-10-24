@@ -8,7 +8,7 @@
 // screen (#wg .wg-big.on .choices), which also keeps the pause menu and the touch buttons away while it is up. Touch:
 // the buttons are 48 px tall, stacked on a narrow (portrait) screen.
 const URL_ = 'https://genzquant.com';
-const SHARE = { title: 'GEN Z QUANT', text: 'They took his dog. Play free in your browser.', url: URL_ };
+const SHARE = { title: 'GEN Z QUANT: Unfinished Business', text: 'They took his dog. Play free in your browser.', url: URL_ };
 const ACTS = ['explore', 'replay', 'share'];
 let shareDead = false;                                 // (a share API with no sheet behind it, found once: copy from then on)
 

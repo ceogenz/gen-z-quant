@@ -7,7 +7,7 @@
 //   const Y = buildYard(W); Y.show(true) (colliders in) / Y.show(false) (out); Y.posts, Y.stash, Y.vanAt, Y.levAt ...
 //   const L = buildLevCar(W);  const lev = await buildLev(W);
 import * as THREE from 'three/webgpu';
-import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { loadGLB } from '../glb.js';
 import { clone as skClone } from 'three/addons/utils/SkeletonUtils.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { positionWorld, positionLocal, normalLocal, uv, vec2, vec3, vec4, float, mix, smoothstep, clamp, abs, color, length, pow, mrt, mx_noise_float } from 'three/tsl';
@@ -394,7 +394,7 @@ export function buildLevCar(W) {
 // Lev: a Degen (thug.glb, the fight's dressing) in his look: a gold chain over the hoodie, an acid-green cap, his clips
 // ready for a scene (cine.js rig)
 export async function buildLev(W) {
-  const gltf = await new GLTFLoader().loadAsync('assets/characters/thug.glb');
+  const gltf = await loadGLB('assets/characters/thug.glb');
   const root = new THREE.Group(); root.name = 'Degen-Lev';
   const inner = skClone(gltf.scene); root.add(inner);
   if (W.combat?.dressDegen) W.combat.dressDegen(inner, 'c');

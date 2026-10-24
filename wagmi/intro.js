@@ -15,7 +15,7 @@
 // Stops (thug.glb, dressed by the fight's dressDegen: Bagsy's shades and duffel, Stops' beanie), Quant's phone (its
 // screen drawn live), the street's extras and parked cars.
 import * as THREE from 'three/webgpu';
-import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { loadGLB } from './glb.js';
 import { clone as skClone } from 'three/addons/utils/SkeletonUtils.js';
 import { buildMoon, buildLeash } from './moon.js';
 import { buildVan } from './van.js';
@@ -64,19 +64,36 @@ export async function install(W) {
   // (on foot by his door from the start, out of sight: the game's 'F · Get out' prompt has no business over the gate)
   if (!Q.get('m1')) { place(W, { quant: [112, 386.7, 0] }); W.person.mesh.visible = false; }
   if (Q.get('m1')) { await m1.start(W, { at: Q.get('m1') }); return; }
+  // (the trailer game.js made as soon as Quant was in, its music coming down since: WAGMI.trailerEarly, let go here so
+  // its sound goes with W.trailer once played)
+  const early = W.trailerEarly ? await W.trailerEarly : undefined; W.trailerEarly = null;
   // the start gate: up the moment the city is on screen, whatever else is still loading (the key also unlocks the sound)
-  // (with a saved game: CONTINUE or NEW GAME on it, mission/m3-save.js)
+  // (with a saved game: CONTINUE or NEW GAME on it, mission/m3-save.js). On the instant title (index.html) it is up at
+  // once, while the city still loads: a start made before it is ready waits for it, and the trailer follows by itself
+  // (onStart in the tap, or at once for a start the title kept: the mixer's context, made then or handed the one the
+  // title's tap woke, index.html, and the opening's)
   const save = Q.has('nogate') ? null : await import('./mission/m3-save.js').then((m) => (m.readSave() ? m : null)).catch(() => null);
-  const gateOpts = { when: () => W.app.ready, onStart: () => sfx.unlock(), fine: 'Headphones on · Built on Slop New York by mrdoob' };
+  // (a first visit's start: 'Starting…' stays on the gate until the cold open can run at once, rather than a black
+  // screen while its music still comes down: hold, set below once the opening's cast is under way)
+  let roll = null;
+  const gateOpts = { when: () => W.app.ready, onStart: () => { W.audio?.unlock?.(); sfx.unlock(); }, hold: () => roll?.() ?? null, fine: 'Headphones on · Built on Slop New York by mrdoob' };
   const gate = Q.has('nogate') ? null : save ? save.saveGate(ui, gateOpts) : ui.gate(gateOpts);
-  // the cold open (wagmi/trailer.js; ?trailer=0 leaves it out): its music fetched while the gate is up, black on the
-  // tap, played on this set before the opening
-  W.trailer = gate ? createTrailer(W) : null;
+  // the cold open (wagmi/trailer.js; ?trailer=0 leaves it out): its music fetched from when Quant is in (game.js), black
+  // on the tap once it can play, played on this set before the opening
+  W.trailer = gate ? (early !== undefined ? early : createTrailer(W)) : null;
   if (W.trailer) gate.then((r) => { if (r !== 'continue') W.trailer.cover(); });
   // the first shot's camera and the bars from now on, while the cast is built behind the loading screen
   const hold = createDirector(W); hold.camera = { pos: [260, 140, 250], look: [-80, 172, 686], fov: 50, band: false }; hold.take(); ui.cine(true);
   W._holdCam = hold;
   const castP = castOpening(W);
+  // (the gate's hold, ui.js: the opening's cast built and the trailer's music in, or 15 s on (the trailer then waits up to
+  // 8 s more for it on black, and plays without it after that); nothing to hold for once both are in, with ?trailer=0
+  // or on a saved game's gate)
+  if (W.trailer && !save) {
+    const tr = W.trailer; let castIn = false, soundIn = false;
+    castP.then(() => { castIn = true; }, () => { castIn = true; }); tr.soundP.then(() => { soundIn = true; });
+    roll = () => (castIn && soundIn ? null : Promise.all([castP, Promise.race([tr.soundP, sleep(15000)])]).catch(() => null));
+  }
   // (Continue: free roam on foot by the next mission's blip, no opening; the cast still builds, for the missions)
   if (save && (await gate) === 'continue') { castP.catch(() => {}); await save.resume(W, hold); return; }
   const cast = await castP;
@@ -311,7 +328,8 @@ async function buildCast(W) {
   const van = buildVan(THREE); van.group.visible = false; scene.add(van.group);
   const street = dressStreet(W);
   // the Degens: thug.glb, dressed as the fight dresses them, each with his own touch
-  const gltf = await new GLTFLoader().loadAsync('assets/characters/thug.glb');
+  // (the fight's own copy, wagmi/glb.js: fetched and parsed once; everything made from it is a SkeletonUtils clone)
+  const gltf = await loadGLB('assets/characters/thug.glb');
   // ZK in his room on the call (his own scene), and Quant's phone with his feed on it
   const zk = createZK(W, gltf);
   const phone = buildPhone(zk.texture); phone.visible = false; scene.add(phone);

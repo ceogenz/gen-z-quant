@@ -13,7 +13,10 @@
 //   phone.show(screen, data) / phone.hide()      feed, incoming, video, ended, moontag
 //   caller(name, colour, status) / caller(null) · dm(from, text) · counter(label, value) / counter(null)
 //   passed({ title, stats, reward, note }) · failed(reason, { skip }) -> Promise<'retry'|'quit'|'skip'> · rekt()
-//   fade(to, secs) · gate({ when, onStart, fine }) -> Promise (up once when() is true; any key or a click starts)
+//   fade(to, secs) · gate({ when, onStart, hold, fine }) -> Promise (up once when() is true; any key or a click starts. Over
+//                                                the instant title, index.html: up at once in its place, a start
+//                                                taken before when() is true kept, resolving the moment it is;
+//                                                hold() -> Promise: 'Starting…' kept until that settles too)
 //   bootOff()                                    the boot veil (index.html: the key art until the gate is up) away
 //   story(on)                                    story mode: the sandbox's toolbar, telemetry, credit pill put away
 //   zk(on, name) · zkTalk(level)                 the video call's frame over ZK's room (mission/zk.js draws the room)
@@ -48,7 +51,7 @@ body.wg-hidehint #hud-controls-hint { opacity: 0 !important; }
 
 .wg-gtitle { position: absolute; left: 0; right: 0; top: 20%; text-align: center; opacity: 0; transform: scale(1.04); transition: opacity 1.2s, transform 7s cubic-bezier(.1,.6,.2,1); z-index: 3; pointer-events: none; }
 .wg-gtitle.on { opacity: 1; transform: scale(1); }
-.wg-gtitle.now { transition: none; }
+.wg-gtitle.now, .wg-gtitle.now .rule { transition: none; }
 .wg-gtitle .logo { font: italic 800 clamp(52px, 10vw, 136px)/0.9 'Barlow Condensed', system-ui; letter-spacing: 1px; white-space: nowrap; text-shadow: 0 6px 30px rgba(0,0,0,.55), 0 2px 4px rgba(0,0,0,.4); }
 .wg-gtitle .logo b { color: #FFC93C; font-weight: 800; }
 .wg-gtitle .tag { display: inline-block; margin-top: 12px; padding: 7px 18px 6px; font: 700 clamp(13px, 1.5vw, 19px)/1 'Barlow Condensed'; letter-spacing: clamp(3px, .5vw, 6px); text-transform: uppercase; color: #fff;
@@ -228,6 +231,9 @@ body.wg-rekt #canvas-container { filter: grayscale(.85) contrast(1.05); transiti
 @media (max-width: 560px) { .wg-gate .go { font-size: 4.3vw; padding: 8px 12px; top: 60%; } .wg-gate .fine { letter-spacing: 1px; } }
 .wg-gate .fine { position: absolute; bottom: calc(var(--bar) + 2.6vh); left: 16px; right: 16px; text-align: center; font: 600 clamp(12px, 1.2vw, 15px)/1.5 'Barlow Condensed'; letter-spacing: 2px; color: rgba(255,255,255,.72); text-shadow: 0 1px 4px rgba(0,0,0,.8); }
 @keyframes wgBlink { 0%,100% { opacity: .6; } 50% { opacity: 1; } }
+/* (taking over from the instant title, index.html: at once, no fade; started before the city is ready: 'Starting…', calm) */
+.wg-gate.now { transition: none; }
+.wg-gate.wait .go { animation: none; opacity: .9; }
 
 /* the objective tracker: over the street signs and the radar (the city's HUD column, so it goes with it in a cutscene);
    [B] opens it into the brief: the objective, the last lines said, the last help */
@@ -339,7 +345,7 @@ export function createUI() {
     <div class="hd"><span class="nm">UNKNOWN</span><small>VIDEO CALL · <span class="clock">00:07</span></small><small class="vc">VOICE CHANGER ON</small></div><div class="rec">● LIVE</div><div class="wave">${'<i></i>'.repeat(16)}</div>`);
   const barT = el('wg-bar top'), barB = el('wg-bar bot');
   const fadeEl = el('wg-fade');
-  const gTitle = el('wg-gtitle', `<div class="logo">GEN Z <b>QUANT</b></div><div class="rule"></div><div class="tag">We're all gonna make it</div>`);
+  const gTitle = el('wg-gtitle', `<div class="logo">GEN Z <b>QUANT</b></div><div class="rule"></div><div class="tag">Unfinished Business</div>`);
   const titleEl = el('wg-title', `<div class="act"></div><div class="name"></div>`);
   const placeEl = el('wg-place', `<div class="n"></div><div class="s"></div>`);
   const capEl = el('wg-cap', `<div class="n"></div><div class="r"></div>`);
@@ -601,19 +607,53 @@ export function createUI() {
     },
     // the start gate: the logo in the sky over the live city under a veil, 'Click or press any key to start'. It goes up
     // as soon as when() is true (polled on a timer: no frame needed) and a key or a click anywhere starts; the logo
-    // stays up into the first shot (gameTitle(false) takes it down)
-    gate({ fine = '', when = () => true, onStart = null } = {}) {
+    // stays up into the first shot (gameTitle(false) takes it down).
+    // Over the instant title (index.html, #wg-boot: this gate drawn over a still of its aerial from the first paint, the
+    // city loading behind it) it is up at once instead, in the title's place without a jump, and a start is taken from
+    // then on, the title's own if one was made on it before this: onStart() at once (in the tap: the sound), 'Starting…'
+    // until when() is true, then the start, with no second tap. The still fades out over the live city once it is
+    // hold(): asked once a start is taken and when() is true (on the next microtask: the caller set up by then); a Promise
+    // from it keeps 'Starting…' up until it settles (what comes next needs it in first), nothing lets the start through
+    gate({ fine = '', when = () => true, onStart = null, hold = null } = {}) {
       document.body.classList.add('wg-gating');
       const touch = matchMedia('(pointer: coarse)').matches;
       // (with a game pad the last used: its A, wagmi/pad.js)
       const g = el('wg-gate', `<div class="go">${touch ? 'Tap to start' : '<span class="wg-nopad">Click or press any key to start</span><span class="wg-padonly">Press <kbd data-pad="A">A</kbd> to start</span>'}</div><div class="fine">${esc(fine)}</div>`);
-      let shown = false;
-      const show = () => { shown = true; g.classList.add('on'); gTitle.classList.add('on'); ui.bootOff(); };
-      if (when()) show(); else { const poll = setInterval(() => { if (when()) { clearInterval(poll); show(); } }, 50); }
+      const goEl = g.querySelector('.go');
+      const T = window.__wgTitle?.adopt?.() || null;
+      // (its line blinks on the page's clock, as the title's does)
+      try { for (const a of goEl.getAnimations()) a.startTime = 0; } catch {}
+      const isReady = () => { try { return !!when(); } catch { return false; } };
+      let shown = false, live = !T;
+      const show = () => {
+        shown = true;
+        if (T) { g.classList.add('now'); gTitle.classList.add('now'); }
+        g.classList.add('on'); gTitle.classList.add('on');
+        if (T) { void g.offsetWidth; g.classList.remove('now'); gTitle.classList.remove('now'); T.handover(); } else ui.bootOff();
+      };
+      // (the still out over the live city, two frames on: the opening's camera the one drawn under it by then)
+      const goLive = () => { if (live) return; live = true; requestAnimationFrame(() => requestAnimationFrame(() => T.live())); };
+      if (T || isReady()) show();
+      if (isReady()) goLive();
+      else { const poll = setInterval(() => { if (!isReady()) return; clearInterval(poll); if (!shown) show(); goLive(); }, 50); }
       return new Promise((res) => {
         // (a finger starts on its release, a tap's end: on a phone only that lets the opening's first line be heard.
         // A mouse or a pen still starts on the press)
         const EVS = ['keydown', 'pointerdown', 'pointerup', 'touchend', 'click'];
+        const finish = () => { g.classList.remove('on'); setTimeout(() => g.remove(), 900); res(); };
+        const waiting = () => { g.classList.add('wait'); goEl.className = 'go'; goEl.textContent = 'Starting…'; document.documentElement.classList.add('wg-t-start'); };
+        const release = () => Promise.resolve().then(() => {
+          let h = null; try { h = hold?.() || null; } catch (err) { console.warn(err); }
+          if (!h) { finish(); return; }
+          waiting(); Promise.resolve(h).then(finish, finish);
+        });
+        const begin = () => {
+          try { onStart?.(); } catch (err) { console.warn(err); }
+          document.body.classList.remove('wg-gating');
+          if (isReady()) { release(); return; }
+          waiting();
+          const wait = setInterval(() => { if (isReady()) { clearInterval(wait); release(); } }, 50);
+        };
         const go = (e) => {
           if (!shown) return;
           if (e.type === 'keydown' && (e.metaKey || e.ctrlKey || e.altKey || e.repeat)) return;
@@ -621,11 +661,9 @@ export function createUI() {
           if (e.type === 'pointerup' && e.pointerType !== 'touch') return;
           e.stopImmediatePropagation(); if (e.type === 'keydown') e.preventDefault();
           for (const t of EVS) removeEventListener(t, go, true);
-          try { onStart?.(); } catch (err) { console.warn(err); }
-          g.classList.remove('on'); document.body.classList.remove('wg-gating'); setTimeout(() => g.remove(), 900);
-          res();
+          begin();
         };
-        for (const t of EVS) addEventListener(t, go, true);
+        if (T?.started) begin(); else for (const t of EVS) addEventListener(t, go, true);
       });
     },
     story(on) { document.body.classList.toggle('wg-story', !!on); },

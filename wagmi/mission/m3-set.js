@@ -17,7 +17,7 @@
 //   const F = await buildFiona(W); const g = await buildGears(W)   (each { root, inner, bones, mixer, rig, clips, arm(...),
 //           face, jaw(k) }: a talking face, wagmi/face.js: the mouth with their own lines, blinks, eyes on whom they talk to)
 import * as THREE from 'three/webgpu';
-import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { loadGLB } from '../glb.js';
 import { clone as skClone } from 'three/addons/utils/SkeletonUtils.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { rig, clamp } from './cine.js';
@@ -732,7 +732,7 @@ function onBone(P, bone, obj, x, y, z) { P.inner.updateMatrixWorld(true); obj.po
 // The scenes ask for the thug's 'thugIdle' (her idle) and 'run' (the library's run). White shades on her head bone, the
 // megaphone in her right hand (posed each frame by hype()).
 let fionaP = null;
-const fionaGLB = () => fionaP || (fionaP = new GLTFLoader().loadAsync('assets/characters/fiona.glb'));
+const fionaGLB = () => fionaP || (fionaP = loadGLB('assets/characters/fiona.glb'));
 export async function buildFiona(W) {
   const gltf = await fionaGLB();
   const root = new THREE.Group(); root.name = 'Degen-Fiona';
@@ -804,7 +804,7 @@ export async function buildFiona(W) {
 // skeleton, so his arms are Quant's (upperarm01_, lowerarm01_, wrist_). The scenes ask for the thug's 'thugIdle':
 // it is his idle. His idle already lets his arms hang, so relax() leaves them be. A red rag in his back pocket.
 let gearsP = null;
-const gearsGLB = () => gearsP || (gearsP = new GLTFLoader().loadAsync('assets/characters/gears.glb'));
+const gearsGLB = () => gearsP || (gearsP = loadGLB('assets/characters/gears.glb'));
 export async function buildGears(W) {
   const gltf = await gearsGLB();
   const root = new THREE.Group(); root.name = 'Gears';

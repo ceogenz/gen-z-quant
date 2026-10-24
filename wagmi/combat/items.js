@@ -9,7 +9,7 @@
 // pose) · fly (thrown or dropped: a rigid body: gravity, a tumble, bounces off the street, the walls and men) · roll (on
 // its side) · wobble (a lid settling) · gone. Its origin is its centre and its long axis its +Y (a lathe's axis).
 import * as THREE from 'three/webgpu';
-import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { loadGLB } from '../glb.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { float, mix, pow, abs, dot, color, normalView, positionViewDirection } from 'three/tsl';
 import { clamp, rnd, pick, hdist, fwd, yawTo } from './util.js';
@@ -167,7 +167,7 @@ export function createItems(c) {
   it.register = (kind, def) => { defs[kind] = { ...(defs[kind] || {}), ...def }; };
   it.load = async (url = 'assets/props/trash-cans.glb') => {
     try {
-      const g = await new GLTFLoader().loadAsync(url);
+      const g = await loadGLB(url);
       const node = (n) => g.scene.getObjectByName(n);
       cans = { bright: { body: node('metal_trash_can'), lid: node('metal_trash_can_lid') }, rust: { body: node('metal_trash_can_rust'), lid: node('metal_trash_can_rust_lid') } };
       // (a fully metallic scan only shows what the street reflects into it: at golden hour a black barrel. Less metal, a

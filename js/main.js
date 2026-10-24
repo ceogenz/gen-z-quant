@@ -165,14 +165,20 @@ async function initApp() {
   const loadingTrack = loadingOverlay ? loadingOverlay.querySelector('.loader-track') : null;
   const loadingFill = document.getElementById('loading-progress');
   // The loading bar sweeps while the city is being built (the main thread is busy) and fills as the shaders compile
+  // (Gen Z Quant: the start gate's instant title, index.html, draws the same as a thin line: --wg-load, wg-load-fill)
   const setLoadingProgress = (p) => {
+    const k = Math.min(1, Math.max(0, p));
+    document.documentElement.style.setProperty('--wg-load', k.toFixed(3));
+    document.documentElement.classList.add('wg-load-fill');
     if (!loadingFill) return;
     if (loadingTrack) loadingTrack.classList.remove('is-indeterminate');
-    loadingFill.style.transform = `scaleX(${Math.min(1, Math.max(0, p))})`;
+    loadingFill.style.transform = `scaleX(${k})`;
   };
+  // (Gen Z Quant: plain words for the player while it loads, not the engine's steps)
+  const LOADING_TEXT = 'Loading Manhattan…';
 
   if (loadingStatus) {
-    loadingStatus.textContent = `Initializing Three.js r${THREE.REVISION} WebGPURenderer & TSL Shaders...`;
+    loadingStatus.textContent = LOADING_TEXT;
   }
 
   // 1. Initialize Three.js WebGPURenderer with 32-bit float reversedDepthBuffer
@@ -218,7 +224,7 @@ async function initApp() {
   markInit('lighting');
 
   if (loadingStatus) {
-    loadingStatus.textContent = 'Constructing Manhattan Grid, Landmarks & Streetscape...';
+    loadingStatus.textContent = LOADING_TEXT;
   }
 
   // 3. Build Manhattan Geography, Iconic Landmarks, Blocks, Street Details & Traffic
@@ -692,7 +698,7 @@ async function initApp() {
   // The loading screen stays up while the shaders compile (precompileShaders() & the warm-up frame, see the loop) and
   // until the first frame is on screen
   if (loadingStatus) {
-    loadingStatus.textContent = 'Compiling Shaders & Render Pipelines...';
+    loadingStatus.textContent = LOADING_TEXT;
   }
 
   // Expose programmatic API for testing & inspection
@@ -785,7 +791,7 @@ async function initApp() {
         for (const object of job) await compile(object);
         done++;
         if (loadingStatus) {
-          loadingStatus.textContent = `Compiling Shaders & Render Pipelines... ${Math.round((done / jobs.length) * 100)}%`;
+          loadingStatus.textContent = `${LOADING_TEXT} ${Math.round((done / jobs.length) * 100)}%`;
         }
         setLoadingProgress(done / jobs.length);
       }

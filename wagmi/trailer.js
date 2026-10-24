@@ -1,30 +1,37 @@
-// Gen Z Quant: the cold open. A 44 s trailer, live in the engine, between "Tap to start" and the opening: cut on the
-// beat of the game's own "Pump & Dump" (140 BPM, assets/music/wagmi-pump.m4a, MIT), letterboxed and graded, then the
-// opening (wagmi/intro.js) from its first frame exactly as before. Hold to skip it at any moment (the cutscenes' own
-// skip: Space or Enter held, a long press anywhere, the pad's A).
-//   ?trailer=0  without it        ?trailer=only  it alone, held on the title at the end (for looking at it)
-//   ?nointro, ?nogate and every ?m.. switch leave it out with the opening.
-// The shots (docs: .scratch/trailer-intro/shotlist.md):
+// Gen Z Quant: Unfinished Business. The cold open: a 45 s trailer, live in the engine, between "Tap to start" and the
+// opening: cut on the beat of the game's own "Pump & Dump" (140 BPM, assets/music/wagmi-pump.m4a, MIT), letterboxed and
+// graded, then the opening (wagmi/intro.js) from its first frame exactly as before. Hold to skip it at any moment (the
+// cutscenes' own skip: Space or Enter held, a long press anywhere, the pad's A).
+//   ?trailer=0  without it        ?trailer=only  it alone, held on the title at the end (for looking at it;
+//   &trat=<s> starts it s seconds in)        ?nointro, ?nogate and every ?m.. switch leave it out with the opening.
+// The shots (docs: .scratch/trailer-intro/shotlist.md, v3):
 //   1 black, a phone buzzing: IT STARTED AS A JOKE.     2 an aerial over Midtown at dusk to the Empire State
 //   3-6 the opening's own set and cast (its frame at a time, its cameras): Moon and Quant out of his door, IT PUMPED. /
 //     IT DUMPED. over a coin's chart, the van swinging in        7-11 the grab, ZK in his ring light ('You pay my
-//   community back.', his recorded voice), the shove, the van tearing off        12-26 the drop: the
+//   community back.', his recorded voice), the shove, the van tearing off        12-25 the drop: the
 //   five nozzles lighting on the boom, the launch past a lens on the asphalt, the burn alongside, a drift into 28th St, a
-//   drift close up (the wheels counter-steered, the smoke), the hop, the fight in Washington Square Park, the takedown, the
-//   rail at a sprint, his face ('Okay.'), a drift out of 27th St that ends on the boost up Fifth Ave (on the hook's new
-//   phrase), the burn chased, the car straight at the lens        27 THEY TOOK HIS DOG.
-//   28 the logo slam over the car at rest: GEN Z QUANT / WE'RE ALL GONNA MAKE IT
+//   drift close up (the wheels counter-steered, the smoke), Gears in his garage by the car's nozzles, the hop, the fight
+//   in Washington Square Park, the takedown, the rail at a sprint, his face ('Okay.'), the city's sightseeing chopper
+//   down Fifth Ave toward the Empire State (on the hook's new phrase), Juno looking up from her laptop, and straight down on the
+//   avenue: the car lighting its five and rocketing up the grid        26 THEY TOOK HIS DOG.
+//   27 the logo slam over the car at rest: GEN Z QUANT / UNFINISHED BUSINESS
 // The drifts are puppets (the car has no drift of its own): a path (a straight, a quarter circle, a straight), its
 // heading the path's plus a slip angle, the fronts counter-steered, the body rolled out, tyre smoke (the cold-gas vapour's
 // puffs, grey) at the rear wheels. The booster's speed kick: the lens punched wider, a buzz, streaks round the frame.
+// The chopper is a clone of the city's own (js/controllers.js: its meshes, their geometry and materials shared), flown by
+// hand, its rotors spinning; the player's is never moved. Juno and Gears are the missions' own (their builders: buildJuno
+// + createJunoRoom, buildGears + buildGarage), their files fetched at low priority when the trailer installs, built on the
+// start's tap; a shot of theirs not ready when its bar comes is left out (the shot before it runs on).
 // Everything in it is a function of its clock (the music's: the context's time), so every cut lands on its beat however
 // slow the frame. Only what the game already has: the music file and one voice line (both the game's own), the
-// opening's cast, the car, Quant's and the Degens' clips; the park and the avenue are the city's; the car's own boost
-// sound (its whump, a rocket's roar under the burns) and the cutscenes' tyre squeal.
+// opening's cast, Juno, Gears and his garage, the car, the city's chopper, Quant's and the Degens' clips; the park and the
+// avenue are the city's; the car's own boost sound (its whump, a rocket's roar under the burns), the city's chopper loop
+// and the cutscenes' tyre squeal. Everything it adds to the city is taken out again at its end or on a skip.
 //   const tr = createTrailer(W)  (installed by intro.js; null when it is left out);  tr.cover();  await tr.play(borrow)
 import * as THREE from 'three/webgpu';
 import { createVapor } from './pursuit/vapor.js';
-import { keys, rig, clamp, smooth, lerp, ease, handheld } from './mission/cine.js';
+import { keys, rig, clamp, smooth, lerp, ease, handheld, shotFov } from './mission/cine.js';
+import { dropFace } from './face.js';
 
 const Q = new URLSearchParams(location.search);
 const PI = Math.PI;
@@ -32,9 +39,9 @@ const BPM = 140, BEAT = 60 / BPM, BAR = 4 * BEAT;
 const B = (b) => b * BAR;
 const MUSIC = 'assets/music/wagmi-pump.m4a', ZKV = 'assets/voice/intro-zk-you-pay-my-community.m4a';
 // the music's edit, on its bar lines (the chord loop kept): [trailer bar, the track's bar, bars]
-// (v2: the drop two bars longer, the hook running on to its bar 58; the silent card after it)
-const EDIT = [[0, 0, 8], [8, 24, 2], [10, 46, 2], [12, 48, 10], [23, 64, 2.5]];
-const DROP = 12, CARD = 22, LOGO = 23, END = B(25.5);
+// (v2: the drop two bars longer, the hook running on to its bar 58; the silent card after it. v3: one bar more, to 59)
+const EDIT = [[0, 0, 8], [8, 24, 2], [10, 46, 2], [12, 48, 11], [24, 64, 2.5]];
+const DROP = 12, CARD = 23, LOGO = 24, END = B(26.5);
 // ZK's line: its first sentence only (0-1.55 s of the file), over the build
 const ZK_AT = B(10) + 0.1, ZK_LEN = 1.55;
 const WHITE = '#FFFFFF', ACID = '#B6FF3B', GOLD = '#FFC93C';
@@ -107,7 +114,7 @@ const CSS = `
 #wg-tr .logo .l { font: italic 800 clamp(58px, 12.5vw, 190px)/.86 'Barlow Condensed'; letter-spacing: .01em; white-space: nowrap; text-shadow: 0 8px 40px rgba(0,0,0,.7), 0 3px 0 rgba(0,0,0,.35); }
 #wg-tr .logo .l b { color: ${GOLD}; font-weight: 800; }
 #wg-tr .logo .r { width: clamp(90px, 13vw, 180px); height: 4px; background: ${GOLD}; margin: clamp(14px, 2vw, 26px) auto 0; transform: scaleX(0); }
-#wg-tr .logo .g { margin-top: clamp(12px, 1.7vw, 22px); font: 700 clamp(14px, 2vw, 28px)/1 'Barlow Condensed'; letter-spacing: .34em; padding-left: .34em; white-space: nowrap; opacity: 0; text-shadow: 0 2px 10px rgba(0,0,0,.85); }
+#wg-tr .logo .g { margin-top: clamp(12px, 1.7vw, 22px); font: 700 clamp(15px, 2.3vw, 32px)/1 'Barlow Condensed'; letter-spacing: .34em; padding-left: .34em; white-space: nowrap; opacity: 0; text-shadow: 0 2px 10px rgba(0,0,0,.85); }
 #wg-tr .spd { position: absolute; left: 0; right: 0; top: var(--bar, 0px); bottom: var(--bar, 0px); overflow: hidden; }
 #wg-tr .spd i { position: absolute; inset: 0; opacity: 0; -webkit-mask-image: radial-gradient(closest-side, transparent 58%, rgba(0,0,0,.5) 82%, #000 112%); mask-image: radial-gradient(closest-side, transparent 58%, rgba(0,0,0,.5) 82%, #000 112%); }
 body.wg-trailer #wg .wg-bar { transition: none; }
@@ -129,7 +136,7 @@ function buildPage() {
 <div class="spd"><i></i><i></i></div>
 <div class="big"></div>
 <div class="card"><div class="t"></div><div class="r"></div></div>
-<div class="logo"><div class="l">GEN Z <b>QUANT</b></div><div class="r"></div><div class="g">WE'RE ALL GONNA MAKE IT</div></div>
+<div class="logo"><div class="l">GEN Z <b>QUANT</b></div><div class="r"></div><div class="g">UNFINISHED BUSINESS</div></div>
 <div class="flash"></div>`;
   (document.getElementById('wg') || document.body).appendChild(root);
   root.querySelectorAll('.spd i').forEach((el, i) => { el.style.background = STREAKS[i]; });
@@ -147,18 +154,104 @@ const CHART = (() => {
   return { up: d(pts), area: d(pts) + ' L720 420 L0 420 Z', down: d(down), upLen: 1400, downLen: 700 };
 })();
 
+/* ------------------------------------------------------------- the cast -- */
+// Juno and Gears for their shots: their files fetched at low priority once the trailer's music is in (on a slow first
+// visit the trailer waits for its sound, not for them), one request each, the bytes parsed once by the game's own loader
+// (wagmi/glb.js: loadGLB(url, bytes), the load the missions get later); built on
+// the start's tap, in the first card's black, by the missions' own builders, one after another (Gears' garage, Gears,
+// Juno and her room), each warmed (its shaders built) before it is first seen. K: what is ready ({ gar, gears, juno,
+// room, okGears, okJuno }); K.drop() puts all of it away (a build still under way is put away the moment it finishes)
+const CAST_GLB = ['assets/characters/gears.glb', 'assets/characters/juno.glb'];
+// (nothing parsed or built while the city still loads and builds its shaders: the title can be up, and tapped, before)
+const cityUp = (W) => new Promise((res) => { const f = () => (W.app?.ready ? res() : setTimeout(f, 150)); f(); });
+function prefetchCast(W, soundP) {
+  if (/[?&]nocast\b/.test(location.search)) return { gears: Promise.resolve(), juno: Promise.resolve() };
+  const get = (url) => fetch(url, { priority: 'low' }).then((r) => (r.ok ? r.arrayBuffer() : null)).catch(() => null);
+  const glb = import('./glb.js').catch(() => null);
+  // (the bytes handed to the loader, not fetched a second time; a failed fetch (null) leaves the loader to fetch it)
+  const parse = (url, bytes) => cityUp(W).then(() => glb).then((m) => m?.loadGLB?.(url, bytes)).catch(() => null);
+  // (after the music; then one after the other: Gears first, he is needed first; each parsed as soon as its bytes are in)
+  const after = Promise.resolve(soundP).catch(() => null);
+  const gb = after.then(() => get(CAST_GLB[0])), jb = gb.then(() => get(CAST_GLB[1]));
+  return { gears: gb.then((b) => parse(CAST_GLB[0], b)), juno: jb.then((b) => parse(CAST_GLB[1], b)) };
+}
+function buildCast(W, fetched) {
+  const app = W.app, K = { gone: false, okGears: false, okJuno: false };
+  const warm = async (obj, cam, scene) => {
+    const r = app.renderer; if (!r?.compileAsync) return;
+    const culled = []; obj.traverse((o) => { if (o.frustumCulled && (o.isMesh || o.isPoints)) { culled.push(o); o.frustumCulled = false; } });
+    const v = obj.visible; obj.visible = true;
+    const p = r.compileAsync(obj, cam, scene).catch((e) => console.warn('[trailer] warm', e));
+    K.warming = p; await p; if (K.warming === p) K.warming = null;
+    obj.visible = v; for (const o of culled) o.frustumCulled = true;
+  };
+  // (disposed once a compile still under way is over)
+  const kill = (o) => (K.warming ? K.warming.then(() => kill0(o)) : kill0(o));
+  const kill0 = (o) => o?.traverse?.((m) => { if (m.isMesh || m.isPoints) { m.geometry?.dispose(); for (const mt of [].concat(m.material || [])) { for (const k of ['map', 'emissiveMap']) mt[k]?.dispose?.(); mt.dispose?.(); } } });
+  K.drop = () => {
+    K.gone = true; K.okGears = K.okJuno = false;
+    if (K.room) { try { K.room.full(null); K.room.dispose(); } catch {} K.room.scene.remove(K.juno.root); for (const o of [...K.room.scene.children]) { K.room.scene.remove(o); kill(o); } K.room = null; }
+    if (K.juno) { K.juno.root.removeFromParent(); if (K.juno.face) dropFace(W, K.juno.face); K.juno.mixer?.stopAllAction(); K.juno = null; }
+    if (K.gears) { K.gears.root.removeFromParent(); if (K.gears.face) dropFace(W, K.gears.face); K.gears.mixer?.stopAllAction(); K.gears = null; }
+    if (K.gar) { try { K.gar.inside(false); } catch {} K.gar.group.removeFromParent(); kill(K.gar.group); K.gar = null; }
+  };
+  K.ready = (async () => {
+    if (/[?&]nocast\b/.test(location.search)) return;
+    await cityUp(W);
+    if (K.gone) return;
+    const cs = app.cameraSystem, scene = app.scene;
+    // the garage (built at once: its bay shown, the city's walls inside it folded away until the end), then Gears in it
+    try {
+      const m3 = await import('./mission/m3-set.js');
+      if (K.gone) return;
+      K.G = m3.GARAGE; K.gar = m3.buildGarage(W); K.gar.show(true); K.gar.inside(true);
+      await fetched.gears;
+      if (K.gone) return K.drop();
+      K.gears = await m3.buildGears(W);
+      if (K.gone) return K.drop();
+      const { x, z } = m3.GARAGE; K.gears.root.position.set(x + 3, 0.22, z + 9);
+      await warm(K.gar.group, cs.camera, scene); await warm(K.gears.root, cs.camera, scene);
+      if (K.gone) return K.drop();
+      K.okGears = true;
+    } catch (e) { console.warn('[trailer] gears', e); }
+    // Juno at her laptop in her room (a scene of its own: juno.js createJunoRoom), a desk and the laptop before her
+    try {
+      const jm = await import('./mission/juno.js');
+      if (K.gone) return;
+      await fetched.juno;
+      if (K.gone) return;
+      K.juno = await jm.buildJuno(W, { auto: false });
+      if (K.gone) return K.drop();
+      K.room = jm.createJunoRoom(W, K.juno);
+      const desk = new THREE.Mesh(new THREE.BoxGeometry(1.3, 0.04, 0.62), new THREE.MeshStandardMaterial({ color: '#221D19', roughness: 0.65 }));
+      desk.position.set(0, 0.72, 0.62); desk.receiveShadow = true; K.room.scene.add(desk);
+      K.lap = jm.buildLaptop(); K.lap.position.set(0, 0.74, 0.5); K.lap.rotation.y = PI; K.room.scene.add(K.lap);
+      K.lap.userData.screen('trace', 0);
+      K.juno.rig.set([[0, K.juno.clips.includes('sit') ? 'sit' : 'idle', { fade: 0.01, speed: 0.6 }]]);
+      await warm(K.room.scene, K.room.cam, K.room.scene);
+      if (K.gone) return K.drop();
+      K.okJuno = true;
+    } catch (e) { console.warn('[trailer] juno', e); }
+  })();
+  return K;
+}
+
 export function createTrailer(W) {
   const mode = trailerMode();
   if (!mode) return null;
   const soundP = loadSound();
   let page = null;
-  const T = { mode, sound: null, soundP };
+  const T = { mode, sound: null, soundP, cast: null };
   soundP.then((b) => { T.sound = b; });
-  // black at once on the start's tap (the opening's first frame and the gate's logo under it until the trailer plays)
+  // (Juno's and Gears' files, behind the music)
+  const fetched = prefetchCast(W, soundP);
+  // black at once on the start's tap (the opening's first frame and the gate's logo under it until the trailer plays);
+  // the cast built from now
   T.cover = () => {
     if (!page) page = buildPage();
     page.blk.style.opacity = '1'; page.root.classList.add('on'); document.body.classList.add('wg-trailer');
     W.ui?.gameTitle(false, true);
+    if (!T.cast) T.cast = buildCast(W, fetched);
   };
   T.play = (borrow) => play(W, T, borrow, () => page || (page = buildPage()));
   return T;
@@ -176,9 +269,29 @@ async function play(W, T, borrow, getPage) {
   // the page's own
   const actx = W.audio?.ctx || null;
   if (!T.sound && actx) await Promise.race([T.soundP, sleep(8000)]);
+  // (?trailer=only&trat=s: from s seconds in, the cast given time to be built first)
+  const AT0 = T.mode === 'only' ? clamp(+(Q.get('trat') || 0) || 0, 0, END - 1) : 0;
+  if (AT0 && T.cast) await Promise.race([T.cast.ready, sleep(20000)]);
   const N = window.NYC;
   const X5 = N?.avenueX ? N.avenueX('5') : 0.4;
   const grade = app.postFX?.colorGrade;
+  // Juno and Gears (buildCast: ready or not when their shots come)
+  const KC = T.cast || { okGears: false, okJuno: false, drop() {} };
+  // the city's sightseeing chopper, a clone (its meshes, their geometry and materials shared), flown by hand in its shot;
+  // the player's own (hovering over 37th St) hidden meanwhile, never moved
+  const H0 = cm.entities?.helicopter, h0Vis = H0?.mesh ? H0.mesh.visible : null;
+  let heli = null;
+  if (H0?.mesh) {
+    try {
+      const path = (o) => { const p = []; while (o && o !== H0.mesh) { p.unshift(o.parent.children.indexOf(o)); o = o.parent; } return p; };
+      const root = H0.mesh.clone(true), at = (p) => p.reduce((o, i) => o?.children[i], root);
+      heli = { root, tilt: at(path(H0.tiltPivot)), main: at(path(H0.mainRotorPivot)), tail: at(path(H0.tailRotorPivot)) };
+      if (!heli.tilt || !heli.main || !heli.tail) throw new Error('no rotors');
+      // (the main rotor's blur disc left out of the clone: against the dusk sky it read as a pale plate over the blades)
+      for (const o of heli.main.children) if (o.isMesh && o.geometry?.type === 'CylinderGeometry') o.visible = false;
+      root.name = 'wagmi-trailer-heli'; root.visible = false; app.scene.add(root);
+    } catch (e) { console.warn('[trailer] chopper', e); heli = null; }
+  }
 
   /* ---- the cast of the trailer's own shots */
   // Quant's clips (copies: actions of their own on his mixer, put away after), the Degens' (Gwei and Wick, the opening's
@@ -203,14 +316,14 @@ async function play(W, T, borrow, getPage) {
   // (the car's own idle step put aside: its thrust and wheels are the trailer's while it plays. kick: the burn lit at
   // once on an ignition, not eased in. The glow the burn throws on the road and the tail reaches further meanwhile)
   const carIdle0 = W.carIdle;
-  let carState = { speed: 0, cold: 0, burn: 0, steer: 0 }, kick = false;
+  let carState = { speed: 0, cold: 0, burn: 0, steer: 0 }, kick = false, glowK = 2.2;
   let glowL = null; rs.group?.traverse((o) => { if (o.isPointLight && o.position.z < -2) glowL = o; });
   const glowD0 = glowL ? glowL.distance : 0; if (glowL) glowL.distance = 11;
   W.carIdle = (dt) => {
     rs.setThrust(carState.cold, carState.burn);
     if (kick) { kick = false; rs.update(1, 0, carState.steer); }
     rs.update(dt, carState.speed, carState.steer);
-    if (glowL) glowL.intensity *= 2.2;
+    if (glowL) glowL.intensity *= glowK;
   };
 
   /* ---- where */
@@ -220,8 +333,10 @@ async function play(W, T, borrow, getPage) {
   // z 2802-2859), cleared west to east off the lawn; the fight on the fountain's plaza
   const FENCE = { x: -16.7, z: 2836, top: 0.91 };
   const FIGHT = { x: -6.5, z: 2866 };
-  // the drifts: 5th Ave north into 28th St west (a left), and 27th St west into 5th Ave north (a right), then the burn
-  const Z28 = N?.streetZ ? N.streetZ(28) : 1117.1, Z27 = N?.streetZ ? N.streetZ(27) : 1195.8;
+  // the drifts: 5th Ave north into 28th St west (a left)
+  const Z28 = N?.streetZ ? N.streetZ(28) : 1117.1;
+  // the bird's-eye: straight down on 5th Ave by Madison Square, the car rolling north from ZB
+  const ZB = 1336;
 
   /* ---- the shots: [from bar, to bar, kind, params] */
   const S = [
@@ -242,19 +357,22 @@ async function play(W, T, borrow, getPage) {
     { a: 13, b: 14, kind: 'burn' },
     { a: 14, b: 15, kind: 'driftA' },
     { a: 15, b: 15.5, kind: 'driftB' },
-    { a: 15.5, b: 16.5, kind: 'hop' },
-    { a: 16.5, b: 17.5, kind: 'fight' },
-    { a: 17.5, b: 18.5, kind: 'takedown' },
-    { a: 18.5, b: 19, kind: 'fence' },
-    { a: 19, b: 19.5, kind: 'open', t0: 60.0 },
-    { a: 19.5, b: 20.5, kind: 'driftC' },
-    { a: 20.5, b: 21.5, kind: 'chase' },
-    { a: 21.5, b: 22, kind: 'headOn' },
+    // (Gears and Juno: left out when they are not built in time, decided at their first frame; the shot before runs on)
+    { a: 15.5, b: 16, kind: 'gears', need: () => KC.okGears },
+    { a: 16, b: 17, kind: 'hop' },
+    { a: 17, b: 18, kind: 'fight' },
+    { a: 18, b: 19, kind: 'takedown' },
+    { a: 19, b: 19.5, kind: 'fence' },
+    { a: 19.5, b: 20, kind: 'open', t0: 60.0 },
+    // (the hook's new phrase: the chopper; Juno; straight down on the avenue, the five lit on bar 22)
+    { a: 20, b: 21, kind: 'heli' },
+    { a: 21, b: 21.5, kind: 'juno', need: () => KC.okJuno },
+    { a: 21.5, b: CARD, kind: 'birdseye' },
     { a: CARD, b: LOGO, kind: 'black' },
-    { a: LOGO, b: 25.5, kind: 'logo' },
+    { a: LOGO, b: 26.5, kind: 'logo' },
   ];
   for (const s of S) { s.A = B(s.a); s.Bt = B(s.b); }
-  const shotAt = (t) => { let s = S[0]; for (const x of S) if (x.A <= t) s = x; return s; };
+  const shotAt = (t) => { let s = S[0]; for (const x of S) { if (x.A > t) break; if (x.need && x.ok == null) x.ok = !!x.need(); if (x.need && !x.ok) continue; s = x; } return s; };
   const dusk = (s) => !(s.kind === 'open' || s.kind === 'black');
 
   /* ---- the cues: once each as the clock passes them */
@@ -274,18 +392,23 @@ async function play(W, T, borrow, getPage) {
     [B(12.5) + 0.27, () => W.audio?.play?.('whoosh', { vol: 1, rate: 1.35 })],
     [B(14) + 0.3, () => play1('squeal', { gain: 0.36, dur: 1.4, p: -0.25 })],
     [B(15) + 0.02, () => play1('squeal', { gain: 0.3, dur: 0.85, p: 0.2 })],
-    [B(15.5) + 0.32, () => W.audio?.play?.('whoosh', { vol: 0.7, rate: 0.75 })],
-    [B(16.5) + 0.33, () => play1('hit', { gain: 0.5 })],
-    [B(16.5) + 0.8, () => play1('hit', { gain: 0.6 })],
-    [B(17.5) + 0.36, () => { play1('hit', { gain: 0.8 }); play1('grunt', { gain: 0.5, f0: 105 }); }],
-    [B(17.5) + 1.2, () => play1('fall', { gain: 0.7 })],
-    [B(19.5) + 0.02, () => play1('squeal', { gain: 0.38, dur: 1.0, p: 0.15 })],
-    [B(20), () => W.audio?.play?.('boostIgnite', { vol: 1 })],
-    [B(21.5) + 0.3, () => W.audio?.play?.('whoosh', { vol: 0.85, rate: 1.2 })],
+    // (Gears' ratchet; the hop's whoosh is the hop's own, with its puffs)
+    ...[0.1, 0.22, 0.34].map((d, i) => [B(15.5) + d, () => { if (cur?.kind === 'gears') play1('thunk', { gain: 0.14, f: 470 + 60 * i, ring: false }); }]),
+    [B(17) + 0.33, () => play1('hit', { gain: 0.5 })],
+    [B(17) + 0.8, () => play1('hit', { gain: 0.6 })],
+    [B(18) + 0.36, () => { play1('hit', { gain: 0.8 }); play1('grunt', { gain: 0.5, f0: 105 }); }],
+    [B(18) + 1.2, () => play1('fall', { gain: 0.7 })],
+    // (Juno's laptop pinging as she looks up; the boost from above)
+    [B(21) + 0.12, () => { if (cur?.kind === 'juno') play1('ding', { gain: 0.1 }); }],
+    [B(22), () => W.audio?.play?.('boostIgnite', { vol: 1 })],
+    [B(22) + 0.45, () => W.audio?.play?.('whoosh', { vol: 0.6, rate: 0.9 })],
     [B(CARD) + 0.02, () => play1('thunk', { gain: 0.55, f: 52 })],
     [B(LOGO), () => play1('thunk', { gain: 0.6, f: 70 })],
+    // (the name's second line on beat 2 of the slam's bar)
+    [B(LOGO) + 2 * BEAT, () => play1('thunk', { gain: 0.4, f: 58 })],
   ].sort((a, b) => a[0] - b[0]);
   let cueAt = 0;
+  while (cueAt < CUES.length && CUES[cueAt][0] < AT0) cueAt++;
 
   /* ---- the clock: the music's, smoothed onto the page's (the context's time moves in steps) */
   let t0Audio = 0, src = null, clockP = 0, perf0 = 0, ran = false;
@@ -297,16 +420,16 @@ async function play(W, T, borrow, getPage) {
         src = actx.createBufferSource(); src.buffer = T.sound;
         const g = actx.createGain(); g.gain.value = 0.92; src.connect(g); g.connect(W.audio.bus?.master || actx.destination);
         src._g = g;
-        t0Audio = actx.currentTime + 0.06; src.start(t0Audio);
+        t0Audio = actx.currentTime + 0.06 - AT0; src.start(t0Audio + AT0, AT0);
       } catch (e) { console.warn('[trailer] music', e); src = null; }
     }
   }
   function clock() {
-    const tp = (performance.now() - perf0) / 1000 - 0.06;
+    const tp = (performance.now() - perf0) / 1000 - 0.06 + AT0;
     if (src && actx.state !== 'running') {
       // (held while the sound is: a hidden tab. A context that never got going (no unlock) is let go after 0.8 s and the
       // page's clock carries the pictures on alone, rather than black for ever)
-      if (ran || tp < 0.8) return clockP;
+      if (ran || tp - AT0 < 0.8) return clockP;
       try { src.stop(); } catch {} src = null;
     }
     if (!src) { clockP = tp; return clockP; }
@@ -353,7 +476,7 @@ async function play(W, T, borrow, getPage) {
     o.r.pose(u);
   }
   function carPose(x, z, h, o = {}) {
-    car.position.set(x, ground(x, z, 'car') + (o.y || 0), z); car.heading = h; car.speed = 0; car.vx = car.vz = 0;
+    car.position.set(x, (o.gy ?? ground(x, z, 'car')) + (o.y || 0), z); car.heading = h; car.speed = 0; car.vx = car.vz = 0;
     car.mesh.position.copy(car.position); car.mesh.rotation.set(0, h, o.roll || 0); car.mesh.visible = true;
     carState = { speed: o.speed || 0, cold: o.cold || 0, burn: o.burn || 0, steer: o.steer || 0 };
   }
@@ -387,7 +510,6 @@ async function play(W, T, borrow, getPage) {
   }
   const DR = 9.5;
   const DRIFT_A = { x0: LANE, z0: Z28 + DR, h0: PI, dir: 1, R: DR, v: 17, pre: -6.2, on: [0.2, 0.52], off: [1.22, 1.62], slip: 0.62 };
-  const DRIFT_C = { x0: LANE + DR, z0: Z27 + 1.2, h0: 1.5 * PI, dir: -1, R: DR, v: 16, pre: -2.6, on: [-0.1, 0.16], off: [0.86, 1.3], slip: 0.66, ign: B(20) - B(19.5), acc: 24 };
   // tyre smoke: grey puffs at the rear wheels (a few at the fronts) while it slides, left behind on the road, rising
   let smokeAcc = 0;
   const _w = new THREE.Vector3();
@@ -409,7 +531,7 @@ async function play(W, T, borrow, getPage) {
       }
     }
   }
-  const puffs = { last: -1 };
+  const puffs = { last: -1 }, pre = { g: 0, j: 0, back() {} };
   function hopPuffs(kind) {
     const b = car.body || { hx: 1.05, z0: -2.3, z1: 2.4 }, h = car.heading, fx = Math.sin(h), fz = Math.cos(h), v = carState.speed;
     if (kind === 'up') for (const [lx, lz] of [[b.hx - 0.25, b.z1 - 0.5], [-(b.hx - 0.25), b.z1 - 0.5], [b.hx - 0.25, b.z0 + 0.45], [-(b.hx - 0.25), b.z0 + 0.45]]) {
@@ -426,7 +548,21 @@ async function play(W, T, borrow, getPage) {
 
   // each kind's frame at its own time u (s since the cut)
   const K = {
-    black(u) { },
+    black(u, s) {
+      // (in the first card's black, once each is ready: a frame in Gears' garage, then one in Juno's room, so the cut to
+      // them costs nothing: the pipelines the frame asks for (its shadows' too) and the textures' uploads, made here
+      // where nothing shows; the car put back where it was)
+      if (s.a !== 0 || u > B(2) - 0.35) return;
+      if (pre.g === 1) { pre.g = 2; if (KC.gears) KC.gears.root.visible = false; pre.back(); return; }
+      if (pre.j === 1) { pre.j = 2; KC.room?.full(null); return; }
+      if (!pre.g && KC.okGears) {
+        pre.g = 1; const c = car, m = c.mesh, st = carState;
+        const p0 = c.position.clone(), h0 = c.heading, mp = m.position.clone(), mr = m.rotation.clone(), cs0 = { ...st };
+        pre.back = () => { c.position.copy(p0); c.heading = h0; m.position.copy(mp); m.rotation.copy(mr); carState = cs0; };
+        K.gears(0.4, {}, 1 / 60); return;
+      }
+      if (!pre.j && KC.okJuno) { pre.j = 1; K.juno(0.5, {}, 1 / 60); }
+    },
     aerial(u, s) {
       // dusk over Midtown: from over Murray Hill, a long climbing sweep west and round to the Empire State, lit
       const k = ease.inOut(u / (s.Bt - s.A));
@@ -488,7 +624,7 @@ async function play(W, T, borrow, getPage) {
       const ht = u - H0, y = ht > 0 && ht < 1.112 ? Math.max(0, 8.9 * ht - 8 * ht * ht) : 0;
       const gas = ht > 0 && ht < 0.4 ? 1 : 0;
       carAt(LANE, z, PI, y, v, gas, 0);
-      if (ht > 0 && puffs.last < 1) { puffs.last = 1; hopPuffs('up'); }
+      if (ht > 0 && puffs.last < 1) { puffs.last = 1; hopPuffs('up'); if (ht < 0.15) W.audio?.play?.('whoosh', { vol: 0.7, rate: 0.75 }); }
       if (ht > 1.112 && puffs.last < 2) { puffs.last = 2; W.audio?.play?.('kerb', { vol: 0.8 }); }
       setCam([LANE + 7.4, 1.05, z0 - v * u + 4.6 - 0.6 * u], [car.position.x, 1.0 + y * 0.6, car.position.z - 1.2], 44, { shake: 1 });
       P.mesh.visible = false;
@@ -532,32 +668,68 @@ async function play(W, T, borrow, getPage) {
       setCam([FENCE.x - 0.9, g + 0.5, z - 5.6], [lerp(x, FENCE.x, 0.35), g + 0.95, z], 40, { shake: 0.9 });
       thug(gwei, 0, 0, 0, 0, false); thug(wick, 0, 0, 0, 0, false);
     },
-    driftC(u, s, dt) {
-      // the lens low in 5th Ave below 27th, outside the turn: the car slides out of 27th into the avenue, its tail swinging
-      // at the lens; on the hook's new phrase the five light straight down the lens and it rockets off up the avenue
-      const d = drift(DRIFT_C, u), tI = DRIFT_C.ign, lit = u >= tI;
+    gears(u, s, dt) {
+      // Static Garage at work (m3-set.js buildGarage, its bay lit): the lens low behind the car, its five nozzles glowing
+      // in the foreground, Gears beside them (cap, beard, overalls), the tool wall behind him; he turns to the lens
+      const { x: GX, z: GZ } = KC.G, GY = 0.22, G = KC.gears;
+      carPose(GX + 1.2, GZ + 6.2, PI, { gy: GY, burn: 0.3 });
+      // (the lens turned east, off the bay's door: from in here its slats' sign reads backwards)
+      const k = smooth(u / 0.857), cp = [lerp(GX - 0.6, GX - 0.3, k), GY + lerp(0.8, 0.88, k), lerp(GZ + 12.2, GZ + 11.8, k)];
+      const gx = GX + 3.3, gz = GZ + 9.4;
+      G.root.visible = true; G.root.position.set(gx, ground(gx, gz), gz); G.root.rotation.set(0, Math.atan2(cp[0] - gx, cp[2] - gz) - 0.4, 0);
+      if (!s.set) { s.set = true; G.rig.set([[0, G.clips.includes('arms') ? 'arms' : 'idle', { fade: 0.01 }]]); }
+      G.rig.pose(1.5 + u); G.root.updateMatrixWorld(true);
+      G.face?.live?.(dt, { look: V(...cp), head: true });
+      setCam(cp, [GX + 3.2, GY + 1.05, GZ + 9.4], 44, { shake: 0.5 });
+      P.mesh.visible = false;
+    },
+    heli(u, s, dt) {
+      // dusk, on the hook's new phrase: the city's sightseeing chopper sweeping down 5th Ave toward the Empire State, nose
+      // down, banking toward it, the rotors a blur; the lens behind it, off its left and below, tracking, the tower lit
+      // beyond it
+      P.mesh.visible = false;
+      if (!heli) { K.aerial(u + 1.2, { A: 0, Bt: B(2) }); return; }
+      // (south, from over 40th St: the tower lit against the deep blue, as the aerial sees it; north it was into the sun)
+      const v = 36, k = smooth(u / 2.2), z = 405 + v * u, x = X5 - 8 - 7 * k * k, y = 172 + 3 * u, h = -0.26 * k;
+      heli.root.position.set(x, y, z); heli.root.rotation.set(0, h, 0);
+      heli.tilt.rotation.set(0.2, 0, 0.24 * k); heli.tilt.position.y = 0.15 * Math.sin(u * 2.6);
+      if (dt > 0) { heli.main.rotation.y += Math.min(dt, 0.05) * 24; heli.tail.rotation.x += Math.min(dt, 0.05) * 32; }
+      setCam(relP(x, y, z, h, -lerp(17, 13.5, k), -lerp(7.5, 5.2, k), -lerp(5, 3.6, k)), relP(x, y, z, h, 9, 1.5, 2.6), lerp(42, 38, k), { shake: 0.7, rate: 1.6, roll: lerp(-0.05, 0.04, k) });
+    },
+    juno(u, s, dt) {
+      // her room at night (juno.js createJunoRoom: a scene of its own, drawn in place of the city's frame): at her laptop,
+      // its glow on her face, typing; a ping, a blink, and she looks up from the screen to just past the lens
+      const J = KC.juno, lap = KC.lap, k = smooth(u / 0.857), up = smooth((u - 0.2) / 0.24);
+      J.root.visible = true; J.root.position.set(0, 0, 0); J.root.rotation.set(0, 0, 0);
+      J.rig.pose(2 + u); J.root.updateMatrixWorld(true);
+      const shR = J.bones.upperarm01_R?.getWorldPosition(V()), shL = J.bones.upperarm01_L?.getWorldPosition(V()), ty = 0.012 * (1 - up);
+      if (shR && shL) {
+        J.arm('L', V(0.12, 0.8 + ty * Math.sin(u * 23 + 1.3), 0.42), shL.add(V(0.5, -0.5, 0)), 0.9);
+        J.arm('R', V(-0.12, 0.8 + ty * Math.sin(u * 19), 0.42), shR.add(V(-0.5, -0.5, 0)), 0.9);
+      }
+      const cp = [lerp(0.3, 0.25, k), lerp(1.22, 1.19, k), lerp(1.78, 1.6, k)], scr = lap.localToWorld(V(0, 0.13, -0.1));
+      J.face.set({ blink: u > 0.12 && u < 0.24 ? 1 - Math.abs(u - 0.18) / 0.06 : 0 });
+      J.face.aim(scr.lerp(V(cp[0] + 0.12, cp[1] + 0.04, cp[2]), up), { k: 0.5 });
+      lap.userData.screen('trace', u);
+      KC.room.full({ pos: cp, look: [0.0, 1.05, 0.15], fov: shotFov(cs, 34) });
+      // (the city's lens left where it was: only the band's bars from it)
+      cam.band = true; cam.shake = null;
+      P.mesh.visible = false;
+    },
+    birdseye(u, s) {
+      // straight down over 5th Ave by Madison Square: the car rolling up the avenue; on bar 22 the five light (the plumes
+      // seen from above, the road orange under them) and it rockets up the grid; the lens climbing after it, lagging, the
+      // frame turning (a high orbit)
+      const tI = B(22) - s.A, lit = u >= tI, dI = Math.max(0, u - tI), v0 = 12, acc = 26;
       if (lit && !s.lit) { s.lit = true; kick = true; }
-      carPose(d.x, d.z, d.h, { speed: d.v, steer: d.steer, roll: d.roll, cold: lit && u < tI + 0.15 ? 0.6 : 0, burn: lit ? 1 : 0 });
-      if (!lit) tyreSmoke(d, dt, 0.6);
-      const cx = X5 - 6.9, cz = Z27 + 3.2, g = ground(cx, cz), k = smooth((u - tI) / 0.6);
-      const aim = [lerp(car.position.x, X5 - 3.4, k), g + lerp(0.7, 1.8, k), lerp(car.position.z, car.position.z - 30, k)];
-      setCam([cx, g + 0.8, cz], aim, 40 + punch(u, tI, 12), { shake: lit ? 4 : 1.2, rate: lit ? 9 : 1.3 });
-      fx.spd = lit ? 0.6 * smooth((u - tI) / 0.1) * (1 - 0.4 * smooth((u - tI - 0.4) / 0.4)) : 0;
-      P.mesh.visible = false;
-    },
-    chase(u) {
-      // the burn, chased: the lens low behind it up 5th, the plumes and the street orange, the Empire State ahead
-      const v = 52, z = Z27 - 10 - (v * u + 3 * u * u), k = smooth(u / 1.714);
-      carPose(LANE, z, PI, { speed: v, burn: 1 });
-      setCam(rel(-lerp(5.6, 4.4, k), 1.3, 0.5), rel(18, 0.1, 1.3), 46 + 4 * k, { shake: 3, rate: 8, roll: lerp(-0.03, 0.02, k) });
-      fx.spd = 0.5;
-      P.mesh.visible = false;
-    },
-    headOn(u) {
-      const z0 = 1010, v = 50, z = z0 - v * u;
-      carAt(LANE, z, PI, 0, v, 1, 0.9);
-      const cz = z0 - v * 0.857 - 2.5;
-      setCam([LANE + 0.2, 0.42, cz], [car.position.x, 0.7, car.position.z], 34, { shake: 2 });
+      const z = ZB - (v0 * u + 0.5 * acc * dI * dI);
+      carPose(LANE, z, PI, { speed: v0 + acc * dI, cold: lit && dI < 0.15 ? 0.6 : 0, burn: lit ? 1 : 0 });
+      // (lower than v3's 28-54 m, the lens keeping closer after it, and on a phone held upright the whole tall screen (no
+      // band: straight down, the avenue runs up it), so the car and its five read on a phone; brighter too, EXP)
+      const k = smooth(u / (s.Bt - s.A)), H = lerp(20, 38, k), g = ground(LANE, ZB, 'car');
+      const zc = ZB - 3 - (v0 * u + 0.42 * acc * dI * dI);
+      setCam([LANE + 0.6, g + H, zc], [LANE + 0.6, g, zc - 0.02 * H], lerp(42, 48, k) + punch(u, tI, 6), { roll: lerp(-0.35, 0.25, k), shake: lit ? 1.2 : 0.4, rate: 3, band: false });
+      fx.spd = lit ? 0.35 * smooth(dI / 0.08) * (1 - smooth((dI - 0.35) / 0.4)) : 0;
       P.mesh.visible = false;
     },
     logo(u) {
@@ -581,7 +753,7 @@ async function play(W, T, borrow, getPage) {
     set(pg.blk, blk.toFixed(3));
     // the flash: the ignition on the drop (light: the five are the flash), the boost out of the last drift, the slam
     const flashAt = (at, peak, len) => (t >= at ? Math.max(0, 1 - (t - at) / len) * peak : 0);
-    const fl = flashAt(B(DROP), 0.38, 0.12) + flashAt(B(20), 0.28, 0.1) + flashAt(B(LOGO), 0.9, 0.3);
+    const fl = flashAt(B(DROP), 0.38, 0.12) + (t < B(CARD) ? flashAt(B(22), 0.28, 0.1) : 0) + flashAt(B(LOGO), 0.9, 0.3);
     set(pg.flash, fl.toFixed(3));
     // the cards
     const card = t < B(2) ? { text: 'IT STARTED AS A JOKE.', a: 0.45, b: B(2) - 0.12, rule: true } : t >= B(CARD) && t < B(LOGO) ? { text: 'THEY TOOK HIS DOG.', a: B(CARD) + 0.1, b: B(LOGO) - 0.04, rule: false } : null;
@@ -620,7 +792,10 @@ async function play(W, T, borrow, getPage) {
       set(pg.logo, Math.min(1, k / 0.06).toFixed(3));
       pg.logo.style.transform = `translateY(-58%) scale(${(1 + 0.32 * Math.pow(1 - clamp(k / 0.16), 2.4) + 0.035 * clamp(k / 4.3)).toFixed(4)})`;
       pg.logoR.style.transform = `scaleX(${ease.out((k - 0.25) / 0.6).toFixed(3)})`;
-      set(pg.logoG, smooth((k - 0.75) / 0.5).toFixed(3));
+      // (the second line, UNFINISHED BUSINESS, on beat 2 of the bar: in fast, settling from a touch larger)
+      const g0 = 2 * BEAT - 0.03;
+      set(pg.logoG, smooth((k - g0) / 0.12).toFixed(3));
+      pg.logoG.style.transform = `scale(${(1.1 - 0.1 * ease.out(clamp((k - g0) / 0.35))).toFixed(4)})`;
       set(pg.shade, smooth(k / 0.3).toFixed(3));
     } else { set(pg.logo, 0); set(pg.shade, 0); }
     // the booster's speed streaks round the frame, flickered between their two sets
@@ -634,22 +809,36 @@ async function play(W, T, borrow, getPage) {
   let flick = 0;
 
   /* ---- the run */
-  // (the exposure: the car's shots up, v1's burns read too dark)
-  const EXP = { aerial: 1.0, fight: 1.28, takedown: 1.28, fence: 1.28, hop: 1.3, logo: 1.1, ignite: 1.1, chase: 1.3, headOn: 1.3 };
+  // (the exposure: the car's shots up, v1's burns read too dark; the bird's-eye most, the avenue's asphalt from above)
+  const EXP = { aerial: 1.0, fight: 1.28, takedown: 1.28, fence: 1.28, hop: 1.3, logo: 1.1, ignite: 1.1, gears: 1.25, heli: 1.1, birdseye: 1.75 };
   // the rocket's roar under the burns (the city's sound: a bed of its own, made at the first burn, let go at the end)
-  const BURNS = new Set(['ignite', 'launch', 'burn', 'driftC', 'chase', 'headOn']);
+  const BURNS = new Set(['ignite', 'launch', 'burn', 'birdseye']);
   let roar = null, roarV = -1;
   function roarAt(s) {
     const want = BURNS.has(s.kind) ? 0.3 * carState.burn : 0;
     if (!roar && want > 0) { try { roar = W.audio?.loop?.('roar', { bus: 'sfx', vol: 0 }) || null; } catch { roar = null; } }
     if (roar && Math.abs(want - roarV) > 0.01) { roarV = want; try { roar.set({ vol: want }); } catch {} }
   }
+  // the chopper's blades (the city's own loop) for its shot
+  let heliSnd = null;
+  function heliSound(on) {
+    if (on && !heliSnd) { try { heliSnd = W.audio?.loop?.('heli', { bus: 'sfx', vol: 0 }) || null; heliSnd?.set({ vol: 0.6 }); } catch { heliSnd = null; } }
+    else if (!on && heliSnd) { try { heliSnd.stop(0.12); } catch {} heliSnd = null; }
+  }
   function frameAt(t, dt) {
     const s = shotAt(t), u = t - s.A;
     if (s !== cur) {
-      // a cut: the time of day for it, the opening's set in or out; the last shot's vapour and smoke gone with it
+      // a cut: the time of day for it, the opening's set in or out; the last shot's vapour and smoke gone with it; the
+      // chopper, Gears and Juno's room only in their own shots (the player's chopper out of sight in the chopper's)
       cur = s; puffs.last = -1; smokeAcc = 0; vapor.update(99); smoke.update(99);
       if (s.kind === 'open') { setTime('golden'); unOwn(); } else { own(); if (dusk(s)) setTime('twilight'); }
+      if (heli) heli.root.visible = s.kind === 'heli';
+      if (H0?.mesh && h0Vis) H0.mesh.visible = s.kind !== 'heli';
+      heliSound(s.kind === 'heli');
+      if (s.kind !== 'gears' && KC.gears) KC.gears.root.visible = false;
+      if (s.kind !== 'juno') KC.room?.full(null);
+      // (seen from above, the burn's glow on the road brighter and wider)
+      glowK = s.kind === 'birdseye' ? 5 : 2.2; if (glowL) glowL.distance = s.kind === 'birdseye' ? 18 : 11;
     }
     fx.spd = 0;
     if (s.kind === 'open') {
@@ -672,9 +861,9 @@ async function play(W, T, borrow, getPage) {
   D.onFrame = (dt) => tick(dt);
   let done = null, skipped = false, sawLogo = false, held = false, ended = false;
   W.audio?.duck?.('amb', 0.45, END + 2);
-  // (the avenue, and the two streets the drifts turn into, kept clear)
+  // (the avenue, and the street the drift turns into, kept clear)
   app.trafficSystem?.hold?.([...(borrow.hold || []), { minX: X5 - 16, maxX: X5 + 16, minZ: 880, maxZ: 1420 },
-    { minX: X5 - 48, maxX: X5 + 16, minZ: Z28 - 12, maxZ: Z28 + 14 }, { minX: X5 - 16, maxX: X5 + 40, minZ: Z27 - 12, maxZ: Z27 + 14 }]);
+    { minX: X5 - 48, maxX: X5 + 16, minZ: Z28 - 12, maxZ: Z28 + 14 }]);
   startClock();
   function tick(dt) {
     if (ended) return;
@@ -698,6 +887,7 @@ async function play(W, T, borrow, getPage) {
     pg.blk.style.transition = 'opacity .22s'; pg.blk.style.opacity = '1';
     if (src) { try { const g = src._g.gain; g.cancelScheduledValues(actx.currentTime); g.setValueAtTime(g.value, actx.currentTime); g.linearRampToValueAtTime(0, actx.currentTime + (skip ? 0.35 : 0.1)); src.stop(actx.currentTime + 0.5); } catch {} }
     if (skip) { try { sfx.stopAll?.(0.25); } catch {} }
+    heliSound(false);
     await sleep(skip ? 240 : 60);
     // everything the trailer moved, back
     for (const a of Qn.mixer._actions) if (qRig.owns(a)) a.setEffectiveWeight(0);
@@ -710,6 +900,11 @@ async function play(W, T, borrow, getPage) {
     if (glowL) glowL.distance = glowD0;
     if (roar) { try { roar.stop(skip ? 0.2 : 0.3); } catch {} roar = null; }
     for (const v of [vapor, smoke]) if (v.mesh) { app.scene.remove(v.mesh); v.mesh.geometry?.dispose(); v.mesh.material?.dispose(); }
+    // (the chopper's clone out (its geometry and materials are the city's: kept), the player's back as it was; the
+    // garage, Gears, Juno and her room put away, or as soon as a build still under way finishes)
+    if (heli) { app.scene.remove(heli.root); heli = null; }
+    if (H0?.mesh && h0Vis != null) H0.mesh.visible = h0Vis;
+    try { KC.drop(); } catch (e) { console.warn('[trailer] cast', e); }
     W.audio?.duck?.('amb', 0, 0);
     borrow.quiet = false;
     delete W.trailerT;
