@@ -108,7 +108,7 @@
   <script>
     // Download the city scripts while Three.js loads; execute them only after its imports are ready below.
     const nycAppScripts = (() => {
-      const assetVersion = '20261024-f';
+      const assetVersion = '20261024-g';
       return [
         './js/nyc-geodata.js',
         './js/city-config.js',
@@ -148,7 +148,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400..800&amp;family=Overpass:wght@600;700&amp;display=swap" />
-  <link rel="stylesheet" href="./css/style.css?v=20261024-f" />
+  <link rel="stylesheet" href="./css/style.css?v=20261024-g" />
   <!-- three.js pinned to dev commit bc7d0b3c38 (22 Oct 2026, the build Slop New York last ran on), served by jsDelivr -->
   <style>
     /* (Gen Z Quant's boot veil, #wg-boot below. Off the gate's paths: the key art over the city until the mission is up.
@@ -162,12 +162,54 @@
     #wg-boot > div { position: absolute; }
     #wg-boot .wg-boot-pic, #wg-boot .wg-boot-bar, #wg-boot .wg-boot-veil, #wg-boot .wg-boot-go, #wg-boot .wg-boot-fine { display: none; }
     #wg-boot .wg-boot-title { left: 0; right: 0; top: 20%; text-align: center; z-index: 3; animation: wgBootIn .5s ease-out both; }
-    #wg-boot .wg-boot-logo { font: italic 800 clamp(52px, 10vw, 136px)/0.9 'Barlow Condensed', system-ui, sans-serif; letter-spacing: 1px; white-space: nowrap; text-shadow: 0 6px 30px rgba(0,0,0,.55), 0 2px 4px rgba(0,0,0,.4); }
+    #wg-boot .wg-boot-logo { position: relative; font: italic 800 clamp(52px, 10vw, 136px)/0.9 'Barlow Condensed', system-ui, sans-serif; letter-spacing: 1px; white-space: nowrap; }
     #wg-boot .wg-boot-logo b { color: #FFC93C; font-weight: 800; }
     #wg-boot .wg-boot-rule { width: 140px; height: 3px; background: #FFC93C; margin: 14px auto 0; }
     #wg-boot .wg-boot-tag { display: inline-block; margin-top: 12px; padding: 7px 18px 6px; font: 700 clamp(13px, 1.5vw, 19px)/1 'Barlow Condensed', system-ui, sans-serif; letter-spacing: clamp(3px, .5vw, 6px); text-transform: uppercase; color: #fff;
       background: radial-gradient(closest-side, rgba(6,8,12,.62), rgba(6,8,12,.38) 70%, rgba(6,8,12,0)); text-shadow: 0 1px 3px rgba(0,0,0,.8); }
+    /* (the lockup letter by letter, for its arrival: each letter a box of its own, set where the one line set it (U-A and
+       U-N kerned by hand, .k, as the face kerns them), the logo's shadow one layer under all of them (data-t: the line
+       itself; painted as the one line's shadow was, over the rule and under the letters and the tag), so the settled
+       title is the one-line title to the pixel; --x: a letter's place from the middle. QUANT's
+       glint (.g): a soft skewed band swept across the word with a bright copy of it inside, moved the other way so the
+       copy stays put: transform only, like all of it, so it runs smooth while the city is built under it) */
+    #wg-boot .wg-boot-logo::before { content: attr(data-t); content: attr(data-t) / ""; position: absolute; left: 0; right: 0; top: 0; color: transparent; text-shadow: 0 6px 30px rgba(0,0,0,.55), 0 2px 4px rgba(0,0,0,.4); }
+    #wg-boot .wg-boot-logo span, #wg-boot .wg-boot-logo b, #wg-boot .wg-boot-tag, #wg-boot .wg-boot-tag span { display: inline-block; position: relative; }
+    #wg-boot .wg-boot-logo .k { margin-left: -.0171em; } #wg-boot .wg-boot-tag .k { margin-left: -.007em; }
+    #wg-boot .wg-boot-logo .g { position: absolute; left: 0; top: -.25em; width: .75em; height: 1.4em; overflow: hidden; font-style: inherit; transform-origin: 0 0; transform: translateX(-.9em) skewX(-18deg);
+      -webkit-mask-image: linear-gradient(90deg, transparent, #000 42%, #000 58%, transparent); mask-image: linear-gradient(90deg, transparent, #000 42%, #000 58%, transparent); }
+    #wg-boot .wg-boot-logo .g > i { position: absolute; left: 0; top: 0; padding-top: .25em; font-style: inherit; transform-origin: 0 0; transform: skewX(18deg) translateX(.9em); color: #FFF6DC; text-shadow: 0 0 .12em rgba(255,214,120,.85); }
     @keyframes wgBootIn { from { opacity: 0; } }
+    /* the arrival (on the title's paths): GEN Z slammed in letter by letter, QUANT landing in gold a beat later with the
+       glint across it (grown from its own left, by the gap, so it never runs over the Z), the rule drawn out from the middle, UNFINISHED BUSINESS tracked in, then the line; the name read
+       by 0.6 s, all of it in by 1.6 s; then the glint again every 4.6 s. Held (html.wg-type) until the type is in (3 s
+       at most), rather than run unseen while the face is still on its way. A start: .punch (the logo punched, the glint
+       across QUANT at once). wagmi/mission/ui.js draws the gate's logo the same (wgG_*) on this one's clock */
+    html.wg-t #wg-boot .wg-boot-logo::before { animation: wgT_fade .5s .42s backwards; }
+    html.wg-t #wg-boot .wg-boot-logo > span { animation: wgT_slam .38s calc((var(--x) + 5) * 60ms) backwards; }
+    html.wg-t #wg-boot .wg-boot-logo > b { transform-origin: 10% 58%; animation: wgT_land .46s .3s backwards; }
+    html.wg-t #wg-boot .wg-boot-logo .g { animation: wgT_glint 4.6s .6s infinite both; } html.wg-t #wg-boot .wg-boot-logo .g > i { animation: wgT_glintIn 4.6s .6s infinite both; }
+    html.wg-t #wg-boot .wg-boot-rule { animation: wgT_rule .52s .52s cubic-bezier(.2,.7,.2,1) backwards; }
+    html.wg-t #wg-boot .wg-boot-tag { animation: wgT_fade .5s .64s backwards; }
+    html.wg-t #wg-boot .wg-boot-tag > span { animation: wgT_track .7s .64s cubic-bezier(.16,.7,.2,1) backwards; }
+    html.wg-t #wg-boot .wg-boot-go span, html.wg-t #wg-boot .wg-boot-fine { animation: wgT_fade .45s 1.15s backwards; }
+    html.wg-t #wg-boot .wg-boot-title.punch .wg-boot-logo { animation: wgT_punch .36s backwards; }
+    html.wg-t #wg-boot .wg-boot-title.punch .g { animation: wgT_shing .5s cubic-bezier(.4,0,.25,1) backwards; } html.wg-t #wg-boot .wg-boot-title.punch .g > i { animation: wgT_shingIn .5s cubic-bezier(.4,0,.25,1) backwards; }
+    html.wg-t:not(.wg-type) #wg-boot .wg-boot-title, html.wg-t:not(.wg-type) #wg-boot .wg-boot-title *, html.wg-t:not(.wg-type) #wg-boot .wg-boot-logo::before,
+    html.wg-t:not(.wg-type) #wg-boot .wg-boot-go span, html.wg-t:not(.wg-type) #wg-boot .wg-boot-fine { animation-play-state: paused !important; }
+    @keyframes wgT_fade { from { opacity: 0; } }
+    @keyframes wgT_slam { 0% { opacity: 0; transform: scale(1.34); animation-timing-function: cubic-bezier(.2,.6,.35,1); } 30% { opacity: 1; } 60% { transform: scale(.982); animation-timing-function: cubic-bezier(.4,0,.4,1); } 100% { opacity: 1; transform: none; } }
+    @keyframes wgT_land { 0% { opacity: 0; transform: scale(1.45); animation-timing-function: cubic-bezier(.2,.6,.3,1); } 28% { opacity: 1; } 62% { transform: scale(.975); animation-timing-function: cubic-bezier(.4,0,.4,1); } 100% { opacity: 1; transform: none; } }
+    /* (a screen too narrow for QUANT to land from x1.45 without running off its right edge (a 280 px fold): from x1.2) */
+    @media (max-width: 340px) { html.wg-t #wg-boot .wg-boot-logo > b { animation-name: wgT_landN; } }
+    @keyframes wgT_landN { 0% { opacity: 0; transform: scale(1.2); animation-timing-function: cubic-bezier(.2,.6,.3,1); } 28% { opacity: 1; } 62% { transform: scale(.975); animation-timing-function: cubic-bezier(.4,0,.4,1); } 100% { opacity: 1; transform: none; } }
+    @keyframes wgT_rule { from { transform: scaleX(0); } }
+    @keyframes wgT_track { 0% { opacity: 0; transform: translateX(calc(var(--x) * .3em)); } 55% { opacity: 1; } 100% { opacity: 1; transform: none; } }
+    @keyframes wgT_glint { 0% { transform: translateX(-.9em) skewX(-18deg); animation-timing-function: cubic-bezier(.45,.05,.35,1); } 13%, 100% { transform: translateX(3.3em) skewX(-18deg); } }
+    @keyframes wgT_glintIn { 0% { transform: skewX(18deg) translateX(.9em); animation-timing-function: cubic-bezier(.45,.05,.35,1); } 13%, 100% { transform: skewX(18deg) translateX(-3.3em); } }
+    @keyframes wgT_shing { from { transform: translateX(-.9em) skewX(-18deg); } to { transform: translateX(3.3em) skewX(-18deg); } }
+    @keyframes wgT_shingIn { from { transform: skewX(18deg) translateX(.9em); } to { transform: skewX(18deg) translateX(-3.3em); } }
+    @keyframes wgT_punch { 0% { transform: none; animation-timing-function: cubic-bezier(.2,.8,.3,1); } 24% { transform: scale(1.065); animation-timing-function: cubic-bezier(.4,0,.3,1); } 100% { transform: none; } }
     html.wg-t #loading-overlay { display: none; }
     html.wg-t #wg-boot { background: #0a0b0d; }
     html.wg-t #wg-boot .wg-boot-pic { display: block; inset: 0; background: #0a0b0d url(assets/ui/gate-aerial-land.webp) 50% 50% / cover no-repeat; }
@@ -198,6 +240,7 @@
     html.wg-t-start #wg-boot .wg-boot-go { animation: none; opacity: .9; visibility: visible; }
     html.wg-t-start #wg-boot .wg-boot-go span { display: none !important; }
     html.wg-t-start #wg-boot .wg-boot-go .k-wait { display: inline !important; }
+    html.wg-t-start #wg-boot .wg-boot-go .k-wait { animation: none; }
     /* the gate has taken over (its own type and veil over this still, which stays until the live city is ready under
        it); then the still fades out under the gate */
     #wg-boot.handed .wg-boot-veil, #wg-boot.handed .wg-boot-title, #wg-boot.handed .wg-boot-go, #wg-boot.handed .wg-boot-fine { visibility: hidden; }
@@ -213,6 +256,14 @@
     html:not(.wg-load-fill) #wg-load i { right: auto; width: 24%; background: linear-gradient(90deg, rgba(255,201,60,0), #FFC93C, rgba(255,201,60,0)); transition: none; animation: wgLoadSweep 1.8s cubic-bezier(.45,0,.25,1) infinite; }
     @keyframes wgLoadSweep { from { transform: translateX(-100%); } to { transform: translateX(420%); } }
     @keyframes wgBlink { 0%,100% { opacity: .6; } 50% { opacity: 1; } }
+    /* (asked for less motion: no movement, the lockup faded in, then the line; the glint left out; a
+       start still heard. Their own durations kept against css/style.css's every-animation-to-0.01ms: a fade isn't motion) */
+    @media (prefers-reduced-motion: reduce) {
+      html.wg-t #wg-boot .wg-boot-title { animation: wgT_fade .7s backwards; animation-duration: .7s !important; }
+      html.wg-t #wg-boot .wg-boot-title *, html.wg-t #wg-boot .wg-boot-logo::before { animation: none !important; }
+      html.wg-t #wg-boot .wg-boot-go span, html.wg-t #wg-boot .wg-boot-fine { animation: wgT_fade .5s .5s backwards; animation-duration: .5s !important; }
+      #wg-boot .wg-boot-logo .g { display: none; }
+    }
   </style>
   <script type="importmap">
     {
@@ -272,7 +323,7 @@
        fades its still out over the live city once that is ready. It goes by itself 25 s after the city is up if
        nothing took it) -->
   <div id="wg-boot" aria-hidden="true"><div class="wg-boot-pic"></div><div class="wg-boot-bar top"></div><div class="wg-boot-bar bot"></div><div class="wg-boot-veil"></div>
-    <div class="wg-boot-title"><div class="wg-boot-logo">GEN Z <b>QUANT</b></div><div class="wg-boot-rule"></div><div class="wg-boot-tag">Unfinished Business</div></div>
+    <div class="wg-boot-title"><div class="wg-boot-logo" data-t="GEN Z QUANT"><span style="--x:-5">G</span><span style="--x:-4">E</span><span style="--x:-3">N</span> <span style="--x:-1">Z</span> <b><span style="--x:1">Q</span><span style="--x:2">U</span><span class="k" style="--x:3">A</span><span style="--x:4">N</span><span style="--x:5">T</span><i class="g" aria-hidden="true"><i><span>Q</span><span>U</span><span class="k">A</span><span>N</span><span>T</span></i></i></b></div><div class="wg-boot-rule"></div><div class="wg-boot-tag"><span style="--x:-9">U</span><span class="k" style="--x:-8">n</span><span style="--x:-7">f</span><span style="--x:-6">i</span><span style="--x:-5">n</span><span style="--x:-4">i</span><span style="--x:-3">s</span><span style="--x:-2">h</span><span style="--x:-1">e</span><span style="--x:0">d</span> <span style="--x:2">B</span><span style="--x:3">u</span><span style="--x:4">s</span><span style="--x:5">i</span><span style="--x:6">n</span><span style="--x:7">e</span><span style="--x:8">s</span><span style="--x:9">s</span></div></div>
     <div class="wg-boot-go"><span class="k-key">Click or press any key to start</span><span class="k-tap">Tap to start</span><span class="k-wait">Starting…</span></div>
     <div class="wg-boot-fine">Community entertainment project. Have fun!</div></div>
   <div id="wg-load" aria-hidden="true"><i></i></div>
@@ -287,8 +338,12 @@
         setTimeout(() => { if (!T.adopted) boot.remove(); }, 25000);
       }, 100);
       if (!H.classList.contains('wg-t')) { load.remove(); return; }
-      // (the title's type asked for at once; when it is in, for the timings)
-      try { document.fonts.load('italic 800 64px "Barlow Condensed"').then(() => { T.typeAt = Math.round(performance.now()); }, () => {}); } catch (e) {}
+      // (the title's type asked for at once; when it is in, for the timings, and the lettering's arrival let go: html.wg-type,
+      // 3 s on at the latest, so it doesn't run unseen while the face is still on its way. The name's face alone: the tag's
+      // and the line's come in on their own, display=block, by the time they are drawn)
+      const typed = () => { if (H.classList.contains('wg-type')) return; H.classList.add('wg-type'); T.typeAt = Math.round(performance.now()); };
+      try { document.fonts.load('italic 800 64px "Barlow Condensed"').then(typed, typed); } catch (e) { typed(); }
+      setTimeout(typed, 3000);
       // ('Tap to start' blinks on the page's clock: the gate's own line is set to the same, so neither flickers at the
       // hand-over)
       try { for (const a of boot.querySelector('.wg-boot-go').getAnimations()) a.startTime = 0; } catch (e) {}
@@ -309,7 +364,36 @@
         if (e.type === 'pointerup' && e.pointerType !== 'touch') return;
         if (H.classList.contains('wg-t-save')) return;
         e.stopImmediatePropagation(); if (e.type === 'keydown') e.preventDefault();
-        T.started = { t: Math.round(performance.now()), type: e.type }; H.classList.add('wg-t-start'); off();
+        T.started = { t: Math.round(performance.now()), type: e.type }; H.classList.add('wg-t-start'); off(); punch();
+      }
+      // the start seen and heard at once, in the tap: the logo punched, a glint across QUANT, a low knock and a metal
+      // shing; the game's own sounds once it has them (mission/audio.js thunk and shing), made the same here before that,
+      // in the context the tap has just woken (the shim above)
+      const title = boot.querySelector('.wg-boot-title');
+      function punch() {
+        title.classList.remove('punch'); void title.offsetWidth; title.classList.add('punch');
+        if (/[?&]noaudio\b/.test(location.search)) return;
+        const S = window.WAGMI && window.WAGMI.sfx;
+        if (S) { try { S.unlock(); S.play('thunk', { gain: 0.5, f: 58, ring: false }); S.play('shing', { gain: 0.3 }); } catch (err) {} return; }
+        const L = window.__wgCtx || [], c = L[L.length - 1];
+        if (!c) return;
+        // (at the player's own volume, the pause menu's Master (mission/pause.js): none at 0)
+        let vol = 1; try { const m = JSON.parse(localStorage.getItem('wagmi.volume') || '{}').master; if (m != null && isFinite(+m)) vol = Math.max(0, Math.min(1, +m)); } catch (err) {}
+        if (!vol) return;
+        try {
+          const t = c.currentTime + 0.01, out = c.createGain(); out.gain.value = 0.9 * vol; out.connect(c.destination);
+          const env = (g, a, p, d) => { g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(p, t + a); g.gain.exponentialRampToValueAtTime(0.0001, t + a + d); };
+          const node = (n, ...to) => { let a = n; for (const b of to) { a.connect(b); a = b; } a.connect(out); return n; };
+          const gain = () => c.createGain(), filt = (type, f) => { const b = c.createBiquadFilter(); b.type = type; b.frequency.value = f; return b; };
+          const nb = c.createBuffer(1, Math.floor(c.sampleRate * 0.4), c.sampleRate), nd = nb.getChannelData(0); for (let i = 0; i < nd.length; i++) nd[i] = Math.random() * 2 - 1;
+          const noise = () => { const s = c.createBufferSource(); s.buffer = nb; return s; };
+          // (the knock: a sine falling 104 to 58 Hz, a dull tap of noise on it)
+          const o = c.createOscillator(), og = gain(); o.frequency.setValueAtTime(104, t); o.frequency.exponentialRampToValueAtTime(58, t + 0.12); node(o, og); env(og, 0.004, 0.5, 0.3); o.start(t); o.stop(t + 0.45);
+          const k = noise(), kg = gain(); node(k, filt('lowpass', 900), kg); env(kg, 0.002, 0.35, 0.09); k.start(t); k.stop(t + 0.15);
+          // (the shing: four bright partials ringing out, a breath of high noise sweeping up)
+          for (const [f, a, d] of [[2637, 1, 0.9], [3951, 0.6, 0.7], [5274, 0.45, 0.5], [6645, 0.3, 0.35]]) { const p = c.createOscillator(), pg = gain(); p.frequency.value = f; node(p, pg); env(pg, 0.002, 0.15 * a, d); p.start(t); p.stop(t + d + 0.1); }
+          const h = noise(), hp = filt('highpass', 3500), hg = gain(); hp.frequency.setValueAtTime(3500, t); hp.frequency.exponentialRampToValueAtTime(9000, t + 0.25); node(h, hp, hg); env(hg, 0.008, 0.1, 0.28); h.start(t); h.stop(t + 0.4);
+        } catch (err) {}
       }
       for (const k of EVS) addEventListener(k, on, true);
       // the gate takes it: its start, if one was made; then handover() (the gate's own type over the still) and live()

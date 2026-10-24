@@ -52,6 +52,20 @@ export function createAudio() {
       env(cg, t, 0.03, v * 0.35, 2.8);
       const n = noise(), hp = filt('highpass', 4000), ng = gain(0); n.connect(hp); hp.connect(ng); send(ng, 0.5); env(ng, t, 0.005, v * 0.25, 1.6); n.start(t); n.stop(t + 2);
     },
+    // the title's glint (a start on it, index.html and mission/ui.js): a bright metal ring of four partials, a breath of
+    // high noise sweeping up under it (index.html makes the same before this module is in)
+    shing({ gain: v = 0.3 } = {}) {
+      const t = now();
+      for (const [f, a, d] of [[2637, 1, 0.9], [3951, 0.6, 0.7], [5274, 0.45, 0.5], [6645, 0.3, 0.35]]) { const o = osc('sine', f), g = gain(0); o.connect(g); send(g, 0.45); env(g, t, 0.002, v * a * 0.5, d); o.start(t); o.stop(t + d + 0.1); }
+      const n = noise(), hp = filt('highpass', 3500), g = gain(0); n.connect(hp); hp.connect(g); send(g, 0.3);
+      hp.frequency.setValueAtTime(3500, t); hp.frequency.exponentialRampToValueAtTime(9000, t + 0.25); env(g, t, 0.008, v * 0.35, 0.28); n.start(t); n.stop(t + 0.4);
+    },
+    // a deep boom (the title blown out into the trailer's black): a sub falling 95 to 34 Hz, a dark thump of noise on it
+    boom({ gain: v = 0.55, at = 0 } = {}) {
+      const t = now() + at, o = osc('sine', 95), g = gain(0); o.connect(g); o.frequency.setValueAtTime(95, t); o.frequency.exponentialRampToValueAtTime(34, t + 0.7);
+      env(g, t, 0.008, v, 0.9); o.start(t); o.stop(t + 1.1);
+      const n = noise(brownBuf), lp = filt('lowpass', 260), ng = gain(0); n.connect(lp); lp.connect(ng); send(ng, 0.3); env(ng, t, 0.005, v * 0.9, 0.45); n.start(t); n.stop(t + 0.7);
+    },
     // a short hit (a cut, a caption)
     hit({ gain: v = 0.25 } = {}) {
       const t = now(), o = osc('sine', 90), g = gain(0); o.connect(g); o.frequency.exponentialRampToValueAtTime(45, t + 0.25); env(g, t, 0.005, v, 0.35); o.start(t); o.stop(t + 0.5);

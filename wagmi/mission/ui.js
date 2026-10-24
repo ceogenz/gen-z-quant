@@ -55,13 +55,70 @@ body.wg-hidehint #hud-controls-hint { opacity: 0 !important; }
 
 .wg-gtitle { position: absolute; left: 0; right: 0; top: 20%; text-align: center; opacity: 0; transform: scale(1.04); transition: opacity 1.2s, transform 7s cubic-bezier(.1,.6,.2,1); z-index: 3; pointer-events: none; }
 .wg-gtitle.on { opacity: 1; transform: scale(1); }
-.wg-gtitle.now, .wg-gtitle.now .rule { transition: none; }
-.wg-gtitle .logo { font: italic 800 clamp(52px, 10vw, 136px)/0.9 'Barlow Condensed', system-ui; letter-spacing: 1px; white-space: nowrap; text-shadow: 0 6px 30px rgba(0,0,0,.55), 0 2px 4px rgba(0,0,0,.4); }
+.wg-gtitle.now { transition: none; }
+.wg-gtitle .logo { position: relative; font: italic 800 clamp(52px, 10vw, 136px)/0.9 'Barlow Condensed', system-ui; letter-spacing: 1px; white-space: nowrap; }
 .wg-gtitle .logo b { color: #FFC93C; font-weight: 800; }
 .wg-gtitle .tag { display: inline-block; margin-top: 12px; padding: 7px 18px 6px; font: 700 clamp(13px, 1.5vw, 19px)/1 'Barlow Condensed'; letter-spacing: clamp(3px, .5vw, 6px); text-transform: uppercase; color: #fff;
   background: radial-gradient(closest-side, rgba(6,8,12,.62), rgba(6,8,12,.38) 70%, rgba(6,8,12,0)); text-shadow: 0 1px 3px rgba(0,0,0,.8); }
-.wg-gtitle .rule { width: 140px; height: 3px; background: #FFC93C; margin: 14px auto 0; transform: scaleX(0); transition: transform 1.2s .4s cubic-bezier(.2,.7,.2,1); }
-.wg-gtitle.on .rule { transform: scaleX(1); }
+.wg-gtitle .rule { width: 140px; height: 3px; background: #FFC93C; margin: 14px auto 0; }
+/* (the lockup letter by letter, as index.html's instant title draws it (#wg-boot, where it is told): the same boxes,
+   kerning, shadow layer and glint, and the same arrival under .on (wgG_* here, its wgT_*). Over the instant title the
+   gate's takes the boot's clock (gate(): syncTitle), so it neither jumps nor plays twice; without it, it arrives as the
+   title did. .punch: a start (the logo punched, the glint across QUANT). .out: blown out toward the lens over the
+   trailer's black (gameTitle), above it, in under 0.5 s) */
+.wg-gtitle .logo::before { content: attr(data-t); content: attr(data-t) / ""; position: absolute; left: 0; right: 0; top: 0; color: transparent; text-shadow: 0 6px 30px rgba(0,0,0,.55), 0 2px 4px rgba(0,0,0,.4); }
+.wg-gtitle .logo span, .wg-gtitle .logo b, .wg-gtitle .tag, .wg-gtitle .tag span { display: inline-block; position: relative; }
+.wg-gtitle .logo .k { margin-left: -.0171em; } .wg-gtitle .tag .k { margin-left: -.007em; }
+.wg-gtitle .logo .g { position: absolute; left: 0; top: -.25em; width: .75em; height: 1.4em; overflow: hidden; font-style: inherit; transform-origin: 0 0; transform: translateX(-.9em) skewX(-18deg); transition: opacity .08s .03s;
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 42%, #000 58%, transparent); mask-image: linear-gradient(90deg, transparent, #000 42%, #000 58%, transparent); }
+.wg-gtitle .logo .g > i { position: absolute; left: 0; top: 0; padding-top: .25em; font-style: inherit; transform-origin: 0 0; transform: skewX(18deg) translateX(.9em); color: #FFF6DC; text-shadow: 0 0 .12em rgba(255,214,120,.85); }
+.wg-gtitle.on .logo::before { animation: wgG_fade .5s .42s backwards; }
+.wg-gtitle.on .logo > span { animation: wgG_slam .38s calc((var(--x) + 5) * 60ms) backwards; }
+.wg-gtitle.on .logo > b { transform-origin: 10% 58%; animation: wgG_land .46s .3s backwards; }
+.wg-gtitle.on .logo .g { animation: wgG_glint 4.6s .6s infinite both; } .wg-gtitle.on .logo .g > i { animation: wgG_glintIn 4.6s .6s infinite both; }
+.wg-gtitle.on .rule { animation: wgG_rule .52s .52s cubic-bezier(.2,.7,.2,1) backwards; }
+.wg-gtitle.on .tag { animation: wgG_fade .5s .64s backwards; }
+.wg-gtitle.on .tag > span { animation: wgG_track .7s .64s cubic-bezier(.16,.7,.2,1) backwards; }
+.wg-gtitle.punch .logo { animation: wgG_punch .36s backwards; }
+.wg-gtitle.punch .logo .g { animation: wgG_shing .5s cubic-bezier(.4,0,.25,1) backwards; } .wg-gtitle.punch .logo .g > i { animation: wgG_shingIn .5s cubic-bezier(.4,0,.25,1) backwards; }
+html.wg-t:not(.wg-type) .wg-gtitle, html.wg-t:not(.wg-type) .wg-gtitle *, html.wg-t:not(.wg-type) .wg-gtitle .logo::before, html.wg-t:not(.wg-type) .wg-gate .go > span, html.wg-t:not(.wg-type) .wg-gate .fine { animation-play-state: paused !important; }
+.wg-gtitle.out { opacity: 1; transform: none; transition: none; z-index: 5; }
+/* (one push through the lens: the whole logo drawn toward the camera (x1.15, from the first frame, gathering speed) and
+   each letter in it pushed out from the middle as far as it grows, as a camera moving through the word would: a letter
+   --x from the middle is about .44em of its own from it, so x2.4 is .62em a step further out; the outer ones a hair
+   first (12 ms a step), so none overtakes its neighbour on the way out and the word goes as one. The logo's own punch
+   gives way to the push) */
+.wg-gtitle.out .logo { animation: wgG_push .46s cubic-bezier(.5,0,.8,.4) both; }
+.wg-gtitle.out .logo > span, .wg-gtitle.out .logo > b > span { animation: wgG_out .3s calc(60ms + (5 - max(var(--x), var(--x) * -1)) * 12ms) cubic-bezier(.5,0,.75,.3) both; }
+.wg-gtitle.out .tag > span { animation: wgG_out2 .26s calc(60ms + (9 - max(var(--x), var(--x) * -1)) * 8ms) cubic-bezier(.5,0,.75,.3) both; }
+.wg-gtitle.out .tag, .wg-gtitle.out .logo::before { animation: wgG_gone .22s .06s both; }
+.wg-gtitle.out .rule { animation: wgG_shut .16s .04s cubic-bezier(.6,0,.9,.5) both; }
+.wg-gtitle.out .logo .g { opacity: 0; }
+@keyframes wgG_fade { from { opacity: 0; } }
+@keyframes wgG_slam { 0% { opacity: 0; transform: scale(1.34); animation-timing-function: cubic-bezier(.2,.6,.35,1); } 30% { opacity: 1; } 60% { transform: scale(.982); animation-timing-function: cubic-bezier(.4,0,.4,1); } 100% { opacity: 1; transform: none; } }
+@keyframes wgG_land { 0% { opacity: 0; transform: scale(1.45); animation-timing-function: cubic-bezier(.2,.6,.3,1); } 28% { opacity: 1; } 62% { transform: scale(.975); animation-timing-function: cubic-bezier(.4,0,.4,1); } 100% { opacity: 1; transform: none; } }
+@media (max-width: 340px) { .wg-gtitle.on .logo > b { animation-name: wgG_landN; } }
+@keyframes wgG_landN { 0% { opacity: 0; transform: scale(1.2); animation-timing-function: cubic-bezier(.2,.6,.3,1); } 28% { opacity: 1; } 62% { transform: scale(.975); animation-timing-function: cubic-bezier(.4,0,.4,1); } 100% { opacity: 1; transform: none; } }
+@keyframes wgG_rule { from { transform: scaleX(0); } }
+@keyframes wgG_track { 0% { opacity: 0; transform: translateX(calc(var(--x) * .3em)); } 55% { opacity: 1; } 100% { opacity: 1; transform: none; } }
+@keyframes wgG_glint { 0% { transform: translateX(-.9em) skewX(-18deg); animation-timing-function: cubic-bezier(.45,.05,.35,1); } 13%, 100% { transform: translateX(3.3em) skewX(-18deg); } }
+@keyframes wgG_glintIn { 0% { transform: skewX(18deg) translateX(.9em); animation-timing-function: cubic-bezier(.45,.05,.35,1); } 13%, 100% { transform: skewX(18deg) translateX(-3.3em); } }
+@keyframes wgG_shing { from { transform: translateX(-.9em) skewX(-18deg); } to { transform: translateX(3.3em) skewX(-18deg); } }
+@keyframes wgG_shingIn { from { transform: skewX(18deg) translateX(.9em); } to { transform: skewX(18deg) translateX(-3.3em); } }
+@keyframes wgG_punch { 0% { transform: none; animation-timing-function: cubic-bezier(.2,.8,.3,1); } 24% { transform: scale(1.065); animation-timing-function: cubic-bezier(.4,0,.3,1); } 100% { transform: none; } }
+@keyframes wgG_push { to { transform: scale(1.15); } }
+@keyframes wgG_out { to { opacity: 0; transform: translateX(calc(var(--x) * .62em)) scale(2.4); } }
+@keyframes wgG_out2 { to { opacity: 0; transform: translateX(calc(var(--x) * .66em)) scale(1.8); } }
+@keyframes wgG_gone { to { opacity: 0; } }
+@keyframes wgG_shut { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+/* (asked for less motion: the lockup only faded in and out, the line after it; no glint, no punch; the fades' own
+   durations kept against css/style.css's every-animation-to-0.01ms) */
+@media (prefers-reduced-motion: reduce) {
+  .wg-gtitle.on { animation: wgG_fade .7s backwards; animation-duration: .7s !important; }
+  .wg-gtitle *, .wg-gtitle .logo::before { animation: none !important; }
+  .wg-gtitle .logo .g { display: none; }
+  .wg-gtitle.out { animation: wgG_gone .3s both; animation-duration: .3s !important; }
+}
 
 .wg-title { position: absolute; left: 0; right: 0; top: 64%; transform: translateY(-50%); text-align: center; z-index: 3; }
 .wg-title .act { font: 700 18px/1 'Barlow Condensed'; letter-spacing: 3px; color: #FFC93C; text-transform: uppercase; opacity: 0; transform: translateY(8px); transition: opacity .4s, transform .5s; }
@@ -246,6 +303,11 @@ body.wg-rekt #canvas-container { filter: grayscale(.85) contrast(1.05); transiti
 /* (taking over from the instant title, index.html: at once, no fade; started before the city is ready: 'Starting…', calm) */
 .wg-gate.now { transition: none; }
 .wg-gate.wait .go { animation: none; opacity: .9; }
+/* (its line and small print faded up after the lockup has arrived, as the instant title's: on its clock, gate()) */
+.wg-gate.on .go > span, .wg-gate.on .fine { animation: wgG_fade .45s 1.15s backwards; }
+@media (prefers-reduced-motion: reduce) { .wg-gate.on .go > span, .wg-gate.on .fine { animation: wgG_fade .5s .5s backwards; animation-duration: .5s !important; } }
+/* (once it is in, a line shown again (a pad picked up or put down) is shown at once, not faded in from the start) */
+.wg-gate.in .go > span, .wg-gate.in .fine { animation: none; }
 
 /* the objective tracker: over the street signs and the radar (the city's HUD column, so it goes with it in a cutscene);
    [B] opens it into the brief: the objective, the last lines said, the last help */
@@ -366,7 +428,29 @@ export function createUI() {
     <div class="hd"><span class="nm">UNKNOWN</span><small>VIDEO CALL · <span class="clock">00:07</span></small><small class="vc">VOICE CHANGER ON</small></div><div class="rec">● LIVE</div><div class="wave">${'<i></i>'.repeat(16)}</div>`);
   const barT = el('wg-bar top'), barB = el('wg-bar bot');
   const fadeEl = el('wg-fade');
-  const gTitle = el('wg-gtitle', `<div class="logo">GEN Z <b>QUANT</b></div><div class="rule"></div><div class="tag">Unfinished Business</div>`);
+  // (the lockup's letters, a box each, as index.html's instant title has them: --x a letter's place from the middle, .k
+  // the two pairs the face kerns (U-A, U-N), .g QUANT's glint)
+  const LET = (s, x0, k = []) => [...s].map((c, i) => (c === ' ' ? ' ' : `<span${k.includes(i) ? ' class="k"' : ''} style="--x:${x0 + i}">${c}</span>`)).join('');
+  // (read once, as the name: role img with its name for a label, its letters (a box each) and shadow layer not read)
+  const gTitle = el('wg-gtitle', `<div class="logo" aria-hidden="true" data-t="GEN Z QUANT">${LET('GEN Z', -5)} <b>${LET('QUANT', 1, [2])}<i class="g" aria-hidden="true"><i>${[...'QUANT'].map((c, i) => `<span${i === 2 ? ' class="k"' : ''}>${c}</span>`).join('')}</i></i></b></div><div class="rule"></div><div class="tag" aria-hidden="true">${LET('Unfinished Business', -9, [1])}</div>`);
+  gTitle.setAttribute('role', 'img'); gTitle.setAttribute('aria-label', 'GEN Z QUANT: Unfinished Business');
+  // (the instant title's lettering clock onto the gate's, by name (index.html's wgT_x, here wgG_x): its arrival, and a
+  // punch it took, mid-way or done, so the gate's takes its place without a jump or a second arrival. Its arrival's parts
+  // all start together (S): one done and gone (they don't hold their last frame, so the settled title paints as one) takes
+  // S too; none of it left, the gate's are finished. Still held for its type (paused): left alone, both go on together)
+  const syncTitle = (from, ...to) => {
+    const st = {}, src = from?.getAnimations?.({ subtree: true }).filter((a) => (a.animationName || '').startsWith('wgT_')) || [];
+    if (src.some((a) => a.playState === 'paused')) return;
+    let S = null;
+    for (const a of src) { const k = a.animationName.slice(4); if (a.startTime == null) continue; if (st[k] == null) st[k] = a.startTime; if (S == null && !/^(punch|shing)/.test(k)) S = a.startTime; }
+    for (const e of to) for (const a of e.getAnimations({ subtree: true })) {
+      const n = a.animationName || ''; if (!n.startsWith('wgG_')) continue;
+      const s = st[n.slice(4)] ?? S; if (s != null) a.startTime = s; else if (a.effect?.getTiming().iterations !== Infinity) a.finish();
+    }
+  };
+  // (armed by a start on the gate: the next take-down at once (the trailer's black over it, trailer.js cover()) blows the
+  // lettering out instead of cutting it)
+  let blowOut = false;
   const titleEl = el('wg-title', `<div class="act"></div><div class="name"></div>`);
   const placeEl = el('wg-place', `<div class="n"></div><div class="s"></div>`);
   const capEl = el('wg-cap', `<div class="n"></div><div class="r"></div>`);
@@ -450,7 +534,20 @@ export function createUI() {
     // (never quite black: a canvas the browser stops drawing under an opaque cover costs a long frame to bring back)
     fade(to = 1, secs = 0.6) { fadeEl.style.transition = `opacity ${secs}s`; fadeEl.style.opacity = String(Math.min(to, 0.985)); return sleep(secs * 1000); },
     // (now: at once, no fade: a skip mustn't leave it over the game)
-    gameTitle(on, now = false) { gTitle.classList.toggle('now', !!now); gTitle.classList.toggle('on', !!on); if (now) { void gTitle.offsetWidth; gTitle.classList.remove('now'); } },
+    // (the first time at once after a start on the gate: the letters blown out toward the lens over the trailer's black,
+    // staggered from the edges in, the rule snapped shut, a whoosh and a deep boom, done in 0.5 s; .on goes at once, nothing
+    // waits on it, and a second take-down meanwhile leaves it to finish)
+    gameTitle(on, now = false) {
+      if (!on && gTitle.classList.contains('out')) return;
+      if (!on && now && blowOut && gTitle.classList.contains('on')) {
+        blowOut = false; gTitle.classList.remove('on'); gTitle.classList.add('out');
+        const S = window.WAGMI?.sfx; try { S?.play('whoosh', { gain: 0.4, dur: 0.5 }); S?.play('boom', { gain: 0.32, at: 0.1 }); } catch {}
+        setTimeout(() => { gTitle.classList.add('now'); gTitle.classList.remove('out', 'punch'); void gTitle.offsetWidth; gTitle.classList.remove('now'); }, 520);
+        return;
+      }
+      blowOut = false; gTitle.classList.remove('out');
+      gTitle.classList.toggle('now', !!now); gTitle.classList.toggle('on', !!on); if (now) { void gTitle.offsetWidth; gTitle.classList.remove('now'); }
+    },
     bootOff() { const b = document.getElementById('wg-boot'); if (!b) return; b.classList.add('off'); setTimeout(() => b.remove(), 900); },
     title(act, name, hold = 2.6) {
       titleEl.querySelector('.act').textContent = act || ''; titleEl.querySelector('.name').textContent = name || '';
@@ -649,7 +746,7 @@ export function createUI() {
       document.body.classList.add('wg-gating');
       const touch = matchMedia('(pointer: coarse)').matches;
       // (with a game pad the last used: its A, wagmi/pad.js)
-      const g = el('wg-gate', `<div class="go">${touch ? 'Tap to start' : '<span class="wg-nopad">Click or press any key to start</span><span class="wg-padonly">Press <kbd data-pad="A">A</kbd> to start</span>'}</div><div class="fine">${esc(fine)}</div>`);
+      const g = el('wg-gate', `<div class="go">${touch ? '<span>Tap to start</span>' : '<span class="wg-nopad">Click or press any key to start</span><span class="wg-padonly">Press <kbd data-pad="A">A</kbd> to start</span>'}</div><div class="fine">${esc(fine)}</div>`);
       const goEl = g.querySelector('.go');
       const T = window.__wgTitle?.adopt?.() || null;
       // (its line blinks on the page's clock, as the title's does)
@@ -658,9 +755,11 @@ export function createUI() {
       let shown = false, live = !T;
       const show = () => {
         shown = true;
-        if (T) { g.classList.add('now'); gTitle.classList.add('now'); }
-        g.classList.add('on'); gTitle.classList.add('on');
-        if (T) { void g.offsetWidth; g.classList.remove('now'); gTitle.classList.remove('now'); T.handover(); } else ui.bootOff();
+        const boot = T && document.getElementById('wg-boot');
+        if (T) { g.classList.add('now'); gTitle.classList.add('now'); if (boot?.querySelector('.wg-boot-title.punch')) gTitle.classList.add('punch'); }
+        g.classList.add('on'); gTitle.classList.add('on'); setTimeout(() => g.classList.add('in'), 1700);
+        // (its lettering on the title's clock: where the title's arrival (or a punch) is, done or mid-way)
+        if (T) { try { syncTitle(boot, gTitle, g); } catch {} void g.offsetWidth; g.classList.remove('now'); gTitle.classList.remove('now'); T.handover(); } else ui.bootOff();
       };
       // (the still out over the live city, two frames on: the opening's camera the one drawn under it by then)
       const goLive = () => { if (live) return; live = true; requestAnimationFrame(() => requestAnimationFrame(() => T.live())); };
@@ -680,6 +779,7 @@ export function createUI() {
         });
         const begin = () => {
           try { onStart?.(); } catch (err) { console.warn(err); }
+          blowOut = true;
           document.body.classList.remove('wg-gating');
           if (isReady()) { release(); return; }
           waiting();
@@ -693,6 +793,12 @@ export function createUI() {
           e.stopImmediatePropagation(); if (e.type === 'keydown') e.preventDefault();
           for (const t of EVS) removeEventListener(t, go, true);
           begin();
+          // (the start seen and heard at once, in the tap, as on the instant title (index.html): the logo punched, a glint
+          // across QUANT, a low knock and a metal shing, the game's own (mission/audio.js), woken by onStart just now. The
+          // sound a task on: a start the city was ready for has blown the logo out by then (begin(), its microtasks), and
+          // that exit's whoosh and boom are the moment's, not a knock 0.1 s ahead of them and a shing with no glint)
+          gTitle.classList.remove('punch'); void gTitle.offsetWidth; gTitle.classList.add('punch');
+          setTimeout(() => { if (gTitle.classList.contains('out')) return; const S = window.WAGMI?.sfx; try { S?.play('thunk', { gain: 0.5, f: 58, ring: false }); S?.play('shing', { gain: 0.3 }); } catch {} }, 0);
         };
         if (T?.started) begin(); else for (const t of EVS) addEventListener(t, go, true);
       });
