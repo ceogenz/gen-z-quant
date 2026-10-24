@@ -351,6 +351,8 @@ function createMission(W, { keep = false } = {}) {
   const dist = (a, x, z) => Math.hypot(a.x - x, a.z - z);
   const inCar = () => cm.activeMode === 'car';
   const me = () => (inCar() ? car.position : P.position);
+  // (on his way: the car over 3 m/s, or on foot over 1.5: Juno's calls on the drives play however he goes)
+  const moving = () => (inCar() ? Math.abs(car.speed || 0) > 3 : Math.abs(P.speed || 0) > 1.5);
   // the lines: subtitles (their recorded voices play from them), held for their reading time or their voice, a mumble
   // where there is no voice; onLine(who, i) as each starts
   const VOICE = { Quant: 152, Juno: 212, Gears: 92, Fiona: 236, Wick: 112 };
@@ -554,7 +556,7 @@ function createMission(W, { keep = false } = {}) {
         if (!up && d < 900) { up = true; spawnRally().catch((e) => console.warn('[m3]', e)); }
         if (dist(me(), G_AT.x, G_AT.z) > 300) S.Gar.show(false);
         if (S.R?.shown) S.R.update(dt, app.cameraSystem.camera.position);
-        if (!called && inCar() && now() - t0 > 7000) { called = true; junoDrive(); }
+        if (!called && now() - t0 > 7000 && (moving() || now() - t0 > 10000)) { called = true; junoDrive(); }
       });
       // (there: by the arch, or stopped on 5th Ave's last stretch in front of it, or on foot near it)
       try { await wait(() => { const p = me(), d = dist(p, ARCH.x, ARCH.z); return d < 26 || ((d < 60 || at5th(p)) && (!inCar() || Math.abs(car.speed) < 6)); }); }
@@ -761,7 +763,7 @@ function createMission(W, { keep = false } = {}) {
           // the fight's ground (from past the fountain up 5th Ave to where the drive ended)
           const d = Math.min(dist(me(), ARENA.x, ARENA.z), dist(me(), FIFTH.x, FIFTH.z + 30));
           if (d > 160) fail('You left the fight.');
-          else if (d > 100 && !warned) { warned = true; ui.objective(['Get back to the ', { fight: 'yellow' }, '.']); }
+          else if (d > 100 && !warned) { warned = true; objective(['Get back to the ', { fight: 'yellow' }, '.'], { x: ARENA.x, z: ARENA.z, name: 'The fight · Washington Square' }); }
           else if (d < 90 && warned) { warned = false; go(); }
         });
         await wait(() => R.smashed >= 3);
@@ -849,7 +851,7 @@ function createMission(W, { keep = false } = {}) {
       const m = createMarker(THREE, app.scene, { color: '#FFC93C', radius: 2.4, height: 2.2, alpha: 0.3 });
       m.at(door.x, cm.getGroundHeight(door.x, door.z, 'person'), door.z);
       const t0 = now(); let called = false;
-      const off = hook(() => { drive.step(); if (!called && inCar() && now() - t0 > 8000) { called = true; junoReturn(); } });
+      const off = hook(() => { drive.step(); if (!called && now() - t0 > 8000 && (moving() || now() - t0 > 10000)) { called = true; junoReturn(); } });
       try { await wait(() => { const d = dist(me(), door.x, door.z); return inCar() ? d < 7 && Math.abs(car.speed) < 3 : d < 2.6; }); }
       finally { off(); drive.stop(); m.hide(); app.scene.remove(m.group); }
     },

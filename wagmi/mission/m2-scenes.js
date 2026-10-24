@@ -19,7 +19,8 @@ export const CRASH = { x: -341, z: 604, h: -2.35 };
 const V = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 
 // the shared runner: def = { END, shots: [{ t, cam(t, t0) -> { pos, look, fov, shake } }], cues: [[t, fn]], pose(t, dt),
-// cleanup(), quant: false (Quant left alone) }. END and the shots' t may change as it runs (a scene paced by its lines:
+// cleanup(), quant: false (Quant left alone), face: where he goes next, for the hand-back (cine.js release) }. END and the
+// shots' t may change as it runs (a scene paced by its lines:
 // a shot starts with its line, the end comes after the last one)
 export async function runScene(W, def) {
   const app = W.app, ui = W.ui, C = await getCast(W), D = createDirector(W), Q = W.quant;
@@ -51,7 +52,7 @@ export async function runScene(W, def) {
   try { def.cleanup?.(st); } catch (e) { console.warn('[m2] cleanup', e); }
   delete W.directed; delete W.sceneClock; D.onFrame = null;
   if (grade) grade.exposure.value = exp0;
-  const rel = D.release(skip ? 0.4 : def.blend ?? 1.2);
+  const rel = D.release(skip ? 0.4 : def.blend ?? 1.2, { face: def.face });
   ui.cine(false); W.cutscene = false;
   await rel;
   return st;
@@ -241,6 +242,8 @@ export async function burnerMeet(W, { U, say, van, at = J_AT }) {
   const def = {
     // (a touch brighter than the street's twilight grade while it plays: faces at a table, not cars under street lamps)
     END: Infinity, exposure: 1.16,
+    // (handed back facing his car: the next step needs it, and it waits at the park's curb, m2.js start)
+    face: () => W.car.position,
     shots: [
       // over the avenue at twilight: the park's trees, her at her table under the terrace by its lamp, Quant crossing to
       // her (from her left and a little higher than his head: he walks in from the right of the shot, never between it
@@ -351,6 +354,8 @@ export function crashScene(W, { levCar, lev, phone, say, at = CRASH }) {
   const lx = keys([[T.out, door[0]], [T.run, drop[0] + 0.4], [T.end, away[0]]], 'linear'), lz = keys([[T.out, door[1]], [T.run, drop[1] - 0.3], [T.end, away[1]]], 'linear');
   return {
     END: T.end, quant: false, drop,
+    // (handed back looking at where Lev's phone fell: the next step)
+    face: { x: drop[0], z: drop[1] },
     shots: [
       { t: 0, cam: (t) => ({ pos: keys([[0, [CX + 14, 2.4, CZ - 9]], [T.out, [CX + 12.5, 2.1, CZ - 8]]], 'linear')(t), look: [CX, 1.0, CZ], fov: 40, shake: 1.2 }) },
       { t: T.out, cam: () => ({ pos: [door[0] + 4.2, 1.5, door[1] + 2.4], look: [lx(T.out + 1), 1.2, lz(T.out + 1)], fov: 36, shake: 0.7 }) },

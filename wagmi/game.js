@@ -52,6 +52,7 @@ installDriveMode(WAGMI);
     rs.setThrust(keys.boost && throttle > 0 ? 1 : 0, keys.boost && throttle > 0 ? 0.85 : 0);
     rs.update(dt, car.speed, -steer * 0.9);
     alongWall(dt, throttle);
+    curbAssist(dt, steer);
     unpin(dt, throttle);
     stuckClock(dt, throttle);
   };
@@ -72,12 +73,13 @@ installDriveMode(WAGMI);
     }
     return true;
   };
-  // against a wall, nosing along it: the throttle (or reverse) held into a building at a slant, at a crawl, turns the
-  // car along the wall (the way it was already more facing, up to ~1.6 rad/s) and eases it off it, so it drives on
-  // along the wall instead of grinding into it; head on (within ~25 degrees) it is left to reverse
+  // against a wall, nosing along it: the throttle (or reverse) held into a building at a slant, up to 12 m/s, turns the
+  // car along the wall (the way it was already more facing, up to ~1.6 rad/s at a crawl, 0.9 over 6 m/s) and eases it
+  // off it, so it drives on along the wall instead of grinding into it; head on (within ~25 degrees) it is left to
+  // reverse
   const _wp = new THREE.Vector3();
   function alongWall(dt, throttle) {
-    if (!throttle || car.halt || Math.abs(car.speed) > 6 || cm.activeMode !== 'car') return;
+    if (!throttle || car.halt || Math.abs(car.speed) > 12 || cm.activeMode !== 'car') return;
     const dir = throttle > 0 ? 1 : -1, fx = Math.sin(car.heading) * dir, fz = Math.cos(car.heading) * dir;
     // (its box a little further the way it is pushed: where the buildings put it back from, the wall's normal)
     _wp.set(car.position.x + fx * 0.3, 0, car.position.z + fz * 0.3);
@@ -93,8 +95,39 @@ installDriveMode(WAGMI);
     // (the wall's way nearer the way it faces)
     let tx = -nz, tz = nx; if (tx * fx + tz * fz < 0) { tx = -tx; tz = -tz; }
     const want = Math.atan2(tx * dir, tz * dir), d = Math.atan2(Math.sin(want - car.heading), Math.cos(want - car.heading));
-    car.heading += Math.sign(d) * Math.min(Math.abs(d), 1.6 * dt);
+    car.heading += Math.sign(d) * Math.min(Math.abs(d), (Math.abs(car.speed) > 6 ? 0.9 : 1.6) * dt);
     car.vx += nx * 0.6 * dt * 10; car.vz += nz * 0.6 * dt * 10;
+  }
+  // up the curb by mistake: the front wheels up on the sidewalk, the back ones still on the road, the car nosing into
+  // the curb at under 30 degrees, at over 3 m/s, not steered that way: eased back off it (slid back toward the road and
+  // turned along the street, at up to 0.8 rad/s) for a beat. Steered up onto the sidewalk, or driven along it, it is left
+  // alone
+  const curb = { t: 0, ax: 0, side: 0, a0: 0 };
+  function curbAssist(dt, steer) {
+    if (car.halt || cm.activeMode !== 'car' || car.speed <= 3) { curb.t = 0; return; }
+    const fx = Math.sin(car.heading) * (car.axle || 1.45), fz = Math.cos(car.heading) * (car.axle || 1.45);
+    const up = cm.getGroundHeight(car.position.x + fx, car.position.z + fz, 'car') - cm.getGroundHeight(car.position.x - fx, car.position.z - fz, 'car');
+    if (up >= 0.1 && up <= 0.3) {
+      // (the street's way: the nearest lane's, either way along it)
+      let best = null;
+      for (const l of lanesNear(car.position.x, car.position.z, 12)) if (!best || l.d < best.d) best = l;
+      if (best) {
+        let ax = best.h; if (Math.abs(wrapA(car.heading - ax)) > Math.PI / 2) ax += Math.PI;
+        const a = wrapA(car.heading - ax);
+        // (steered into it: deliberate)
+        const into = steer * a > 0 && Math.abs(steer) > 0.15;
+        if (Math.abs(a) > 0.02 && Math.abs(a) < 0.52 && !into) Object.assign(curb, { t: 0.6, ax, side: Math.sign(a), a0: Math.max(curb.t > 0 ? curb.a0 : 0, Math.abs(a)) });
+      }
+    }
+    if (curb.t <= 0) return;
+    curb.t -= dt;
+    if (steer * curb.side > 0 && Math.abs(steer) > 0.15) { curb.t = 0; return; }
+    const a = wrapA(car.heading - curb.ax);
+    if (a * curb.side > 0) car.heading -= Math.sign(a) * Math.min(Math.abs(a), 0.8 * dt);
+    // (back toward the road: across the street's way, away from the curb's side)
+    const nx = -curb.side * Math.cos(curb.ax), nz = curb.side * Math.sin(curb.ax);
+    const want = 0.6 * Math.sin(curb.a0) * car.speed, have = car.vx * nx + car.vz * nz;
+    if (have < want) { const k = (want - have) * Math.min(1, dt * 10); car.vx += nx * k; car.vz += nz * k; }
   }
   // how long the car has been held going nowhere: the throttle or reverse on all along, and under 2.5 m from where it
   // was 1.5 s ago (a wriggle free that slides it a metre or two and back into the wall counts as nowhere); over 1.2 s,
@@ -141,7 +174,8 @@ installDriveMode(WAGMI);
         const t = Math.max(3, Math.min(e.len - 3, (x - ax) * e.dx + (z - az) * e.dz));
         if (e.len < 6) continue;
         const px = ax + e.dx * t, pz = az + e.dz * t, d = Math.hypot(px - x, pz - z);
-        if (d < R) out.push({ x: px, z: pz, h: Math.atan2(e.dx, e.dz), d, ux: e.dx, uz: e.dz, lo: 3 - t, hi: e.len - 3 - t });
+        // (bx, bz: the edge's own line there, the one the GPS route runs along)
+        if (d < R) out.push({ x: px, z: pz, h: Math.atan2(e.dx, e.dz), d, ux: e.dx, uz: e.dz, lo: 3 - t, hi: e.len - 3 - t, bx: e.sx + e.dx * t, bz: e.sz + e.dz * t });
       }
     }
     for (const lane of HW?.lanes || []) {
@@ -177,12 +211,77 @@ installDriveMode(WAGMI);
     }
     return true;
   }
+  // (nothing in its lane from 5 m behind it to 15 m ahead of it: the city's cars, the highways', the mission's, the
+  // chase's; a car in the next lane over doesn't count)
+  function laneClear(x, z, h) {
+    const B = car.body, ux = Math.sin(h), uz = Math.cos(h);
+    const list = (WAGMI.crash?.bodies?.(x + ux * 5, z + uz * 5, 17) || []).slice();
+    for (const P of WAGMI.pursuit?.chase?.cars || []) if (!P.gone) list.push([P.x, P.z, P.h, P.hw, P.hl]);
+    for (const [ox, oz, oy, ow, ol] of list) {
+      const dx = ox - x, dz = oz - z, a = dx * ux + dz * uz, s = Math.abs(dx * uz - dz * ux);
+      const c = Math.abs(Math.cos(oy - h)), sn = Math.abs(Math.sin(oy - h)), rw = ow * c + ol * sn, rl = ow * sn + ol * c;
+      if (s < B.hx + rw + 0.5 && a + rl > B.z0 - 5 && a - rl < B.z1 + 15) return false;
+    }
+    return true;
+  }
+  // the GPS route (WAGMI.gps.route, [x, z] points; the first is where he was) near (x, z): how far off it that is, d, and
+  // its heading, h: on along it `ahead` m from its nearest point (0: the stretch it is on); null with no route
+  function routeAt(x, z, ahead = 0) {
+    const r = WAGMI.gps?.route;
+    if (!r || r.length < 2) return null;
+    let bi = -1, bk = 0, bd = Infinity;
+    for (let i = r.length > 2 ? 2 : 1; i < r.length; i++) {
+      const [ax, az] = r[i - 1], [bx, bz] = r[i], dx = bx - ax, dz = bz - az, L = dx * dx + dz * dz;
+      if (L < 0.25) continue;
+      const k = Math.max(0, Math.min(1, ((x - ax) * dx + (z - az) * dz) / L)), d = Math.hypot(ax + dx * k - x, az + dz * k - z);
+      if (d < bd) { bd = d; bi = i; bk = k; }
+    }
+    if (bi < 0) return null;
+    const [ax, az] = r[bi - 1], [bx, bz] = r[bi], px = ax + (bx - ax) * bk, pz = az + (bz - az) * bk;
+    let qx = px, qz = pz, left = ahead;
+    for (let i = bi; i < r.length && left > 0; i++) {
+      const L = Math.hypot(r[i][0] - qx, r[i][1] - qz);
+      if (L >= left) { qx += (r[i][0] - qx) / L * left; qz += (r[i][1] - qz) / L * left; left = 0; } else { left -= L; qx = r[i][0]; qz = r[i][1]; }
+    }
+    const h = Math.hypot(qx - px, qz - pz) > 2 ? Math.atan2(qx - px, qz - pz) : Math.atan2(bx - ax, bz - az);
+    return { d: bd, h };
+  }
+  // X: the lane to put it on faces the way the GPS goes (the route's way 15 m on from where it passes the car; no route,
+  // or the car 40 m or more off it, the way the car faces), on the route or near it, never in a junction (7 m or more
+  // inside its lane's ends), with its lane clear 15 m ahead; none of those within 300 m, the old rule: the nearest lane
+  // the car more or less faces along, with room for it. Either way the traffic round it is held back a moment
   function recoverCar() {
     if (WAGMI.cutscene || WAGMI.directed || WAGMI.ride?.phase) return false;
     const x = car.position.x, z = car.position.z;
+    const near = routeAt(x, z, 15), routed = !!(near && near.d < 40), ref = routed ? near.h : car.heading;
     for (const R of [45, 120, 300]) {
       const cands = lanesNear(x, z, R);
-      // (nearest first; a lane facing well away from the way it faces counts as further)
+      // (nearest first; a lane facing away from the way to go counts as further, and one off the route too)
+      for (const c of cands) {
+        let want = ref, on = false;
+        if (routed) {
+          const a = routeAt(c.x, c.z), b = c.bx != null ? routeAt(c.bx, c.bz) : null;
+          on = !!(a && (a.d < 6 || (b && b.d < 3)));
+          if (on) want = (b && b.d < a.d ? b : a).h;
+        }
+        c.dh = wrapA(c.h - want);
+        c.score = c.d + 30 * (c.dh / Math.PI) ** 2 + (routed && !on ? 15 : 0);
+      }
+      cands.sort((a, b) => a.score - b.score);
+      for (const c of cands.slice(0, 24)) {
+        if (routed && Math.abs(c.dh) > Math.PI / 3) continue;
+        for (const k of [0, 5, -5, 10, -10, 16, -16, 24, -24]) {
+          if (k < c.lo + 7 || k > c.hi - 7) continue;
+          const px = c.x + c.ux * k, pz = c.z + c.uz * k;
+          if (cm.getGroundHeight(px, pz, 'car') > 0.3 || !boxClear(px, pz, c.h) || !carsClear(px, pz, c.h) || !laneClear(px, pz, c.h)) continue;
+          place(px, pz, c.h); held(px, pz, c.h);
+          return true;
+        }
+      }
+    }
+    // (the old rule)
+    for (const R of [45, 120, 300]) {
+      const cands = lanesNear(x, z, R);
       for (const c of cands) c.score = c.d + 9 * (wrapA(c.h - car.heading) / Math.PI) ** 2;
       cands.sort((a, b) => a.score - b.score);
       for (const c of cands.slice(0, 24)) {
@@ -190,13 +289,31 @@ installDriveMode(WAGMI);
           if (k < c.lo || k > c.hi) continue;
           const px = c.x + c.ux * k, pz = c.z + c.uz * k;
           if (cm.getGroundHeight(px, pz, 'car') > 0.3 || !boxClear(px, pz, c.h) || !carsClear(px, pz, c.h)) continue;
-          place(px, pz, c.h);
+          place(px, pz, c.h); held(px, pz, c.h);
           return true;
         }
       }
     }
     return false;
   }
+  // (the city's cars hold back a moment round the car just put down: a blocker of TS.blockers, as the chase's cars are,
+  // riding with it for HOLD s; and the route planned afresh from its new way)
+  const HOLD = 1.5, hold = { b: null, until: 0 };
+  function held(x, z, h) {
+    if (cm.activeMode === 'car') WAGMI.gps?.update?.(true);
+    if (!Array.isArray(TS?.blockers)) return;
+    if (!hold.b) hold.b = { x, z, yaw: h, halfW: car.body.hx + 0.3, halfL: (car.body.z1 - car.body.z0) / 2 + 2, vx: 0, vz: 0 };
+    Object.assign(hold.b, { x, z, yaw: h, vx: 0, vz: 0 });
+    if (!TS.blockers.includes(hold.b)) TS.blockers.push(hold.b);
+    hold.until = performance.now() + HOLD * 1000;
+  }
+  WAGMI.resetHold = () => {
+    const b = hold.b; if (!b || !TS?.blockers) return;
+    const k = TS.blockers.indexOf(b);
+    if (performance.now() > hold.until) { if (k >= 0) TS.blockers.splice(k, 1); return; }
+    const s = Math.sin(car.heading), c = Math.cos(car.heading), v = car.speed || 0;
+    Object.assign(b, { x: car.position.x, z: car.position.z, yaw: car.heading, vx: s * v + (car.vx || 0), vz: c * v + (car.vz || 0) });
+  };
   function place(x, z, h) {
     const driving = cm.activeMode === 'car';
     // (the camera snapped to its usual place behind it, not glided from where it was: wedged by a wall or a bus, that
@@ -214,6 +331,18 @@ installDriveMode(WAGMI);
     WAGMI.ui?.offer?.(null);
   }
   WAGMI.recoverCar = Object.assign(recoverCar, { key: 'KeyX' });
+  // stopped (under 5 m/s) facing more than 120 degrees off the GPS route's way, WRONG s on end: the prompt offers the
+  // reset (a phone's RESET CAR, the pad's B). WAGMI.carWrongWay(dt) (the prompt's tick) is how long it has been
+  const WRONG = 1.5, wrong = { t: 0 };
+  WAGMI.carWrongWay = (dt) => {
+    let off = false;
+    if (cm.activeMode === 'car' && !car.halt && Math.abs(car.speed) < 5) {
+      const r = routeAt(car.position.x, car.position.z, 15);
+      off = !!(r && r.d < 40 && Math.abs(wrapA(car.heading - r.h)) > (2 * Math.PI) / 3);
+    }
+    wrong.t = off ? wrong.t + dt : 0;
+    return wrong.t >= WRONG ? wrong.t : 0;
+  };
   // (parked, it still settles its thrust; rolling on with nobody in it, its wheels still turn)
   WAGMI.carIdle = (dt) => { if (cm.activeMode !== 'car') { rs.setThrust(0, 0); rs.update(dt, car.speed || 0, 0); } };
   // parked, it is solid to Quant on foot (the city's collision only knows the buildings): its body a box in its own frame
@@ -867,8 +996,10 @@ let last = performance.now();
 (function tick() {
   const now = performance.now(), dt = Math.min(0.05, (now - last) / 1000); last = now;
   WAGMI.carIdle(dt);
-  // (held going nowhere a beat in the car: the reset offered first)
-  const pinned = cm.activeMode === 'car' && (WAGMI.carStuck?.() || 0) > 1.2;
+  WAGMI.resetHold();
+  // (held going nowhere a beat in the car, or stopped facing the wrong way: the reset offered first)
+  const wrongWay = WAGMI.carWrongWay(ride.phase || WAGMI.paused || WAGMI.cutscene || WAGMI.directed ? 0 : dt) > 0;
+  const pinned = cm.activeMode === 'car' && ((WAGMI.carStuck?.() || 0) > 1.2 || wrongWay);
   const show = ride.phase || WAGMI.paused || WAGMI.cutscene || WAGMI.directed ? '' : cm.activeMode === 'person' && near() ? 'F  ·  Get in'
     : pinned ? 'X  ·  Reset car to road' : cm.activeMode === 'car' && Math.abs(car.speed) < 4 ? 'F  ·  Get out' : '';
   // (the key in a key cap that reads as plain text, so a game pad's button can stand in for it: wagmi/pad.js; what is

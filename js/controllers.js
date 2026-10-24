@@ -1336,6 +1336,7 @@ class ThirdPersonControllerManager {
     let steerInput = 0;
     if (this.keys.left) steerInput = this.keys.left;
     if (this.keys.right) steerInput = -this.keys.right;
+    const steerHeld = +steerInput; // (the player's steer as held: a key, the touch stick or the pad's stick, analog)
 
     // (Gen Z Quant: a car with its own handling, c.handling, steers for a keyboard: see steerHandled)
     let yawFull = 0;
@@ -1354,7 +1355,10 @@ class ThirdPersonControllerManager {
     // Integrate collision yaw spin & lateral tire slip velocity with asphalt grip damping
     const tireGripDamp = Math.exp(-dt * 6.8);
     c.heading += c.angularVel * dt;
-    c.angularVel *= Math.exp(-dt * 7.8);
+    // (Gen Z Quant: steering against a knock's spin catches it about twice as fast; the spin stays the knock's alone,
+    // the steer only damps it)
+    const counter = Math.abs(steerHeld) > 0.2 && steerHeld * (c.speed < 0 ? -1 : 1) * c.angularVel < 0;
+    c.angularVel *= Math.exp(-dt * (counter ? 14 : 7.8));
 
     const prevX = c.position.x;
     const prevZ = c.position.z;

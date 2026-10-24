@@ -47,6 +47,7 @@ function near(px, pz, bx, bz, by, bw, bl, out) {
 export function createWrecks({ TS, cm, fx, play, props, camera }) {
   const vehicles = [...(TS.cars || []), ...(TS.buses || [])];
   const live = new Set();
+  const stats = { taken: 0, square: 0, backed: 0, away: 0, backing: 0, waiting: 0 }; // (handed back how, for a test)
   const frustum = new THREE.Frustum(), _pm = new THREE.Matrix4(), _s = new THREE.Sphere();
   let clock = 0;
   const seen = (x, z) => { _s.center.set(x, 0.8, z); _s.radius = 3; return frustum.intersectsSphere(_s); };
@@ -65,7 +66,7 @@ export function createWrecks({ TS, cm, fx, play, props, camera }) {
       R.vx = v.tx * v.speed + (v.vx || 0); R.vz = v.tz * v.speed + (v.vz || 0);
       v.vx = v.vz = 0; v.speed = 0; v.yawOffset = 0; v.yawVel = 0;
       v.wreck = step;
-      live.add(R);
+      live.add(R); stats.taken++;
     }
     R.vx = vx; R.vz = vz; R.w = Math.max(-6, Math.min(6, w)); R.still = 0;
     v.pitchVel += kick * rnd(-0.6, 0.2); v.rollVel += kick * rnd(-1, 1);
@@ -80,8 +81,9 @@ export function createWrecks({ TS, cm, fx, play, props, camera }) {
     if (v.wreck && v._wreck) { const R = v._wreck; R.vx += jx / m; R.vz += jz / m; R.w += tq; R.still = 0; return R; }
     // (the speed the blow gives it along its lane, + ahead, and across it)
     const al = (jx * v.tx + jz * v.tz) / m, ac = Math.abs(jx * v.tz - jz * v.tx) / m;
-    // (a bump from behind only shoves it on: a wreck from there takes a real rear-ending, 4.5 m/s given, ~7 closing)
-    if (wreckIt && !v.bus && (ac > 1.2 || al < 0 || al > 4.5)) { const R = take(v, v.tx * v.speed + v.vx + jx / m, v.tz * v.speed + v.vz + jz / m, tq * 1.2, dv); return R; }
+    // (a bump from behind only shoves it on: a wreck from there takes a real rear-ending, 4.5 m/s given, ~7 closing; a
+    // brush along its side or a nudge on its nose leaves it in its lane too: a wreck takes 2.5 m/s across it, or 1.5 back)
+    if (wreckIt && !v.bus && (ac > 2.5 || al < -1.5 || al > 4.5)) { const R = take(v, v.tx * v.speed + v.vx + jx / m, v.tz * v.speed + v.vz + jz / m, tq * 1.2, dv); return R; }
     // (along its lane the blow is its speed: shoved from behind it is carried on, up to its own pace, never slowed; hit
     // from ahead it loses what the blow took; across, the lane's knock, and its driver brakes only on a real side blow)
     v.vx += jx / m - v.tx * al; v.vz += jz / m - v.tz * al;
@@ -170,19 +172,52 @@ export function createWrecks({ TS, cm, fx, play, props, camera }) {
       play('horn', { pos: [R.x, 1, R.z], kind: hornKind(v), len: R.honks === 0 ? 'lean' : Math.random() < 0.5 ? 'long' : 'double', vol: 0.9 });
       R.honks++; R.honk = rnd(2.5, 5);
     }
-    // stopped a while: handed back to its lane if near enough to it, or once out of view
+    // stopped a while: handed back to its lane if near enough to it, or once out of view. (Where its lane has it, and
+    // which way: the lane's spot nearest it now, or as it was hit)
     R.still = sp < 0.3 && Math.abs(R.w) < 0.1 ? R.still + dt : 0;
     if (R.still > 5) {
-      const square = Math.abs(wrap(R.yaw - R.laneYaw)) < 0.6;
+      const L = TS.laneSpot ? TS.laneSpot(v, R.x, R.z) : null;
+      const gap = L ? Math.hypot(L.x - R.x, L.z - R.z) : 0, dy = wrap((L ? L.yaw : R.laneYaw) - R.yaw);
+      const square = Math.abs(dy) < 0.6 && gap < 2.4;
       const away = !seen(R.x, R.z) && Math.hypot(R.x - camera.position.x, R.z - camera.position.z) > 40;
-      if (square || away) {
+      if ((square && !(R.retry > R.t)) || away) {
         const close = TS.unwreck ? TS.unwreck(v, R.x, R.z, R.yaw) : false;
-        if (close || away) return drop(R);
-        // (not close after all: put back where it stood, and try again later)
-        v.x = R.x; v.z = R.z; v.yaw = R.yaw; v.yawOffset = 0; R.still = 0;
+        if (close || away) { stats[close ? (R.moved ? 'backed' : 'square') : 'away']++; return drop(R); }
+        // (not close after all: put back where it stood, and try again in a second)
+        v.x = R.x; v.z = R.z; v.yaw = R.yaw; v.yawOffset = 0; v.tx = Math.sin(R.yaw); v.tz = Math.cos(R.yaw); R.retry = R.t + 1;
       }
+      // (stood 8 s, in sight, turned across its lane or off it: its driver backs out, straightening up at 0.6 rad/s and
+      // over onto the lane at 1.2 m/s, waiting while that would take it into another vehicle; not one slid 12 m or more
+      // from its lane, which is left until it is out of view)
+      if (R.still > 8 && L && !square && gap < 12) backOut(R, v, L, dy, gap, hw, hl, dt);
     }
     return true;
+  }
+  function backOut(R, v, L, dy, gap, hw, hl, dt) {
+    const yaw = R.yaw + Math.sign(dy) * Math.min(Math.abs(dy), 0.6 * dt);
+    const k = gap > 0.8 ? Math.min(1, (1.2 * dt) / gap) : 0;
+    let x = R.x + (L.x - R.x) * k, z = R.z + (L.z - R.z) * k;
+    // (kept out of the buildings, as it slides)
+    proxy.heading = yaw; proxy.body.hx = hw; proxy.body.z0 = -hl; proxy.body.z1 = hl; proxy.vx = proxy.vz = 0; proxy.speed = 0;
+    _pos.set(x, 0, z); cm.resolveHorizontalCollision(_pos, 1.35, 1.0, proxy); x = _pos.x; z = _pos.z;
+    // (not into another vehicle, nor Quant's car: no deeper into one than it already is)
+    const deeper = (ox, oz, oy, ow, ol) => {
+      if (Math.abs(ox - x) > 9 || Math.abs(oz - z) > 9 || !boxes(x, z, yaw, hw, hl, ox, oz, oy, ow, ol, hit)) return false;
+      const pen = hit.pen;
+      return pen > 0.03 && (!boxes(R.x, R.z, R.yaw, hw, hl, ox, oz, oy, ow, ol, hit) || pen > hit.pen + 1e-3);
+    };
+    for (const o of vehicles) {
+      if (o === v || !o.edge) continue;
+      const [ow, ol] = dims(o);
+      if (deeper(o.x, o.z, o.wreck && o._wreck ? o._wreck.yaw : o.yaw + o.yawOffset, ow, ol)) { stats.waiting++; return; }
+    }
+    const Q = cm.entities.car, QB = Q && Q.body;
+    if (QB && Q.mesh && Q.mesh.visible) {
+      const qh = Q.heading, qcz = (QB.z1 + QB.z0) / 2;
+      if (deeper(Q.position.x + Math.sin(qh) * qcz, Q.position.z + Math.cos(qh) * qcz, qh, QB.hx, (QB.z1 - QB.z0) / 2)) { stats.waiting++; return; }
+    }
+    R.x = x; R.z = z; R.yaw = yaw; R.moved = true; stats.backing++;
+    v.x = x; v.z = z; v.yaw = yaw; v.tx = Math.sin(yaw); v.tz = Math.cos(yaw);
   }
   function drop(R) { live.delete(R); R.v._wreck = null; return false; }
   // the wreck as a mover for the furniture
@@ -196,5 +231,5 @@ export function createWrecks({ TS, cm, fx, play, props, camera }) {
     camera.updateMatrixWorld();
     _pm.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse); frustum.setFromProjectionMatrix(_pm);
   }
-  return { take, push, velOf, live, frame, vehicles };
+  return { take, push, velOf, live, frame, vehicles, stats };
 }

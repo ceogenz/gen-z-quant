@@ -2,7 +2,8 @@
 // (__NYC_APP.trafficSystem.network: lane edges joined by the turns the graph allows, so one-way streets are kept),
 // edge to edge, re-planned every second and whenever the player strays 25 m off it. The route (yellow on a dark casing),
 // the destination and the blips are drawn on the radar and the full map over the city's own layers, in place of its
-// L-shaped line (mapSystem.waypoint still names the destination). On foot and close (150 m) the route is a straight line.
+// L-shaped line (mapSystem.waypoint still names the destination). On foot and close (150 m) the route is a straight line;
+// on foot and further, a walking route (planWalk: junction to junction, a one-way street walked either way).
 // The rule (every mission, GTA's): the route always goes where the current objective says. An objective about the car
 // routes to the car, one about a place to the place, a fight has none.
 //   const gps = createGPS(W);  gps.set({ x, z, name });  gps.clear();
@@ -10,10 +11,13 @@
 //                         it, in one call: target a place { x, z, name } (its yellow blip too, unless blip: false), a thing
 //                         that moves { follow: () => ({ x, z }), name } (the route only), or null (no route)
 //   gps.to(target)        the route's target alone, the blips left as they are (same targets)
-//   gps.drive({ dest, objective, onFoot, grace }) -> { step(), stop(), state }   a 'drive there' objective: out of the
-//                         car on the way, after a grace of a few seconds, 'Get back in your car.' with the car blipped
-//                         and the route to it; within onFoot m of the place on foot, on to it on foot; back in the car,
-//                         the place again. step() every frame (from the mission's frame hook), stop() at the end.
+//   gps.drive({ dest, objective, onFoot, grace, needsCar }) -> { step(), stop(), state }   a 'get there' objective.
+//                         A place he can walk to (needsCar false, the default): out of the car the objective, the
+//                         place's blip and the route stay (a walking route), the car blipped once he's 25 m from it,
+//                         one help line that the car is quicker. A leg that needs the car (needsCar: a tail, a chase):
+//                         out of it, after a grace of a few seconds, 'Get back in your car.' with the car blipped and the
+//                         route to it; within onFoot m of the place on foot, on to it on foot; back in the car, the place
+//                         again. step() every frame (from the mission's frame hook), stop() at the end.
 //   gps.blip(id, { x, z, kind: 'dest' | 'car' | 'enemy' | 'friend' | 'object' | 'letter' | 'paw' | 'waypoint', letter,
 //                  pulse, edge, name });  gps.unblip(id);  gps.update() (every frame; the radar asks for it itself)
 //   gps.user              the player's own waypoint (a click on the full map, or its search's 'Set waypoint'): purple,
@@ -74,6 +78,96 @@ export function createGPS(W) {
     pts.push([to.x, to.z]);
     return pts;
   }
+  // the walking route: a man on foot walks a one-way street either way. The road graph's junctions are the nodes, every
+  // road between two an edge both ways (two junctions closer than 20 m are one corner: joined too); its ends are the
+  // nearest road to each point, left by either end. Built once, when an objective with a place to go first comes up
+  // (walkGraph(): not on a replan mid-walk), the roads bucketed into a 50 m grid so the nearest one is a few cells' look
+  const CELL = 50, cellOf = (x, z) => Math.floor(x / CELL) + ',' + Math.floor(z / CELL);
+  let walkG = null;
+  // (again: built afresh, to time it)
+  function walkGraph(again = false) {
+    if (walkG && !again) return walkG;
+    const t0 = performance.now(), adj = new Map(), grid = new Map(), roads = [], seen = new Set(), nodes = new Set();
+    const link = (a, b, w) => { for (const [p, q] of [[a, b], [b, a]]) { let l = adj.get(p); if (!l) adj.set(p, (l = [])); l.push([q, w]); } };
+    for (const e of edges) {
+      const a = e.from, b = e.to; if (!a || !b || a === b) continue;
+      const id = a.id ?? a.x + ',' + a.z, jd = b.id ?? b.x + ',' + b.z, k = id < jd ? id + '|' + jd : jd + '|' + id;
+      if (seen.has(k)) continue; seen.add(k);
+      const L = Math.hypot(b.x - a.x, b.z - a.z); if (L < 0.5) continue;
+      const r = { a, b, dx: (b.x - a.x) / L, dz: (b.z - a.z) / L, L };
+      roads.push(r); link(a, b, L); nodes.add(a); nodes.add(b);
+      const n = Math.max(1, Math.ceil(L / 20)), cells = new Set();
+      for (let i = 0; i <= n; i++) cells.add(cellOf(a.x + (b.x - a.x) * i / n, a.z + (b.z - a.z) * i / n));
+      for (const c of cells) { let l = grid.get(c); if (!l) grid.set(c, (l = [])); l.push(r); }
+    }
+    // (the same corner: a divided avenue's two carriageways, a stretch too short to be a traffic lane)
+    const ng = new Map();
+    for (const n of nodes) { const c = cellOf(n.x, n.z); let l = ng.get(c); if (!l) ng.set(c, (l = [])); l.push(n); }
+    for (const n of nodes) {
+      const cx = Math.floor(n.x / CELL), cz = Math.floor(n.z / CELL);
+      for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) for (const m of ng.get(cx + i + ',' + (cz + j)) || []) {
+        if (m === n) continue; const d = Math.hypot(m.x - n.x, m.z - n.z);
+        if (d < 20 && !(adj.get(n) || []).some(([q]) => q === m)) { let l = adj.get(n); if (!l) adj.set(n, (l = [])); l.push([m, d]); }
+      }
+    }
+    return (walkG = { adj, grid, roads, ms: performance.now() - t0 });
+  }
+  // the nearest road to (x, z): the grid's cells ring by ring, out until nothing nearer can be further out
+  function roadAt(G, x, z) {
+    const cx = Math.floor(x / CELL), cz = Math.floor(z / CELL);
+    let best = null, bd = Infinity;
+    const look = (r) => {
+      const s = Math.max(0, Math.min(r.L, (x - r.a.x) * r.dx + (z - r.a.z) * r.dz));
+      const d = Math.hypot(r.a.x + r.dx * s - x, r.a.z + r.dz * s - z);
+      if (d < bd) { bd = d; best = { r, s, d }; }
+    };
+    for (let ring = 0; ring <= 8; ring++) {
+      for (let i = -ring; i <= ring; i++) for (let j = -ring; j <= ring; j++) {
+        if (Math.max(Math.abs(i), Math.abs(j)) !== ring) continue;
+        for (const r of G.grid.get(cx + i + ',' + (cz + j)) || []) look(r);
+      }
+      if (best && bd <= ring * CELL) break;
+    }
+    if (!best) for (const r of G.roads) look(r);
+    return best;
+  }
+  // (a man on foot cuts across a park or a plaza: from each end, straight to the furthest of the next few corners he can
+  // walk to in a line, on land and clear of the buildings, 400 m at most)
+  const clear = (a, b) => {
+    const L = Math.hypot(b[0] - a[0], b[1] - a[1]); if (L > 400) return false;
+    for (let i = 1, n = Math.ceil(L / 5); i < n; i++) { const x = a[0] + (b[0] - a[0]) * i / n, z = a[1] + (b[1] - a[1]) * i / n; if (!net.walkable(x - 0.6, x + 0.6, z - 0.6, z + 0.6)) return false; }
+    return true;
+  };
+  function trim(pts) {
+    if (!net.walkable || pts.length < 4) return pts;
+    for (let j = Math.min(pts.length - 1, 8); j >= 2; j--) if (clear(pts[0], pts[j])) { pts = [pts[0], ...pts.slice(j)]; break; }
+    const n = pts.length;
+    for (let j = Math.max(0, n - 9); j <= n - 3; j++) if (clear(pts[j], pts[n - 1])) { pts = [...pts.slice(0, j + 1), pts[n - 1]]; break; }
+    return pts;
+  }
+  function planWalk(from, to) {
+    const G = walkGraph(), A = roadAt(G, from.x, from.z), B = roadAt(G, to.x, to.z);
+    if (!A || !B) return null;
+    const P = (q) => [q.r.a.x + q.r.dx * q.s, q.r.a.z + q.r.dz * q.s];
+    const [bx, bz] = P(B);
+    if (A.r === B.r) return trim([[from.x, from.z], P(A), [bx, bz], [to.x, to.z]]);
+    // (A*: off A's road by either end, onto B's road by either end; the straight line to B's point never overestimates)
+    const goal = new Map([[B.r.a, B.s], [B.r.b, B.r.L - B.s]]), h = (n) => Math.hypot(n.x - bx, n.z - bz);
+    const g = new Map(), came = new Map(), closed = new Set(), heap = [];
+    const push = (f, k) => { heap.push([f, k]); let i = heap.length - 1; while (i > 0) { const q = (i - 1) >> 1; if (heap[q][0] <= heap[i][0]) break; [heap[q], heap[i]] = [heap[i], heap[q]]; i = q; } };
+    const pop = () => { const top = heap[0], last = heap.pop(); if (heap.length) { heap[0] = last; let i = 0; for (;;) { const l = 2 * i + 1, r = l + 1; let m = i; if (l < heap.length && heap[l][0] < heap[m][0]) m = l; if (r < heap.length && heap[r][0] < heap[m][0]) m = r; if (m === i) break; [heap[m], heap[i]] = [heap[i], heap[m]]; i = m; } } return top; };
+    for (const [n, c] of [[A.r.a, A.s], [A.r.b, A.r.L - A.s]]) if (c < (g.get(n) ?? Infinity)) { g.set(n, c); push(c + h(n), n); }
+    let best = Infinity, end = null, k = 0;
+    while (heap.length && k++ < 40000) {
+      const [f, n] = pop(); if (f >= best) break; if (closed.has(n)) continue; closed.add(n);
+      const gn = g.get(n);
+      if (goal.has(n) && gn + goal.get(n) < best) { best = gn + goal.get(n); end = n; }
+      for (const [m, w] of G.adj.get(n) || []) { if (closed.has(m)) continue; const v = gn + w; if (v < (g.get(m) ?? Infinity)) { g.set(m, v); came.set(m, n); push(v + h(m), m); } }
+    }
+    if (!end) return null;
+    const pts = []; for (let n = end, i = 0; n && i < 5000; n = came.get(n), i++) pts.unshift([n.x, n.z]);
+    return trim([[from.x, from.z], P(A), ...pts, [bx, bz], [to.x, to.z]]);
+  }
   const offRoute = (x, z, pts) => {
     let best = Infinity;
     for (let i = pts.length > 2 ? 2 : 1; i < pts.length; i++) {
@@ -106,7 +200,7 @@ export function createGPS(W) {
   const target = () => gps.user || (gps.dest && (gps.dest.follow ? gps.dest.follow() : gps.dest)) || null;
   const named = (t) => (t ? { x: t.x, z: t.z, name: t.name || '' } : null);
   const gps = {
-    dest: null, user: null, route: null, length: 0, lastPlan: 0, waypoints: null, _to: null,
+    dest: null, user: null, route: null, length: 0, lastPlan: 0, waypoints: null, _to: null, _foot: null,
     // a destination; via: authored waypoints the route goes through in turn (shore highways are not in the graph)
     set(dest, via = null) { gps.to(dest); gps.waypoints = via; gps.blip('dest', { x: dest.x, z: dest.z, kind: 'dest', edge: true, name: dest.name }); },
     // the route's target alone (the objective changed: the player's own waypoint gives way to it)
@@ -116,6 +210,8 @@ export function createGPS(W) {
       if (!same) stall.reset(true);
       if (gps.user) { gps.user = null; ms.userWaypoint = null; gps.unblip('user'); }
       if (!t) { gps.length = 0; ms.waypoint = null; return; }
+      // (the walking graph built now, as a step starts, not on a replan as he walks: a phone mustn't stall mid-stride)
+      walkGraph();
       const p = t.follow ? t.follow() : t;
       ms.waypoint = p ? { x: p.x, z: p.z, name: t.name || '' } : null;
       gps.update(true);
@@ -151,22 +247,27 @@ export function createGPS(W) {
       if (!force) stall.step(!!gps.user || !!(gps.dest && (!gps.dest.follow || gps.dest.still)));
       // (a target on the move, a car he's chasing: planned again as it goes, a few times a second at most)
       const moved = gps._to && dist(t, gps._to) > 8 && t0 - gps.lastPlan > 350;
-      if (force || moved || !gps.route || t0 - gps.lastPlan > 1000 || offRoute(p.x, p.z, gps.route) > 25) {
-        gps.lastPlan = t0; gps._to = { x: t.x, z: t.z };
-        const foot = cm.activeMode !== 'car';
-        const r = foot && dist(p, t) < FOOT_LINE ? null : plan({ x: p.x, z: p.z }, t, foot ? null : ent.heading);
+      // (in or out of the car: planned again at once, the other way's route never kept: a walking route against a
+      // one-way street is no route for a car)
+      const foot = cm.activeMode !== 'car', swap = gps._foot !== foot;
+      if (force || moved || swap || !gps.route || t0 - gps.lastPlan > 1000 || offRoute(p.x, p.z, gps.route) > 25) {
+        gps.lastPlan = t0; gps._to = { x: t.x, z: t.z }; gps._foot = foot;
+        const r = foot && dist(p, t) < FOOT_LINE ? null : foot ? planWalk({ x: p.x, z: p.z }, t) : plan({ x: p.x, z: p.z }, t, ent.heading);
         // (still on the route it had, a new plan much longer is not taken: crossing a junction straight on, a cross
         // street's lane can look like the way he is going for a moment, and the line must not flick round a block)
-        const old = !force && !moved && r && gps.route && gps.route.length > 2 && offRoute(p.x, p.z, gps.route) < 10 ? onFrom(gps.route, p.x, p.z) : null;
+        const old = !force && !moved && !swap && r && gps.route && gps.route.length > 2 && offRoute(p.x, p.z, gps.route) < 10 ? onFrom(gps.route, p.x, p.z) : null;
         gps.route = old && lengthOf(r) > lengthOf(old) + 120 ? old : r || [[p.x, p.z], [t.x, t.z]];
         gps.length = lengthOf(gps.route);
       } else if (gps.route) { gps.route = onFrom(gps.route, p.x, p.z); gps.route[gps.route.length - 1] = [t.x, t.z]; gps.length = lengthOf(gps.route); }
     },
     // a 'drive there' objective, the GTA way (see the top)
-    drive({ dest, objective, back = ['Get back in your ', { car: 'blue' }, '.'], onFoot = 150, grace = 2.5 }) {
+    // needsCar: false (a place he can walk to: the objective, its blip and the route stay on the place on foot, the car
+    // only blipped while he's away from it, one help line framing the car as the quicker way); true (the leg needs the
+    // car: a tail, a chase): the old rule, 'Get back in your car.' after the grace, the route to it
+    drive({ dest, objective, back = ['Get back in your ', { car: 'blue' }, '.'], onFoot = 150, grace = 2.5, needsCar = false, hintFar = 400 }) {
       const car = W.car, ui = W.ui;
       const carTarget = { follow: () => car.position, name: car.label || "Quant's car" };
-      let state = 'drive', outAt = 0, live = true;
+      let state = 'drive', outAt = 0, live = true, hinted = false;
       const apply = (s) => {
         const was = state; state = s;
         // (between driving and walking the objective and the route stay as they are: a waypoint of his own too)
@@ -185,17 +286,25 @@ export function createGPS(W) {
           else {
             if (!outAt) outAt = t;
             const d = dist(p, dest);
-            if (state === 'walk' ? d < onFoot * 1.25 : d < onFoot) want = 'walk';
+            if (!needsCar) want = 'walk';
+            else if (state === 'walk' ? d < onFoot * 1.25 : d < onFoot) want = 'walk';
             else if (t - outAt > grace * 1000) want = 'back';
             else if (state === 'walk') want = 'back';
+            // (walking is fine; the car is the quicker way: said once a leg, far out, with the car close by. On a phone
+            // the [F] cap reads GET IN, the button that does it)
+            if (!needsCar && !hinted && t - outAt > 4000 && d > hintFar && dist(p, car.position) < 80) {
+              hinted = true; ui?.help(['On foot works too. Your ', { car: 'blue' }, ' is quicker: walk up to it and press [F].'], 7, { mode: 'foot' });
+            }
           }
           if (want !== state) apply(want);
-          if (state !== 'drive') gps.blip('car', { x: car.position.x, z: car.position.z, kind: 'car', edge: true, name: carTarget.name });
+          // (the car on the radar: always while he's asked back to it; walking, once he's 25 m from it)
+          if (state === 'back' || (state === 'walk' && dist(p, car.position) > 25)) gps.blip('car', { x: car.position.x, z: car.position.z, kind: 'car', edge: true, name: carTarget.name });
+          else gps.unblip('car');
         },
         stop() { live = false; gps.unblip('car'); },
       };
     },
-    plan,
+    plan, planWalk, walkGraph,
   };
   // the stall watch (see the top): headway is the route getting shorter; the time is play time (the clock stops in the
   // pause menu, and a cutscene starts it over)

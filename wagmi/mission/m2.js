@@ -325,6 +325,9 @@ function createMission(W, { keep = false } = {}) {
       const meet = SCENES.burnerMeet;
       const def = meet ? meet(W, { U, say, van: S.C.van, at: J_AT }) : burnerScene(W, { U, say, van: S.C.van });
       if (def && typeof def.then !== 'function') def.setup?.();
+      // (the next step needs his car: left far off (the J reached on foot), it waits at the park's curb before the scene
+      // draws, under the bars, so it never pops in and the scene's hand-back can face it; the curb hold below covers it)
+      if (!inCar() && dist(car.position, -303.5, J_AT.z + 9) > 60) place(W, { car: [-303.5, J_AT.z + 9, PI] });
       // (the street crowd kept off his stretch of the sidewalk, curb to terrace, Juno's table and the street-side cameras
       // west of it, and the curb by the van in Times Square for the cutaway, while it plays: nobody walks through its
       // close shots; the avenues' traffic is left be, but for the curb lane where his car stands. The traffic's hold
@@ -345,17 +348,23 @@ function createMission(W, { keep = false } = {}) {
       holds(TAIL_HOLDS);
       // the step's objective, as it stands: the drive, then (Times Square reached) the van; out of the car by the van,
       // back into it, and the step's own again once he is
-      const goObj = () => objective(['Go to ', { 'Times Square': 'yellow' }, '.'], { x: -589, z: -488, name: 'Times Square · 7th Ave & W 47th St' });
+      // (this leg needs the car: the tail after it is a car tail. On foot, at the step's start or out of it on the way, the
+      // car is asked for at once, with its route and its blip, and why; in it, the step's own objective)
+      const goObj = () => objective(['Drive to ', { 'Times Square': 'yellow' }, '.'], { x: -589, z: -488, name: 'Times Square · 7th Ave & W 47th St' });
       const findObj = () => objective(['Find the ', { van: 'red' }, '. Stay in your car.'], null);
-      goObj();
-      let footTold = false;
+      const carObj = (first) => { objective(first ? ['Get in your ', { car: 'blue' }, '.'] : ['Get back in your ', { car: 'blue' }, '. You need it for the tail.'], { follow: () => car.position, name: car.label || "Quant's car" }); blipCar(); };
+      if (inCar()) goObj(); else carObj(true);
+      let footTold = !inCar(), outAt = 0;
       const off = hook(() => {
         const d = dist(me(), vanD.pos.x, vanD.pos.z);
         if (d < 260) gps.blip('van', { x: vanD.pos.x, z: vanD.pos.z, kind: 'enemy', edge: true, name: 'The van' }); else gps.unblip('van');
         if (d < 160) S.chev.at(vanD.pos.x, vanD.pos.y + 3.4, vanD.pos.z, frameDt()); else S.chev.hide();
         // (Times Square reached: from here a restart puts him in his car behind the van, not back at the park)
-        if (!S.square && d < 160) { S.square = true; ui.place('Times Square', 'Midtown · New York', 3); findObj(); }
-        if (!inCar() && d < 60 && !footTold) { footTold = true; objective(['Get back in your ', { car: 'blue' }, '.'], null); blipCar(); }
+        if (!S.square && d < 160) { S.square = true; ui.place('Times Square', 'Midtown · New York', 3); if (inCar()) findObj(); }
+        // (a frame's time from the clock, not frameDt: the chevron above takes that)
+        outAt = inCar() ? 0 : outAt || now();
+        if (!inCar() && now() - outAt > 2500 && !footTold) { footTold = true; carObj(false); }
+        if (footTold && !inCar()) blipCar();
         if (inCar() && footTold) { footTold = false; gps.unblip('car'); if (S.square) findObj(); else goObj(); }
         // (right on top of it: they know)
         if (inCar() && d < 9) S.flee = true;
@@ -429,7 +438,7 @@ function createMission(W, { keep = false } = {}) {
         // (not in its first seconds on the move: he's still making the corner)
         if (goT != null && t - goT > 14 && ((d > 140 && farT > 5) || d > 240)) fail('The van got away.');
         // out of the car on the way
-        if (!inCar()) { onFootT += dt; if (onFootT > 1.5 && onFootT - dt <= 1.5) objective(['Get back in your ', { car: 'blue' }, '.'], null); blipCar(); } else if (onFootT) { onFootT = 0; gps.unblip('car'); say1(); }
+        if (!inCar()) { onFootT += dt; if (onFootT > 1.5 && onFootT - dt <= 1.5) objective(['Get back in your ', { car: 'blue' }, ". The van won't wait."], { follow: () => car.position, name: car.label || "Quant's car" }); blipCar(); } else if (onFootT) { onFootT = 0; gps.unblip('car'); say1(); }
         // Juno calls a little way in
         if (!called && t > 9 && !S.flee) { called = true; junoTail(); }
         // the yard goes up before it can be seen
@@ -523,8 +532,8 @@ function createMission(W, { keep = false } = {}) {
           if (now() > barkT) { barkT = now() + 14000; say([['Lev', ACID, barks[1 + Math.floor(Math.random() * 2)]]]).catch(() => {}); }
           const d = dist(me(), YARD.cx, YARD.cz);
           if (d > 150) fail('You left the fight.');
-          else if (d > 90 && !warned) { warned = true; ui.objective(['Get back to the ', { fight: 'yellow' }, '.']); }
-          else if (d < 80 && warned) { warned = false; ui.objective(['Beat up the ', { Degens: 'red' }, '.']); }
+          else if (d > 90 && !warned) { warned = true; objective(['Get back to the ', { fight: 'yellow' }, '.'], { x: YARD.cx, z: YARD.cz, name: 'The fight · the yard' }); }
+          else if (d < 80 && warned) { warned = false; objective(['Beat up the ', { Degens: 'red' }, '.'], null); }
         });
         await wait(() => wave2 && crews.every((c) => c.alive() === 0));
         stats.rekt = total;
@@ -559,7 +568,9 @@ function createMission(W, { keep = false } = {}) {
       // (the GPS line on Lev, re-planned as he goes: the streets to him, not just his blip)
       const levTarget = { follow: () => levD.pos, name: 'Lev' };
       const go = () => objective(['Take down ', { Lev: 'red' }, '.'], levTarget);
-      if (!inCar()) { objective(['Get in your ', { car: 'blue' }, '.'], null); blipCar(); } else go();
+      // (on foot: the car asked for with why, and its route: Lev is in a car)
+      const carTarget = { follow: () => car.position, name: car.label || "Quant's car" };
+      if (!inCar()) { objective(['Get in your ', { car: 'blue' }, '. Lev is driving off.'], carTarget); blipCar(); } else go();
       say([['Lev', ACID, "You can't catch leverage, kid!"]]).catch(() => {});
       S.engine = sfx?.engine?.();
       let farT = 0, warned = false, wasIn = inCar(), everIn = wasIn, helped = false, juno = false, goT = null;
@@ -580,11 +591,11 @@ function createMission(W, { keep = false } = {}) {
         S.chev.at(levD.pos.x, levD.pos.y + 2.6, levD.pos.z, dt);
         gps.blip('lev', { x: levD.pos.x, z: levD.pos.z, kind: 'enemy', edge: true, name: 'Lev' });
         S.engine?.set(clamp(levD.v / 32), clamp(16 / Math.max(6, d)) * 0.4);
-        if (inCar() && !wasIn) { go(); gps.unblip('car'); } if (!inCar() && wasIn) { objective(['Get back in your ', { car: 'blue' }, '.'], null); blipCar(); }
+        if (inCar() && !wasIn) { go(); gps.unblip('car'); } if (!inCar() && wasIn) { objective(['Get back in your ', { car: 'blue' }, ". You can't catch Lev on foot."], carTarget); blipCar(); }
         wasIn = inCar();
         if (!helped && inCar() && t > 2) { helped = true; ui.help("Ram Lev's car to wreck it, or keep up until he crashes.", 8); }
         if (!juno && t > 14 && inCar()) { juno = true; junoChase(); }
-        if (d > 150 && !warned) { warned = true; ui.objective([{ Lev: 'red' }, ' is getting away.']); } else if (d < 110 && warned) { warned = false; go(); }
+        if (inCar()) { if (d > 150 && !warned) { warned = true; ui.objective([{ Lev: 'red' }, ' is getting away.']); } else if (d < 110 && warned) { warned = false; go(); } }
         // (not while he's still running for his car at the start)
         if (d > 260 && everIn) farT += dt; else farT = Math.max(0, farT - dt);
         if (farT > 6 || d > 450) fail('Lev got away.');

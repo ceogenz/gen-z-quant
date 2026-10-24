@@ -10,7 +10,7 @@
 //   home    back at the garage: Gears at the door, the car "in one piece"
 // Each is paced by its lines (a shot starts with its line) or fixed, and returns when it ends (or is skipped).
 import * as THREE from 'three/webgpu';
-import { upright, UPRIGHT_BONES } from '../intro.js';
+import { upright, UPRIGHT_BONES, place } from '../intro.js';
 import { keys, clamp, lerp, spline, travel, rig } from './cine.js';
 import { GARAGE, ARCH, STAGE, FIONA_AT, SUV_AT, SCREEN_Z, CROWD_CAM, RIGS, drawMoon } from './m3-set.js';
 
@@ -23,7 +23,9 @@ export const SPOT = {
   quant: [GX - 1.6, GZ + 3.9, 0.59],         // by the car's nose, looking at Gears' legs
   gearsLie: [GX - 0.45, GZ + 5.4],           // his feet, out from under the car's left side (his head under it, east)
   gears: [GX - 1.9, GZ + 6.3, 3.02],         // up, facing Quant
-  out: { car: [GX + 6, 1603.6, PI / 2], quant: [GX - 1.2, 1607.6, PI] }, // after: the car at the curb, Quant on the sidewalk
+  // after: the car at the curb, Quant on the sidewalk facing its door and W 22nd St east beyond it (the way on; facing
+  // the street (PI) had the hand-back's view on the facade across it, the route ~70 degrees off)
+  out: { car: [GX + 6, 1603.6, PI / 2], quant: [GX - 1.2, 1607.6, Math.atan2(7.2, -4.0)] },
   // the home scene (23 Oct: a metre more between them, across the wide shot's line, which had him right in front of Gears)
   door: { gears: [GX + 0.9, GZ - 1.4], quant: [GX - 1.9, 1607.6] },
 };
@@ -206,7 +208,11 @@ export function garageScene(W, { U, say, gears, garage }) {
     cleanup() {
       U.call.hide(); C.phone.visible = false; gears.root.visible = false; garage.inside(false);
       W.voice?.fx?.('Fiona', null);
+      // (out on the sidewalk by his car at the curb before the hand-back, where play goes on (m3.js puts them there
+      // too), so the view comes down behind him there, facing the car and the way on)
+      place(W, { car: SPOT.out.car, quant: SPOT.out.quant });
     },
+    face: { x: SPOT.out.car[0], z: SPOT.out.car[1] },
   };
   return def;
 }
@@ -332,6 +338,8 @@ export function rallyScene(W, { say, fiona, rally, spotter, lawn = null, onRigs 
   const back = (d, h, s = 0) => (lawn ? [lawn[0] - Math.sin(QH) * d + Math.cos(QH) * s, h, lawn[1] - Math.cos(QH) * d - Math.sin(QH) * s] : [0, h, 2830]);
   return {
     END: T.end, quant: false,
+    // (handed back facing the nearest rig: the job)
+    face: near ? { x: near[0], z: near[1] } : null,
     shots: [
       // from 5th Ave: the arch, Moon on the banner, the chart through the opening
       { t: 0, cam: (t) => ({ pos: keys([[0, [7.5, 2.0, 2748]], [3.2, [6.5, 2.3, 2758]]], 'linear')(t), look: keys([[0, [0, 11, 2801]], [3.2, [0, 10, 2801]]], 'linear')(t), fov: 54, shake: 0.4 }) },

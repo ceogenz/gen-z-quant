@@ -320,7 +320,10 @@ export function createFightCamera(c) {
     if (few.length) for (const e of few) spread = Math.max(spread, Math.min(16, hdist(e.pos, q)));
     const lean = lg ? 0.45 : few.length ? 0.42 : 0.3;
     const off = n ? _v2.set(cen.x / n - q.x, 0, cen.z / n - q.z).multiplyScalar(lean) : _v2.set(0, 0, 0);
-    if (off.length() > (few.length ? 2.2 : 1.6)) off.setLength(few.length ? 2.2 : 1.6);
+    // (a man winding up: the view pulls back to take him in, and the frame leans halfway to the middle of the two of them)
+    const wt = winder(q);
+    if (wt) { const d = hdist(wt.pos, q); spread = Math.max(spread, Math.min(16, d)); off.x += ((wt.pos.x - q.x) * 0.5 - off.x) * 0.5; off.z += ((wt.pos.z - q.z) * 0.5 - off.z) * 0.5; }
+    if (off.length() > (few.length || wt ? 2.2 : 1.6)) off.setLength(few.length || wt ? 2.2 : 1.6);
     st.frame.x = damp(st.frame.x, off.x, 2.2, dt); st.frame.z = damp(st.frame.z, off.z, 2.2, dt);
     // (down: the view on his chest as he lies, looking down on him from further back)
     st.downK = damp(st.downK, down ? 1 : 0, down ? 4 : 2, dt);
@@ -445,17 +448,35 @@ export function createFightCamera(c) {
       e.setFade(k);
     }
   }
+  // the man winding up soonest to land (alive, not a thrown thing), or null
+  function winder(q) {
+    let tgt = null, best = Infinity;
+    for (const t of c.threats) { const r = t.at - c.time; if (r > 0 && r < best && !t.item && t.e?.alive && hdist(t.e.pos, q) < 13) { best = r; tgt = t.e; } }
+    return tgt;
+  }
   function assist(dt, w) {
     const q = P.position, me = c.me;
-    if (st.idle < 0.5 || st.cine || st.swing) return;
-    // a man winding up outside the view: drift toward him; hidden straight behind Quant along it: round off his line
+    if (st.cine || st.swing) { st.thr = null; return; }
+    // a man winding up outside the view (by where he is on the screen): round toward him at once (the player's own drag
+    // in the last 0.25 s always wins), quicker the sooner his blow lands, until both of them are in it: the view's yaw
+    // ~0.45 rad short of him, on Quant's side. Walking (camera-relative), no faster than 2 rad/s, so W keeps its meaning
     let tgt = null, best = Infinity;
-    for (const t of c.threats) { const r = t.at - c.time; if (r > 0 && r < best) { best = r; tgt = t.e; } }
-    if (tgt) {
-      const rel = angWrap(Math.atan2(tgt.pos.x - q.x, tgt.pos.z - q.z) - st.yaw), over = Math.abs(rel) - 0.6;
-      if (over > 0) { st.yaw += Math.sign(rel) * Math.min(over, 1.4 * dt * w); return; }
-      if (offAxis(tgt, dt, w, 1.5)) return;
-    }
+    for (const t of c.threats) { const r = t.at - c.time; if (r > 0 && r < best && !t.item && t.e?.alive) { best = r; tgt = t; } }
+    if (tgt && st.idle >= 0.25) {
+      // (short of him by 0.45 rad on a landscape screen; less on a narrower one, a phone held upright)
+      const half = Math.atan(Math.tan(cam.fov * Math.PI / 360) * cam.aspect), lead = Math.min(0.45, 0.6 * half);
+      const e = tgt.e, rel = angWrap(Math.atan2(e.pos.x - q.x, e.pos.z - q.z) - st.yaw), over = Math.abs(rel) - lead;
+      if (st.thr !== e && !inView(e, _t1)) st.thr = e;
+      if (st.thr === e && over > 0.02) {
+        let rate = clamp(over / Math.max(0.15, (tgt.at - c.time) - 0.15), 1.4, 3.5);
+        if (cm.footMove && cm.footMove.mag > 0.1) rate = Math.min(rate, 2.0);
+        st.yaw += Math.sign(rel) * Math.min(over, rate * dt * w);
+        return;
+      }
+      if (st.thr === e) st.thr = null;
+      if (st.idle >= 0.5 && offAxis(e, dt, w, 1.5)) return;
+    } else st.thr = null;
+    if (st.idle < 0.5) return;
     // the last one or two on their feet out of the view: round toward him until he is well inside it (the player's own
     // look, the mouse, always wins)
     if (frameFoe(dt, w)) return;
@@ -502,7 +523,7 @@ export function createFightCamera(c) {
   function cineShot() {
     const S = st.cine; S.t += c.dt || 0; // (on the fight's clock: a slow motion inside it stretches it too)
     // (a man winding up meanwhile: the shot gives the view back soon, so his cue can be seen)
-    if (c.threats.some((t) => t.e !== S.target) && S.t > 0.3) S.dur = Math.min(S.dur, S.t + 0.3);
+    if (c.threats.some((t) => t.e !== S.target)) S.dur = Math.min(S.dur, S.t + 0.3);
     const k = smooth(S.t / 0.3) * (1 - smooth((S.t - S.dur + 0.35) / 0.35));
     if (S.t > S.dur || !S.target) { st.cine = null; return; }
     refresh(P.position, 0);

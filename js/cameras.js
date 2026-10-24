@@ -19,16 +19,38 @@ const CAMERA_PRESETS = [
   { id: 'drone',       name: 'Auto-Director Aerial',     short: 'Director',    category: 'scenic', fov: 50 }
 ];
 
-// The follow cameras' lens keeps LENS_PAD m off the buildings (the near plane, 0.35 m out, stays clear of a wall)
-const LENS_PAD = 0.3;
+// The follow cameras' lens keeps LENS_PAD m off the buildings (the near plane, 0.35 m out, stays clear of a wall); on
+// foot, LENS_PAD_FOOT (Gen Z Quant: the lens a man's height off the pavement had a facade grazing the frame's edge)
+const LENS_PAD = 0.3, LENS_PAD_FOOT = 0.55;
+// (Gen Z Quant) a wall alongside the lens: probes SIDE_A off the view's way either side (wider on a wider lens), SIDE m
+// long, from the lens; a hit edges the view away from it, at most SIDE_MAX rad (keepInView)
+const SIDE_A = 70 * Math.PI / 180, SIDE = 2.2, SIDE_MAX = 0.35;
+// (Gen Z Quant) a car's impact spin ridden through (update(): the view keeps its line while the car spins under it and
+// comes round after, at most SPIN_CAP rad behind it, let go at SPIN_BLEED /s but never faster than SPIN_RATE rad/s)
+const SPIN_CAP = 1.2, SPIN_BLEED = 2.6, SPIN_RATE = 1.6;
+// (Gen Z Quant) a low thing in the street across the boom (a parked car, a car in traffic, a can: cs.blockers' boxes
+// under OVER_TOP m): the lens rises over it, by the least of these that clears it, before it pulls in or swings round
+const OVER_TOP = 3.5, OVER_LIFTS = [0.5, 1.0, 1.5, 2.0, 2.6];
+const wrapA = (a) => Math.atan2(Math.sin(a), Math.cos(a));
+// (Gen Z Quant) a follow offset (from the entity) eased toward another in polar form, its yaw and its length, and its
+// height straight: swung round a big turn the boom keeps its length instead of cutting across close to him
+function easePolar(cur, want, k) {
+  const l0 = Math.hypot(cur.x, cur.z), l1 = Math.hypot(want.x, want.z);
+  if (l0 < 0.05 || l1 < 0.05) { cur.lerp(want, k); return; }
+  const a0 = Math.atan2(cur.x, cur.z), a = a0 + wrapA(Math.atan2(want.x, want.z) - a0) * k, l = l0 + (l1 - l0) * k;
+  cur.x = Math.sin(a) * l; cur.z = Math.cos(a) * l; cur.y += (want.y - cur.y) * k;
+}
+// (the box the last rayClear stopped at, or null)
+let rayHit = null;
 // How far a line from p (unit direction ux, uy, uz) runs, up to len, before it comes within LENS_PAD of one of the
 // boxes: the controllers' colliders, boxes from the ground up to maxY, some turned (obb); (Gen Z Quant) a box with a minY
 // starts there instead (a sign, a screen up on its truss). A box the line starts within the pad of counts at its own
-// size, one it starts inside not at all.
-function rayClear(p, ux, uy, uz, len, boxes) {
+// size, one it starts inside not at all. (Gen Z Quant: pad, the way off them; buildings: the street's things skipped)
+function rayClear(p, ux, uy, uz, len, boxes, pad0 = LENS_PAD, buildings = false) {
   let t = len;
+  rayHit = null;
   for (const c of boxes) {
-    if (c.carOnly || p.y - LENS_PAD > c.maxY && uy >= 0) continue;
+    if (c.carOnly || p.y - pad0 > c.maxY && uy >= 0 || buildings && c.street) continue;
     const y0 = c.minY != null ? c.minY : -1e4;
     let ox = p.x, oz = p.z, dx = ux, dz = uz, x0 = c.minX, x1 = c.maxX, z0 = c.minZ, z1 = c.maxZ;
     if (c.obb) {
@@ -43,7 +65,7 @@ function rayClear(p, ux, uy, uz, len, boxes) {
     }
     const within = (m) => ox > x0 - m && ox < x1 + m && oz > z0 - m && oz < z1 + m && p.y < c.maxY + m && p.y > y0 - m;
     if (within(0)) continue;
-    const pad = within(LENS_PAD) ? 0 : LENS_PAD;
+    const pad = within(pad0) ? 0 : pad0;
     let t0 = 0;
     let t1 = t;
     for (const [o, d, lo, hi] of [[ox, dx, x0 - pad, x1 + pad], [p.y, uy, y0 - pad, c.maxY + pad], [oz, dz, z0 - pad, z1 + pad]]) {
@@ -58,7 +80,7 @@ function rayClear(p, ux, uy, uz, len, boxes) {
       if (b < t1) t1 = b;
       if (t0 > t1) break;
     }
-    if (t0 <= t1 && t0 < t) t = t0;
+    if (t0 <= t1 && t0 < t) { t = t0; rayHit = c; }
   }
   return t;
 }
@@ -287,7 +309,15 @@ class CameraSystem {
     this.smoothedSpeed += (Math.abs(entity.speed) - this.smoothedSpeed) * (1 - Math.exp(-dt * 3.0));
     const speedLag = this.smoothedSpeed * 0.1;
 
-    const totalYaw = entity.heading + this.orbitYawOffset;
+    // (Gen Z Quant) a car spun by a hit (angularVel: only a contact writes it, never the steering): the view rides through
+    // it, keeping its line while the car turns under it, and comes round behind it after (SPIN_*); a teleport, a new
+    // preset or another entity starts it afresh
+    if (entity.type === 'car' && this.initialized && this.followEntity === entity && this.activePresetId === 'chase') {
+      let s = (this._spin || 0) + (entity.angularVel || 0) * dt;
+      s -= Math.sign(s) * Math.min(Math.abs(s) * (1 - Math.exp(-dt * SPIN_BLEED)), SPIN_RATE * dt);
+      this._spin = Math.max(-SPIN_CAP, Math.min(SPIN_CAP, s));
+    } else this._spin = 0;
+    const totalYaw = entity.heading - this._spin + this.orbitYawOffset;
     // (Gen Z Quant: the screen upright, pk > 0: see PORT. Turned back to landscape: the lens as it was, at once)
     const pk = this.portK();
     if (!pk && this._port) {
@@ -503,8 +533,9 @@ class CameraSystem {
       }
       const k = 1 - Math.exp(-dt * 8.5);
       this.followBaseY += (entity.position.y - this.followBaseY) * k;
-      this.followOffset.lerp(desiredPos.sub(entity.position), k);
-      this.followLookOffset.lerp(desiredLook.sub(entity.position), k);
+      // (Gen Z Quant: eased round him in polar form, so a big swing keeps the boom's length)
+      easePolar(this.followOffset, desiredPos.sub(entity.position), k);
+      easePolar(this.followLookOffset, desiredLook.sub(entity.position), k);
       this.currentPos.set(entity.position.x, this.followBaseY, entity.position.z).add(this.followOffset);
       this.currentLookAt.set(entity.position.x, this.followBaseY, entity.position.z).add(this.followLookOffset);
       this.currentPos.y = Math.max(0.55, this.currentPos.y);
@@ -546,6 +577,9 @@ class CameraSystem {
     const near = this.controllerManager.nearColliders(p.x, p.z, r);
     const more = this.blockers ? this.blockers(p.x, p.z, r, entity) : null;
     const hwy = this.highway ? this.highwayBoxes(p.x, p.z, r) : null;
+    // (the street's things marked: keepInView rises over the low ones, and its side probes look at the buildings only)
+    if (more) for (const b of more) b.street = true;
+    if (hwy) for (const b of hwy) b.street = true;
     const all = more && more.length ? near.concat(more) : near;
     return hwy && hwy.length ? all.concat(hwy) : all;
   }
@@ -588,8 +622,9 @@ class CameraSystem {
 
   // (Gen Z Quant) the turn of the player (rad: the least there is) that puts the view behind him clear of all round him
   // at its full length; 0 when straight behind him already is, or in a car. A cutscene's hand-back turns him by it (a
-  // van, a wall or the stage right at his back would have the view in it): wagmi/mission/cine.js release()
-  clearTurn(entity) {
+  // van, a wall or the stage right at his back would have the view in it): wagmi/mission/cine.js release(). With face
+  // (a world yaw: where he goes next), the clear way nearest it instead
+  clearTurn(entity, face = null) {
     if (!entity || entity.type === 'car' || entity.type === 'helicopter') return 0;
     // (upright, the boom as update() makes it: see PORT)
     const rig = this.portK() ? this.portRig(entity) : null;
@@ -598,8 +633,12 @@ class CameraSystem {
     const near = this.nearBoxes(P, dist + 1, entity);
     const clearAt = (yaw) => {
       const h = entity.heading + yaw, x = -Math.sin(h) * horiz, y = entity.position.y + height - P.y, z = -Math.cos(h) * horiz, L = Math.hypot(x, y, z);
-      return rayClear(P, x / L, y / L, z / L, L, near) / L;
+      return rayClear(P, x / L, y / L, z / L, L, near, LENS_PAD_FOOT) / L;
     };
+    if (face != null && Number.isFinite(face)) {
+      const t0 = wrapA(face - entity.heading);
+      for (const o of [0, 0.3, -0.3, 0.6, -0.6, 0.9, -0.9, 1.35, -1.35]) if (clearAt(t0 + o) > 0.97) return wrapA(t0 + o);
+    }
     let best = 0, bk = -1;
     for (const yaw of [0, ...SWINGS, Math.PI]) {
       const k = clearAt(yaw);
@@ -618,9 +657,10 @@ class CameraSystem {
     const hz = cam.z - P.z;
     const L = Math.hypot(hx, hy, hz);
     if (L < 0.05) return;
-    const v = this._view || (this._view = { boom: L, swing: 0, want: 0, lift: 0 });
+    const v = this._view || (this._view = { boom: L, swing: 0, want: 0, lift: 0, over: 0, side: 0 });
     const minBoom = car ? 3.2 : 1.8;
-    const near = this.nearBoxes(P, L + 1, entity);
+    const pad = car ? LENS_PAD : LENS_PAD_FOOT;
+    const near = this.nearBoxes(P, L + 3, entity);
     // the boom turned `yaw` about him (at the same height), and how far it is clear
     const dirAt = (yaw, out) => {
       const c = Math.cos(yaw);
@@ -631,11 +671,46 @@ class CameraSystem {
       return out;
     };
     const d = this._desiredLook; // (free by now: a scratch vector)
-    const clearAt = (yaw) => { dirAt(yaw, d); return rayClear(P, d.x, d.y, d.z, L, near); };
+    // (Gen Z Quant: and its far end lifted `up` m; how far along it is clear, as m of a boom L long)
+    const clearAt = (yaw, up = 0) => {
+      dirAt(yaw, d);
+      if (!up) return rayClear(P, d.x, d.y, d.z, L, near, pad);
+      const x = d.x * L, y = d.y * L + up, z = d.z * L, n = Math.hypot(x, y, z);
+      return rayClear(P, x / n, y / n, z / n, n, near, pad) / n * L;
+    };
 
     let free = clearAt(v.swing);
+    // (Gen Z Quant) a low thing of the street's across the boom (a parked car, a car in traffic, a can: OVER_TOP): up
+    // over it, by the least lift that clears it, rather than in close to him or round him
+    let over = 0;
+    const hb = rayHit;
+    let overFree = L;
+    if (free < L - 0.05 && hb && hb.street && hb.maxY - entity.position.y < OVER_TOP) {
+      let bu = 0, bc = free;
+      for (const up of OVER_LIFTS) { const c = clearAt(v.swing, up); if (c >= L - 0.05) { over = up; break; } if (c > bc) { bc = c; bu = up; } }
+      // (none clears it all the way: the lift that gets furthest, coming in a little, if that beats pulling right in)
+      if (!over && bu && bc >= minBoom + 0.5 && bc > free + 0.5) { over = bu; overFree = bc; }
+    }
+    v.over += (over - v.over) * (1 - Math.exp(-dt * (over > v.over ? 7 : 2)));
+    if (over) free = overFree;
+    // (Gen Z Quant) a wall alongside the lens, the boom clear but a facade filling a side of the frame: the view edges
+    // away from it (on foot, or a car all but stopped: driving, it never swings round)
+    let bias = 0;
+    if (!car || Math.abs(entity.speed) < 4) {
+      dirAt(v.swing, d);
+      const lens = this._side || (this._side = new THREE.Vector3());
+      lens.set(P.x + d.x * v.boom, P.y + d.y * v.boom + v.lift + v.over, P.z + d.z * v.boom);
+      const va = Math.atan2(-d.x, -d.z);
+      const half = Math.atan(Math.tan(this.camera.fov * Math.PI / 360) * this.camera.aspect);
+      const A = Math.max(SIDE_A, half + 15 * Math.PI / 180);
+      for (const s of [1, -1]) {
+        const a = va + s * A, t = rayClear(lens, Math.sin(a), 0, Math.cos(a), SIDE, near, 0, true);
+        if (t < SIDE) bias += s * SIDE_MAX * Math.sqrt(1 - t / SIDE);
+      }
+    }
+    v.side += (Math.max(-SIDE_MAX, Math.min(SIDE_MAX, bias)) - v.side) * (1 - Math.exp(-dt * 4));
     let best = free; // (the clearest way there is: with none, it may rise right over him)
-    if (v.swing === 0 ? free >= minBoom : clearAt(0) >= Math.min(L, minBoom + 0.6)) v.want = 0;
+    if (over || (v.swing === v.side ? free >= minBoom : clearAt(v.side) >= Math.min(L, minBoom + 0.6))) v.want = v.side;
     else if (free < minBoom && (!car || Math.abs(entity.speed) < 4)) { // (driving, it only pulls in: no swinging round)
       let top = -Infinity;
       for (const yaw of SWINGS) {
@@ -648,7 +723,7 @@ class CameraSystem {
     if (v.want !== v.swing) {
       v.swing += Math.max(-2.4 * dt, Math.min(2.4 * dt, v.want - v.swing));
       if (Math.abs(v.swing) < 1e-3) v.swing = 0;
-      free = clearAt(v.swing);
+      free = over ? Math.max(clearAt(v.swing, over), Math.min(L, v.boom)) : clearAt(v.swing);
     }
     const reach = Math.min(free, L);
     v.boom = reach < v.boom ? reach : v.boom + (reach - v.boom) * (1 - Math.exp(-dt * 2.5));
@@ -657,11 +732,13 @@ class CameraSystem {
     v.lift += (lift - v.lift) * (1 - Math.exp(-dt * (lift > v.lift ? 6 : 2)));
 
     dirAt(v.swing, d);
-    cam.set(P.x + d.x * v.boom, P.y + d.y * v.boom + v.lift, P.z + d.z * v.boom);
+    cam.set(P.x + d.x * v.boom, P.y + d.y * v.boom + v.lift + v.over, P.z + d.z * v.boom);
     // ...looking more at him the further round and up it has gone (risen over him: down at his feet); on foot, and pulled
     // in close, more at him than past him too (else his head drops out of the bottom of the frame)
-    const turn = Math.max(Math.min(1, Math.abs(v.swing) / 1.2) * 0.85, car ? 0 : Math.min(0.75, Math.max(0, 1 - v.boom / L) * 1.3));
+    // (risen over a car: down at him, so he stays in the frame's middle, not its bottom edge)
+    const turn = Math.max(Math.min(1, Math.abs(v.swing) / 1.2) * 0.85, car ? 0 : Math.min(0.75, Math.max(0, 1 - v.boom / L) * 1.3), Math.min(0.8, v.over * 0.32));
     if (turn > 0) this._look.lerp(P, turn);
+    if (v.over > 0.05) this._look.y -= Math.min(0.6, v.over * 0.25);
     const up = Math.min(1, v.lift / 1.6);
     if (up > 0) {
       const fx = Math.sin(entity.heading);

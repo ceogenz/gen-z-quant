@@ -525,6 +525,9 @@ function createTrafficSystem(scene, sidewalks, obstacles) {
     for (const v of vehicles) {
       const e = v.edge;
       if (!e) continue;
+      // (Gen Z Quant: a wreck slid clear of its lane, its middle 2.7 m or more to one side of the lane's, no longer holds
+      // its place in it: those behind drive on by, blockedAhead keeping them out of it)
+      if (v.wreck && !v.conn && Math.abs((v.x - e.sx) * e.rx + (v.z - e.sz) * e.rz - e.lanes[v.lane]) > 2.7) continue;
       if (!v.conn) {
         occupy(e.occ[v.lane], v, v.s);
         const side = straddle(v);
@@ -673,6 +676,7 @@ function createTrafficSystem(scene, sidewalks, obstacles) {
     v.pAhead = dx * fx + dz * fz;
     v.pRight = dz * fx - dx * fz;
     v.pSpeed = Math.max(0, player.vx * fx + player.vz * fz);
+    v.pCross = player.vz * fx - player.vx * fz; // (Gen Z Quant: and across v's way, + to its right)
   }
 
   // Gap to the player (or the parked car) if it is ahead in the lane whose centre is `off` metres to the right of v;
@@ -726,9 +730,13 @@ function createTrafficSystem(scene, sidewalks, obstacles) {
   // ...and for a line d metres ahead to stop s0 short of: no time gap to keep to a line
   const stopAt = (v, d, s0 = 1) => brake(v, d, 0, s0, 0);
 
+  // (Gen Z Quant: a wreck that has stood still 15 s or more: one nosing through a jam (v.ghost) may pass it)
+  const passable = (o) => !!(o.wreck && o._wreck && o._wreck.still > 15);
+
   // Braking for the vehicle ahead of position s in a lane list; remembers the nearest one
   function follow(v, list, s) {
-    const o = ahead(list, s, v);
+    let o = ahead(list, s, v);
+    while (o && v.ghost > 0 && passable(o.v)) o = ahead(list, o.s, v);
     if (!o) return 0;
     const gap = o.s - o.v.half - s - v.half;
     if (gap > LOOKAHEAD) return 0;
@@ -761,6 +769,7 @@ function createTrafficSystem(scene, sidewalks, obstacles) {
       const m = e.moves[k];
       let w = m.turn === 'S' ? (v.bus ? 8 : 3) : 1;
       if (v.bus && m.turn !== 'S' && m.to.lanes.length < 2) w *= 0.05;
+      if (v.bus && m.to.axis !== 'ave') w *= 1e-3; // (Gen Z Quant: buses keep to the avenues; a side street only when there is no other way)
       if (fromLane) {
         if (m.out[v.lane] < 0) w = 0;
       } else if (Math.abs(nearestLane(m, v.lane) - v.lane) * 22 > e.len - v.s) {
@@ -938,6 +947,24 @@ function createTrafficSystem(scene, sidewalks, obstacles) {
     return merger.v ? merger : null;
   }
 
+  // (Gen Z Quant) Is Quant's car (driving) in junction n's box, or in it or within 4 m of it at any time in the next
+  // 2.5 s at the way it goes? Not when he follows v (or leads it) the same way, nor when he comes the other way and v
+  // doesn't turn across him: the lane's own following sees to those
+  function playerCrossing(v, n) {
+    if (!player.car || Math.abs(player.x - n.x) > 80 || Math.abs(player.z - n.z) > 80) return false;
+    const sp = Math.hypot(player.vx, player.vz);
+    if (sp < 1.5) return false;
+    const e = v.edge;
+    const along = (player.vx * e.dx + player.vz * e.dz) / sp;
+    if (along > 0.7 || (along < -0.7 && v.move.turn !== 'L')) return false;
+    const hx = Math.max(n.hx || 0, 6) + 4;
+    const hz = Math.max(n.hz || 0, 6) + 4;
+    for (let t = 0; t <= 2.5; t += 0.25) {
+      if (Math.abs(player.x + player.vx * t - n.x) < hx && Math.abs(player.z + player.vz * t - n.z) < hz) return true;
+    }
+    return false;
+  }
+
   // May v, its front bumper d metres before the stop line, enter the intersection now? Sets the exit lane.
   // Once too close to stop, v is committed: it goes, and holds the intersection from then on.
   function mayEnter(v, d) {
@@ -964,12 +991,24 @@ function createTrafficSystem(scene, sidewalks, obstacles) {
       return false;
     }
     if (phase === 'red' || (phase === 'amber' && stoppable)) return false;
+    // (Gen Z Quant: Quant's car crossing it, or about to: wait for him)
+    if (playerCrossing(v, n)) return false;
     // (Gen Z Quant: waited ~18 s at the line for a way in the rules never give it (the Village's diagonal corners, where
-    // each arm can be waiting on another): it goes, slowly, its way kept physically clear by blockedAhead)
+    // each arm can be waiting on another): it goes, slowly, its way kept physically clear by blockedAhead, if there is
+    // room for it on its way out (else it stood in the box and blocked it for the others): no room, another way its lane
+    // allows, every 4 s. Nosing through a jam that has stood 40 s in view (unjam), it goes all the same)
     if (v.wait > 18 && d < 3) {
-      v.out = j;
-      v.yielding = false;
-      return true;
+      if (room(f, j, v) || (v.ghost > 0 && v.wait > 40)) {
+        v.out = j;
+        v.yielding = false;
+        return true;
+      }
+      if (!(v.rerouteAt > clock)) {
+        v.rerouteAt = clock + 4;
+        const m2 = chooseMove(v, true);
+        if (m2 && m2.out[v.lane] >= 0) v.move = m2;
+      }
+      return false;
     }
     // (Gen Z Quant: at a corner without signals, a side road's driver kept at the line by the avenue's traffic filling
     // the box asks for the avenue's courtesy too (see below), not only one waiting for a gap in it)
@@ -1078,7 +1117,9 @@ function createTrafficSystem(scene, sidewalks, obstacles) {
       if (gap < 1.5 || freeAcc(f) + brake(f, gap, v.speed) < bSafe) return false;
     }
     const off = v.edge.lanes[t] - v.edge.lanes[v.lane] - v.dl;
-    const reach = v.half + player.halfL + 6;
+    // (Gen Z Quant: and further from Quant's car the faster it closes on v, from behind or ahead)
+    const closing = !player.car ? 0 : v.pAhead < 0 ? v.pSpeed - v.speed : v.speed - v.pSpeed;
+    const reach = v.half + player.halfL + 6 + 1.5 * Math.max(0, closing);
     if (v.kAhead < Infinity && Math.abs(v.kRight - off) < v.halfWidth + v.kW + 0.4 && Math.abs(v.kAhead) < v.half + v.kL + 6) return false;
     return !(Math.abs(v.pRight - off) < v.halfWidth + player.halfW + 0.4 && v.pAhead > -reach && v.pAhead < reach);
   }
@@ -1151,6 +1192,10 @@ function createTrafficSystem(scene, sidewalks, obstacles) {
         v.gap = pg;
         v.leaderSpeed = gapSpeed;
       }
+    }
+    // (Gen Z Quant: Quant's car cutting across its way within 25 m ahead, more than 3 m/s across: it stops short of him)
+    if (player.car && v.pAhead > 0 && v.pAhead < 25 && Math.abs(v.pRight) < v.halfWidth + 3 && Math.abs(v.pCross) > 3) {
+      worst = Math.min(worst, stopAt(v, Math.max(0.1, v.pAhead - v.half - 4)));
     }
     const acc = Math.min(freeAcc(v) + worst, (cap - v.speed) * 2);
     v.acc = clamp(acc, -9, v.driver.a);
@@ -1242,7 +1287,8 @@ function createTrafficSystem(scene, sidewalks, obstacles) {
         if (!list) continue;
         for (const o of list) {
           if (o === v || Math.abs(o.x - nx) > o.bodyL + v.bodyL + 0.5 || Math.abs(o.z - nz) > o.bodyL + v.bodyL + 0.5) continue;
-          if (v.ghost > 0 && o.speed < 0.5 && !o.wreck) continue; // (Gen Z Quant: nosing through a deadlock, see drive)
+          // (Gen Z Quant: nosing through a deadlock, see drive; and past a wreck that has stood 15 s)
+          if (v.ghost > 0 && o.speed < 0.5 && (!o.wreck || passable(o))) continue;
           if (!inFront(v, o) || (inFront(o, v) && v.id < o.id)) continue;
           const after = bodyPen(v, nx, nz, o);
           if (after > 0.02 && after > bodyPen(v, v.x, v.z, o) + 1e-4) return true;
@@ -1303,11 +1349,61 @@ function createTrafficSystem(scene, sidewalks, obstacles) {
     }
   }
 
+  // (Gen Z Quant) How long v noses through at 3 m/s: its length, the junction's curve it is on or about to take, 4 m more
+  // (4 s at the least)
+  function ghostFor(v) {
+    let c = 0;
+    if (v.conn) c = v.conn.len;
+    else if (v.move && v.edge.len - v.s - v.half < 20) {
+      const j = v.move.out[v.lane];
+      if (j >= 0 && j < v.move.to.lanes.length) c = connector(v.edge, v.lane, v.move.to, j).len;
+    }
+    return Math.max(4, (2 * v.half + c + 4) / 3);
+  }
+  // (Gen Z Quant) A queue that has stood 40 s in view (v one of it): its head, the front one of those standing nose to
+  // tail (or the one behind a wreck), noses on through whatever stands in its way, at a crawl. Not at a red light, where
+  // it is only waiting for the green. Once every 2 s for a queue at most
+  function unjam(v) {
+    if (v.unjamAt > clock) return;
+    let u = v;
+    for (let k = 0; k < 40; k++) {
+      const list = u.conn ? u.move.to.occ[u.out] : u.edge.occ[u.lane];
+      const s = u.conn ? u.cs - u.conn.len : u.s;
+      const o = ahead(list, s, u);
+      if (!o || o.v.wreck || o.v.speed > 0.5 || o.s - o.v.half - s - u.half > 10) break;
+      u = o.v;
+    }
+    v.unjamAt = u.unjamAt = clock + 2;
+    if (!u.conn && u.edge.to.signal && phaseOf(u.edge) !== 'green' && u.edge.len - u.s - u.half < 8) return;
+    u.ghost = Math.max(u.ghost || 0, ghostFor(u));
+  }
+  // (Gen Z Quant) Hidden from the camera behind another vehicle: one across the line of sight to it, in its last 40 m
+  function behindAnother(v) {
+    const dx = camX - v.x;
+    const dz = camZ - v.z;
+    const D = Math.hypot(dx, dz) || 1;
+    const ux = dx / D;
+    const uz = dz / D;
+    for (let t = 3; t < Math.min(D - 2, 40); t += 7) {
+      const list = grid.get(gridKey(v.x + ux * t, v.z + uz * t));
+      if (!list) continue;
+      for (const o of list) {
+        if (o === v) continue;
+        const ox = o.x - v.x;
+        const oz = o.z - v.z;
+        const a = ox * ux + oz * uz;
+        if (a > 2 && a < D - 2 && Math.abs(ox * uz - oz * ux) < o.bodyW * 0.8) return true;
+      }
+    }
+    return false;
+  }
+
   function drive(v, dt) {
     // (Gen Z Quant: held 10 s by something in front of it that doesn't move off either (two or more of them nose to nose
     // in a junction, a cycle of queues round the Village's diagonal corners), it noses on through the stopped ones at a
-    // crawl for a few seconds; separate() eases them apart. Never through Quant's car)
-    if (v.blocked > 10) { v.ghost = 4; v.blocked = 0; }
+    // crawl for a few seconds (long enough at 3 m/s for its length and the junction's, a bus's too); separate() eases
+    // them apart. Never through Quant's car)
+    if (v.blocked > 10) { v.ghost = ghostFor(v); v.blocked = 0; }
     if (v.ghost > 0) { v.ghost -= dt; v.speed = Math.min(v.speed, 3); }
     v.laneTimer -= dt;
     if (v.laneTimer <= 0) {
@@ -1661,7 +1757,7 @@ function createTrafficSystem(scene, sidewalks, obstacles) {
     if (ax * hx + az * hz < 40 || Math.abs(ax * hz - az * hx) > 20 || Math.abs(e.dx * hx + e.dz * hz) > 0.5 || Math.random() < 0.25) return;
     for (const m of e.moves) {
       if (Math.abs(m.to.dx * hx + m.to.dz * hz) < 0.9 || Math.abs(nearestLane(m, v.lane) - v.lane) * 22 > e.len - v.s) continue;
-      if (heldEdges.size && heldEdges.has(m.to)) continue;
+      if ((heldEdges.size && heldEdges.has(m.to)) || (v.bus && m.to.axis !== 'ave')) continue; // (and no bus off the avenues)
       v.move = m;
       return;
     }
@@ -1696,6 +1792,44 @@ function createTrafficSystem(scene, sidewalks, obstacles) {
       return true;
     }
     return false;
+  }
+  // (Gen Z Quant) spawnVehicle for one already on the roads, and a note of it (why, how far from the player, whether the
+  // camera could see where it was) in recycleLog, the last 300, for a test
+  const recycleLog = [];
+  function note(why, x, z, r) {
+    const d = Math.hypot(x - player.x, z - player.z);
+    recycleLog.push({ t: Math.round(clock * 10) / 10, why, d: Math.round(d), inView: visible(x, z, r) && (d > 150 || !occluded(x, z)) });
+    if (recycleLog.length > 300) recycleLog.shift();
+  }
+  function recycleVehicle(v, why, rMin, rMax, hidden, ahead = false) {
+    const on = !!v.edge;
+    const x = v.x;
+    const z = v.z;
+    if (!spawnVehicle(v, rMin, rMax, hidden, ahead)) return false;
+    if (on) note(why, x, z, v.half + 2);
+    return true;
+  }
+  // (Gen Z Quant) Where v's lane has it nearest (x, z), and its way there: for a wreck backing out to it (wagmi/crash)
+  const spot = { x: 0, z: 0, dx: 0, dz: 1 };
+  function laneSpot(v, x, z) {
+    const e = v.edge;
+    if (!e) return null;
+    if (v.conn) {
+      let best = Infinity;
+      let bc = 0;
+      for (let c = 0; c <= v.conn.len; c += 1) {
+        curvePoint(v.conn, c, spot);
+        const d = (spot.x - x) ** 2 + (spot.z - z) ** 2;
+        if (d < best) {
+          best = d;
+          bc = c;
+        }
+      }
+      curvePoint(v.conn, bc, spot);
+    } else {
+      lanePoint(e, v.lane, clamp((x - e.sx) * e.dx + (z - e.sz) * e.dz, v.half, Math.max(v.half, e.len - v.half)), spot);
+    }
+    return { x: spot.x, z: spot.z, yaw: Math.atan2(spot.dx, spot.dz) };
   }
 
   // (Gen Z Quant) The side streets round the player kept from standing empty: placed only where the camera can't see,
@@ -1799,6 +1933,7 @@ function createTrafficSystem(scene, sidewalks, obstacles) {
       if (parked.active && Math.hypot(x - parked.x, z - parked.z) < 25) continue;
       if (blockers.some((k) => Math.hypot(x - k.x, z - k.z) < 25)) continue;
       if (!laneClear(e.occ[lane], s, donor.half + 10)) continue;
+      note('feed', donor.x, donor.z, donor.half + 2);
       place(donor, e, lane, s);
       feedStats.placed++;
       return;
@@ -2309,6 +2444,7 @@ function createTrafficSystem(scene, sidewalks, obstacles) {
     updateView(camera);
 
     player.active = Boolean(playerEntity && activeMode !== 'helicopter' && playerEntity.position.y < 2.6);
+    player.car = player.active && activeMode === 'car'; // (Gen Z Quant: the traffic's look-ahead for him, driving only)
     if (playerEntity) {
       const heading = playerEntity.heading || 0;
       const speed = playerEntity.speed || 0;
@@ -2362,7 +2498,7 @@ function createTrafficSystem(scene, sidewalks, obstacles) {
       if (d <= (jump ? NEAR_RADIUS : VEHICLE_RADIUS)) continue;
       if (!jump && d < 1200 && visible(v.x, v.z, v.half + 2) && !occluded(v.x, v.z)) continue;
       recycle--;
-      spawnVehicle(v, jump ? 0 : 100, NEAR_RADIUS, !jump, driving);
+      recycleVehicle(v, jump ? 'jump' : 'far', jump ? 0 : 100, NEAR_RADIUS, !jump, driving);
     }
     buildOccupancy();
     for (const m of bodyMeshes) m.count = 0;
@@ -2380,14 +2516,18 @@ function createTrafficSystem(scene, sidewalks, obstacles) {
       if (!v.edge) {
         // (not placed yet: the recycling above places it)
       } else if (heldEdges.size && (heldEdges.has(v.edge) || held(v.x, v.z, v.half + 1))) {
-        if (!spawnVehicle(v, 120, NEAR_RADIUS, true)) spawnVehicle(v, 120, 900, false); // (Gen Z Quant: a hold zone)
+        if (!recycleVehicle(v, 'hold', 120, NEAR_RADIUS, true)) recycleVehicle(v, 'hold', 120, 900, false); // (Gen Z Quant: a hold zone)
       } else if (v.placedAt === tick) {
         // (Gen Z Quant: placed this frame already)
-      } else if (budget > 0 && v.wait > JAM_WAIT && !visible(v.x, v.z, v.half + 2) && spawnVehicle(v, 100, 300, true)) {
-        budget--; // stuck in a jam out of view: somewhere else
+      } else if (budget > 0 && v.wait > JAM_WAIT && (unseen(v.x, v.z, v.half + 2) || (d > 120 && behindAnother(v))) && recycleVehicle(v, 'jam', 100, 300, true)) {
+        budget--; // stuck in a jam out of view (Gen Z Quant: or behind a building, or 120 m off behind another vehicle): somewhere else
       } else if (budget > 0 && v.bus && !v.wreck && d > 60 && !visible(v.x, v.z, v.half + 2) &&
-        buses.some((b) => b !== v && b.edge && b.id < v.id && Math.abs(b.x - v.x) + Math.abs(b.z - v.z) < 45) && spawnVehicle(v, 100, 300, true)) {
+        buses.some((b) => b !== v && b.edge && b.id < v.id && Math.abs(b.x - v.x) + Math.abs(b.z - v.z) < 45) && recycleVehicle(v, 'bunch', 100, 300, true)) {
         budget--; // (Gen Z Quant) a bus bunched up with another, out of view: somewhere else
+      } else if (budget > 0 && v.bus && v.edge.axis !== 'ave' && unseen(v.x, v.z, v.half + 2) && recycleVehicle(v, 'bus', 100, 300, true)) {
+        budget--; // (Gen Z Quant) a bus on a side street, out of view: back on an avenue
+      } else if (v.wait > 40 && !v.wreck) {
+        unjam(v); // (Gen Z Quant) stood 40 s in view: its queue noses on
       }
       if (!v.edge) continue;
 
@@ -2498,6 +2638,8 @@ function createTrafficSystem(scene, sidewalks, obstacles) {
     network,
     hold, // (Gen Z Quant)
     unwreck, // (Gen Z Quant)
+    laneSpot, // (Gen Z Quant)
+    recycleLog, // (Gen Z Quant)
     blockers, // (Gen Z Quant)
     feedStats // (Gen Z Quant)
   };

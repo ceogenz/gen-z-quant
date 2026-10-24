@@ -24,6 +24,7 @@ import { createAudio } from './mission/audio.js';
 import { createZK } from './mission/zk.js';
 import { createDirector, keys, angleKeys, spline, travel, rig, masked, handheld, clamp, smooth, lerp, ease, shotAspect, shotFov } from './mission/cine.js';
 import { createFace } from './face.js';
+import { createTrailer } from './trailer.js';
 
 const Q = new URLSearchParams(location.search);
 const PI = Math.PI;
@@ -68,6 +69,10 @@ export async function install(W) {
   const save = Q.has('nogate') ? null : await import('./mission/m3-save.js').then((m) => (m.readSave() ? m : null)).catch(() => null);
   const gateOpts = { when: () => W.app.ready, onStart: () => sfx.unlock(), fine: 'Headphones on · Built on Slop New York by mrdoob' };
   const gate = Q.has('nogate') ? null : save ? save.saveGate(ui, gateOpts) : ui.gate(gateOpts);
+  // the cold open (wagmi/trailer.js; ?trailer=0 leaves it out): its music fetched while the gate is up, black on the
+  // tap, played on this set before the opening
+  W.trailer = gate ? createTrailer(W) : null;
+  if (W.trailer) gate.then((r) => { if (r !== 'continue') W.trailer.cover(); });
   // the first shot's camera and the bars from now on, while the cast is built behind the loading screen
   const hold = createDirector(W); hold.camera = { pos: [260, 140, 250], look: [-80, 172, 686], fov: 50, band: false }; hold.take(); ui.cine(true);
   W._holdCam = hold;
@@ -723,9 +728,9 @@ function buildScript(ctx) {
   }
 
   // ---- the cues: once each, as the clock passes them (ui: also replayed on a seek into their span)
-  let sound = {};
+  let sound = {}, noTitle = false;
   const CUES = [
-    [0, () => { ui.gameTitle(true); }, 4.5, true],
+    [0, () => { if (!noTitle) ui.gameTitle(true); }, 4.5, true],
     [0.3, () => sfx.play('stinger', { gain: 0.3 })],
     [4.5, () => ui.gameTitle(false)],
     [6.5, (r = 3.6) => ui.place('Murray Hill', 'E 37th St · Midtown · 5:45 PM', r), 3.6, true],
@@ -1274,29 +1279,30 @@ function buildScript(ctx) {
     if (zc && playing) W.audio?.duck?.('amb', 0.85, 0.12);
     if (zc || feed) zk.pose(t, { lean: zkLean(t), tilt: zkTilt(t), palm: zkPalm(t) });
     // the words
-    const L = lineAt(t);
-    ui.sub(L ? L[0] : null, L ? L[4] : null, L ? L[1] : WHITE);
+    const L = borrow.quiet ? null : lineAt(t);
+    if (!borrow.quiet) ui.sub(L ? L[0] : null, L ? L[4] : null, L ? L[1] : WHITE);
     const zkTalks = L && L[0] === 'ZK';
     // (ZK's recorded voice, when his line has one: the meters follow it; else the buzzing babble)
     const zkVoiced = zkTalks && W.voice?.has('ZK', L[4]);
     if (sound.voice) sound.voice.talk(zkTalks && playing && !zkVoiced);
     if (zkTalks) { const lv = zkVoiced ? Math.min(1, 0.12 + W.voice.level() * 1.2) : 0.6 + 0.4 * Math.random(); ui.phone.talk(lv); ui.zkTalk(lv); }
-    cues(t, seek);
+    if (!borrow.quiet) cues(t, seek);
     lastT = t;
   }
 
   // ---- the run
+  const SET_HOLD = [
+    { minX: 9, maxX: 164, minZ: 384.5, maxZ: 410 },     // E 37th St, curb to curb and both sidewalks
+    { minX: -9, maxX: 9, minZ: 404, maxZ: 492 },        // 5th Ave south of 37th (the van's way out)
+    { minX: 146, maxX: 164, minZ: 404, maxZ: 470 },     // Madison south of 37th (its way in)
+  ];
   function startState() {
     app.selectTime?.('golden');
     place(W, { car: [MARK.car[0], MARK.car[2], MARK.car[3]], quant: [112, 386.7, 0] });
     P.mesh.visible = false;
     // (the gaits put away while the scene poses him: the rig's own copies of the clips do it)
     for (const a of Qn.mixer._actions) if (!qRig.owns(a)) a.setEffectiveWeight(0);
-    app.trafficSystem.hold?.([
-      { minX: 9, maxX: 164, minZ: 384.5, maxZ: 410 },     // E 37th St, curb to curb and both sidewalks
-      { minX: -9, maxX: 9, minZ: 404, maxZ: 492 },        // 5th Ave south of 37th (the van's way out)
-      { minX: 146, maxX: 164, minZ: 404, maxZ: 470 },     // Madison south of 37th (its way in)
-    ]);
+    app.trafficSystem.hold?.(SET_HOLD);
     street.show(true);
     W.cutscene = true;
     W._holdCam?.release(0); W._holdCam = null;
@@ -1353,6 +1359,16 @@ function buildScript(ctx) {
     seek(x) { t = clamp(x, 0, END); }, play() { playing = true; }, pause() { playing = false; },
     get playing() { return playing; }, get skipped() { return skipped; }, END, shots, LINES,
   };
+  // the cold open (wagmi/trailer.js) shoots on this set: the frame at any time x of it (quiet: no cues, no lines),
+  // this director's camera, and off() to put the set and the cast away for a shot of its own
+  const borrow = {
+    D, quiet: false, hold: SET_HOLD,
+    at(x, dt) { t = clamp(x, 0, END); frame(dt); },
+    off() {
+      for (const o of [moon.group, van.group, bagsy.root, stops.root, leash.mesh, phone]) o.visible = false;
+      zk.full(null); zk.phone(false); qKeep.restore();
+    },
+  };
   async function run(gate) {
     startState();
     t = 0; frame(0);
@@ -1360,6 +1376,9 @@ function buildScript(ctx) {
     while (!app.ready) await sleep(100);
     if (gate) await gate;
     sfx.unlock();
+    // the trailer first (wagmi/trailer.js), then the opening from its first frame as before
+    // (after the trailer's own logo slam the opening leaves its title out, so the name doesn't show twice)
+    if (W.trailer) { const tr = await W.trailer.play(borrow); noTitle = !!tr?.sawLogo; W.trailer = null; startState(); t = 0; lastT = -1; frame(0); }
     sound.city = sfx.city(); sound.city?.fadeTo(0.5, 2.5);
     sound.pad = sfx.pad(); sound.pad?.fadeTo(0.16, 4);
     sound.voice = sfx.voice();

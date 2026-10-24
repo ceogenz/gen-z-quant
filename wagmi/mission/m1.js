@@ -83,6 +83,8 @@ function createMission(W, { keep = false } = {}) {
   const dist = (a, x, z) => Math.hypot(a.x - x, a.z - z);
   const inCar = () => cm.activeMode === 'car';
   const me = () => (inCar() ? car.position : P.position);
+  // (on his way: the car over 3 m/s, or on foot over 1.5)
+  const moving = () => (inCar() ? Math.abs(car.speed || 0) > 3 : Math.abs(P.speed || 0) > 1.5);
   // lines: [speaker, colour, text, pause after]; each held for its reading time (15 characters a second, 1.4 s at least),
   // a voice mumbling each phrase of it as it goes (no words: the subtitles are the words)
   const VOICE = { Quant: 152, Bagsy: 104, Juno: 212, Fomo: 128 };
@@ -190,20 +192,22 @@ function createMission(W, { keep = false } = {}) {
       const tag = [[3.6, 470], [3.6, 641], [-1134, 641], [-1134, 1117], [-1180, 1122]];
       const segs = tag.slice(1).map((p, i) => Math.hypot(p[0] - tag[i][0], p[1] - tag[i][1])), tagLen = segs.reduce((a, b) => a + b, 0);
       const tagAt = (k) => { let s = k * tagLen; for (let i = 0; i < segs.length; i++) { if (s <= segs[i]) { const u = s / segs[i]; return [lerp(tag[i][0], tag[i + 1][0], u), lerp(tag[i][1], tag[i + 1][1], u)]; } s -= segs[i]; } return tag[tag.length - 1]; };
+      // [t, text, mode]: a help about driving only while he drives (the leg can be walked: gps.drive)
       const helps = [
         [2, ['Your destination is marked with a ', { '●': 'yellow' }, ' on the Radar.']],
-        [8, ['GPS shows the quickest legal route with a ', { 'yellow line': 'yellow' }, '.']],
-        [20, 'Hold [Shift] to boost.'],
+        [8, ['GPS shows the quickest legal route with a ', { 'yellow line': 'yellow' }, '.'], 'car'],
+        [20, 'Hold [Shift] to boost.', 'car'],
       ];
       let callAt = null, called = false;
       const places = [['Garment District', (p) => p.x < -300 && p.z < 700], ["Hell's Kitchen", (p) => p.x < -880 && p.z < 700], ['Chelsea', (p) => p.z > 760]];
       const seen = new Set();
       const off = hook(() => {
         const t = (now() - t0) / 1000;
-        if (t < 22) { const [x, z] = tagAt(Math.min(1, t / 20)); gps.blip('tag', { x, z, kind: 'paw', edge: true }); } else gps.unblip('tag');
-        while (helps.length && t >= helps[0][0]) ui.help(helps.shift()[1], 7);
-        // Juno calls six seconds after he sets off
-        if (callAt == null && inCar() && Math.abs(car.speed) > 3) callAt = t + 6;
+        // (the objective says to follow the tag: it stays on the radar where it stopped, by the park, as Juno says)
+        { const [x, z] = tagAt(Math.min(1, t / 20)); gps.blip('tag', { x, z, kind: 'paw', edge: true, name: "Moon's tag" }); }
+        while (helps.length && t >= helps[0][0]) { const [, text, mode] = helps.shift(); ui.help(text, 7, mode ? { mode } : {}); }
+        // Juno calls six seconds after he sets off, in the car or on foot (or 10 s in, if he hasn't)
+        if (callAt == null && (moving() || t > 10)) callAt = t + 6;
         if (callAt != null && !called && t >= callAt) { called = true; junoCall(tk); }
         const p = me();
         if (W.cast && !W.cast.van.group.visible && dist(p, DEST.x, DEST.z) < 320) setVan(W.cast, true);

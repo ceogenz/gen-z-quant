@@ -107,18 +107,24 @@ export function install(W) {
   }
   // the blow between this car and another going (ovx, ovz) of mass mv, along hit's normal (restitution 0.2, nearly none
   // at speed; a little friction across it): this car's share of it (slowed or backed along it, slid across it, turned
-  // by its lever arm; head on at speed, crumpled to a stop); the blow J on this car, or null when they part anyway
-  function blow(ovx, ovz, mv) {
+  // by its lever arm; head on at speed, crumpled to a stop); the blow J on this car, or null when they part anyway.
+  // The turn is by how hard it hit: a nudge or a scrape barely turns it (3 m/s, a degree or so), a real crash (20 m/s and
+  // up) spins it as hard as ever. A heavy one (a bus) shoves it with all its weight but turns it as an SUV's would, and
+  // a scrape's blows (key: the one it grinds along) add up to no more than GRIND rad/s of spin each half second
+  const GRIND = 1.2, grind = new WeakMap();
+  function blow(ovx, ovz, mv, key = null) {
     const s = Math.sin(car.heading), c = Math.cos(car.heading), mp = car.mass || 2, { nx, nz } = hit;
     const pvx = s * car.speed + car.vx, pvz = c * car.speed + car.vz;
     const rvx = pvx - ovx, rvz = pvz - ovz, vn = rvx * nx + rvz * nz;
     if (vn >= -0.15) return null;
-    const sp = -vn, e = sp > 12 ? 0.05 : 0.2, inv = 1 / mp + 1 / mv;
-    const jn = (1 + e) * sp / inv;
-    // (friction across the blow: the sideswipe's scrub)
+    const sp = -vn, e = sp > 12 ? 0.05 : 0.2;
+    // (along the blow, and the friction across it: the sideswipe's scrub; m the other's weight)
     const tx = rvx - nx * vn, tz = rvz - nz * vn, tl = Math.hypot(tx, tz);
-    const jt = tl > 1e-3 ? Math.min(0.35 * jn, tl / inv) : 0;
-    const Jx = nx * jn - (tl > 1e-3 ? tx / tl * jt : 0), Jz = nz * jn - (tl > 1e-3 ? tz / tl * jt : 0);
+    const impulse = (m) => {
+      const inv = 1 / mp + 1 / m, jn = (1 + e) * sp / inv, jt = tl > 1e-3 ? Math.min(0.35 * jn, tl / inv) : 0;
+      return [nx * jn - (tl > 1e-3 ? tx / tl * jt : 0), nz * jn - (tl > 1e-3 ? tz / tl * jt : 0)];
+    };
+    const [Jx, Jz] = impulse(mv);
     // this car: the blow along it slows it (or backs it), across it slides it; its lever arm turns it
     const dvx = Jx / mp, dvz = Jz / mp, along = dvx * s + dvz * c;
     car.speed += along; car.vx += dvx - s * along; car.vz += dvz - c * along;
@@ -127,11 +133,21 @@ export function install(W) {
     // moment whatever is pressed)
     if (front < -0.6 && sp > 14) { car.speed *= clamp(6.3 / sp, 0.12, 0.45); if (sp > 20) hold(sp); }
     const { hl } = box(), B = car.body, I = mp * (hl * hl + B.hx * B.hx) / 3;
-    car.angularVel = clamp((car.angularVel || 0) + ((hit.z - car.position.z) * Jx - (hit.x - car.position.x) * Jz) / I * 0.8, -3.5, 3.5);
+    const [Rx, Rz] = mv > 4 ? impulse(4) : [Jx, Jz];
+    const k = 0.8 * clamp((sp - 2) / 12, 0.15, 1), cap = 2.0 + 1.5 * clamp((sp - 12) / 8, 0, 1);
+    let dw = clamp(((hit.z - car.position.z) * Rx - (hit.x - car.position.x) * Rz) / I * k, -cap, cap);
+    if (sp < 8 && key) {
+      const now = performance.now();
+      let g = grind.get(key);
+      if (!g || now - g.t > 500) grind.set(key, (g = { t: now, used: 0 }));
+      const room = Math.max(0, GRIND - g.used);
+      dw = clamp(dw, -room, room); g.used += Math.abs(dw);
+    }
+    car.angularVel = clamp((car.angularVel || 0) + dw, -3.5, 3.5);
     return { sp, Jx, Jz };
   }
   // another car: apart by the weights, then the blow, each turned by its lever arm; the other knocked off its lane when
-  // it was hard
+  // it was really hit (over 6 m/s: a tap leaves it in its lane)
   const contactCool = new WeakMap();
   function meet(v) {
     const mp = car.mass || 2, mv = v.bus ? 12 : massOf(v);
@@ -142,10 +158,10 @@ export function install(W) {
     car.position.x += nx * pen * share; car.position.z += nz * pen * share;
     if (R) { R.x -= nx * pen * (1 - share); R.z -= nz * pen * (1 - share); v.x = R.x; v.z = R.z; }
     const [ovx, ovz] = wrecks.velOf(v);
-    const b = blow(ovx, ovz, mv);
+    const b = blow(ovx, ovz, mv, v);
     if (!b) return;
     const { sp, Jx, Jz } = b;
-    wrecks.push(v, -Jx, -Jz, hit.x, hit.z, sp > 3);
+    wrecks.push(v, -Jx, -Jz, hit.x, hit.z, sp > 6);
     rock(nx, nz, sp);
     // the feel, once a blow (not every step of a grind): sparks and bits where they touched, a bus's horn and brakes
     const now = performance.now(), last = contactCool.get(v) || 0;
@@ -163,7 +179,7 @@ export function install(W) {
   function meetBody(b) {
     const { nx, nz, pen } = hit;
     car.position.x += nx * pen; car.position.z += nz * pen;
-    const r = blow(b.vx, b.vz, b.mass);
+    const r = blow(b.vx, b.vz, b.mass, b.key && typeof b.key === 'object' ? b.key : null);
     if (!r) return;
     b.knock?.(-r.Jx, -r.Jz);
     rock(nx, nz, r.sp);

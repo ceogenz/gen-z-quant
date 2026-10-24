@@ -1,7 +1,7 @@
 // Gen Z Quant: the cutscene machinery. A cutscene is a clock (t, seconds) and functions of it: the camera's shot, every
 // actor's place and pose, the cues (lines, captions, sounds) that fire once as t passes them. Seeking is cheap, so a
 // capture can step through it frame by frame.
-//   const D = createDirector(W);  D.take();  D.camera = { pos, look, fov, roll };  D.release(blendSecs)
+//   const D = createDirector(W);  D.take();  D.camera = { pos, look, fov, roll };  D.release(blendSecs, { face })
 //   D.block(true, { onSkip })     every key and the mouse kept from the game (hold Space or Enter 0.6 s to skip)
 //   keys(...) / angleKeys(...)    keyframed values;   rig(mixer, clips)   a seekable pose from clip segments
 import * as THREE from 'three/webgpu';
@@ -221,19 +221,25 @@ export function createDirector(W) {
     // or pressed against, what was behind him); in the car the view stays behind it, in front of whatever is there
     // (js/cameras.js keepInView, with the street's things: cs.blockers). It glides (in at most 0.6 s) only when nothing
     // stood behind him, the last shot has him in it from a few metres off, and the straight line from it to the view
-    // behind him is clear all the way; else it cuts
-    release(secs = 1.2) {
+    // behind him is clear all the way; else it cuts. face ({ x, z }, or a function that gives one when it hands back):
+    // where he goes next. On foot he is turned to the clear way nearest it; in the car the view is turned toward it (the
+    // orbit, eased back behind the car once he drives on)
+    release(secs = 1.2, { face = null } = {}) {
       return new Promise((res) => {
         if (!D.active) return res();
         const from = { p: cam.position.clone(), q: cam.quaternion.clone(), fov: cam.fov }, prev = D.prev;
         cs.resetForTeleport(); app.selectCamera?.('chase', true);
-        const ent = cm.getActiveEntity(), turn = cs.clearTurn ? cs.clearTurn(ent) : 0;
-        if (turn) { ent.heading += turn; if (ent.mesh && cm.activeMode === 'person') ent.mesh.rotation.y = ent.heading; }
+        const ent = cm.getActiveEntity(), onFoot = cm.activeMode === 'person';
+        let fp = null; try { fp = typeof face === 'function' ? face() : face; } catch (e) { console.warn('[cine] face', e); }
+        const fy = fp && Number.isFinite(fp.x) && Number.isFinite(fp.z) && Math.hypot(fp.x - ent.position.x, fp.z - ent.position.z) > 1.5 ? Math.atan2(fp.x - ent.position.x, fp.z - ent.position.z) : null;
+        const turn = cs.clearTurn ? cs.clearTurn(ent, onFoot ? fy : null) : 0;
+        if (turn) { ent.heading += turn; if (ent.mesh && onFoot) ent.mesh.rotation.y = ent.heading; }
+        if (fy != null && !onFoot && ent.type === 'car') { cs.orbitYawOffset = Math.atan2(Math.sin(fy - ent.heading), Math.cos(fy - ent.heading)); cs.userOrbitTimer = 1.2; }
         // (the last shot sees him, from a few metres off: a glide from a close-up (his hands in the van, his face) would
         // spend its first half inside him, him out of the frame)
         const pv0 = _p.copy(ent.position); pv0.y += cm.activeMode === 'car' ? 1.15 : 1.45;
         const seen = from.p.distanceTo(pv0) > 2.5 && (cam.updateMatrixWorld(), pv0.project(cam), pv0.z < 1 && Math.abs(pv0.x) < 0.9 && Math.abs(pv0.y) < 0.9);
-        W.handback = { turn, seen, at: performance.now() }; // (for looking at it)
+        W.handback = { turn, seen, face: fy, at: performance.now() }; // (for looking at it)
         cs.update = prev;
         if (secs <= 0) { D.active = false; setBand(0); return res(); }
         // (a glide is short: at most 0.6 s)
