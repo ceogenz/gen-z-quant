@@ -19,7 +19,8 @@
 //                         route to it; within onFoot m of the place on foot, on to it on foot; back in the car, the place
 //                         again. step() every frame (from the mission's frame hook), stop() at the end.
 //   gps.blip(id, { x, z, kind: 'dest' | 'car' | 'enemy' | 'friend' | 'object' | 'letter' | 'paw' | 'waypoint', letter,
-//                  pulse, edge, name });  gps.unblip(id);  gps.update() (every frame; the radar asks for it itself)
+//                  pulse, edge, name, label });  gps.unblip(id);  gps.update() (every frame; the radar asks for it itself)
+//                         (label: true, its name, up to ' · ', written beside it on the full map)
 //   gps.user              the player's own waypoint (a click on the full map, or its search's 'Set waypoint'): purple,
 //                         its route wins over the mission's until he gets there, clicks it away, or the objective changes
 // Named mission places (the route's place, named blips) are found by the full map's search (mapSystem.searchExtra).
@@ -27,6 +28,9 @@
 // stuck (the pedal down, going nowhere, 4 s), real help is offered once (ui.offer): the way shown again, the car put
 // back on the road (WAGMI.recoverCar), the checkpoint restarted (a mission running). gps.stallNote = [from, text]: one
 // gentle line sent with the first offer (the contact's), then never again for that objective.
+// In the car, the next turn and its street at the top of the screen (turns.js: gps.turns), its corner a white chevron on
+// the radar. On the full map, a blip with label: true has its name beside it; a pulse takes the blip's own colour.
+import { createTurns } from './turns.js';
 const YELLOW = '#FFC93C', BLUE = '#6CB8FF', RED = '#EF4444', GREEN = '#4ADE80', PURPLE = '#C77DFF', HALO = 'rgba(8, 11, 15, 0.9)';
 const FOOT_LINE = 150; // m: on foot and this close, the route is the straight line to it
 
@@ -380,12 +384,28 @@ export function createGPS(W) {
     const col = gps.user ? PURPLE : YELLOW;
     ctx.lineJoin = 'round'; ctx.lineCap = 'round';
     ctx.beginPath(); gps.route.forEach(([x, z], i) => (i ? ctx.lineTo(toX(x), toY(z)) : ctx.moveTo(toX(x), toY(z))));
-    ctx.strokeStyle = HALO; ctx.lineWidth = width + 3; ctx.stroke();
+    ctx.strokeStyle = HALO; ctx.lineWidth = width + 4; ctx.stroke();
     ctx.strokeStyle = col; ctx.lineWidth = width; ctx.stroke();
+  }
+  // the next turn's corner on the radar: a white chevron pointing the way out of it
+  function drawTurnMark(ctx, x, y, ux, uz) {
+    ctx.save(); ctx.translate(x, y); ctx.rotate(Math.atan2(uz, ux));
+    ctx.beginPath(); ctx.moveTo(-3, -4.5); ctx.lineTo(2.5, 0); ctx.lineTo(-3, 4.5);
+    ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+    ctx.strokeStyle = HALO; ctx.lineWidth = 5; ctx.stroke();
+    ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2.2; ctx.stroke();
+    ctx.restore();
+  }
+  // (a blip's pulse in its own colour: a green thing to pick up pulses green)
+  const PULSE = { object: '74, 222, 128', enemy: '239, 68, 68', friend: '108, 184, 255', car: '108, 184, 255', paw: '108, 184, 255', waypoint: '199, 125, 255' };
+  function drawLabel(ctx, x, y, text) {
+    ctx.font = '700 13px "Barlow Condensed", system-ui'; ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic'; ctx.lineJoin = 'round';
+    ctx.strokeStyle = HALO; ctx.lineWidth = 3; ctx.strokeText(text, x + 12, y + 4);
+    ctx.fillStyle = '#ffffff'; ctx.fillText(text, x + 12, y + 4);
   }
   function drawBlip(ctx, x, y, b, r, t) {
     const pulse = b.pulse && (performance.now() - b.born) / 1000 < b.pulse;
-    if (pulse) { const k = (t % 1100) / 1100; ctx.fillStyle = `rgba(255, 201, 60, ${0.5 * (1 - k)})`; ctx.beginPath(); ctx.arc(x, y, r + 4 + k * 12, 0, Math.PI * 2); ctx.fill(); }
+    if (pulse) { const k = (t % 1100) / 1100; ctx.fillStyle = `rgba(${PULSE[b.kind] || '255, 201, 60'}, ${0.5 * (1 - k)})`; ctx.beginPath(); ctx.arc(x, y, r + 4 + k * 12, 0, Math.PI * 2); ctx.fill(); }
     const disc = (c, rr = r) => { ctx.fillStyle = HALO; ctx.beginPath(); ctx.arc(x, y, rr + 2, 0, Math.PI * 2); ctx.fill(); ctx.fillStyle = c; ctx.beginPath(); ctx.arc(x, y, rr, 0, Math.PI * 2); ctx.fill(); };
     switch (b.kind) {
       case 'dest': disc(YELLOW); ctx.fillStyle = HALO; ctx.beginPath(); ctx.arc(x, y, r * 0.38, 0, Math.PI * 2); ctx.fill(); break;
@@ -428,6 +448,8 @@ export function createGPS(W) {
   // On foot in a mission it zooms in (a car parked 20 m off is a blip of its own, not one under the arrow); it eases
   // back out in the car. (The city's radar eases its own scale 8% a frame toward its target: set ahead of it so it
   // lands where ours is.)
+  // the turn-by-turn cue (turns.js), stepped with the radar's draw (or the full map's, which hides it)
+  const turns = createTurns(W, gps); gps.turns = turns;
   const miniOrig = ms.renderMinimap.bind(ms);
   const GROUND = ms.miniScale || 0.32, FOOT = 1.0;
   let zoom = GROUND;
@@ -439,13 +461,16 @@ export function createGPS(W) {
       ms.miniScale = (zoom - 0.08 * GROUND) / 0.92;
     } else zoom = ms.miniScale;
     miniOrig(); ms.waypoint = wp;
+    turns.step();
     if (!gps.dest && !gps.user && !blips.size) return;
     const cv = ms.miniCanvas, ctx = ms.miniCtx; if (!cv || !ctx || !cv.offsetParent) return;
     const w = cv.clientWidth, h = cv.clientHeight, dpr = Math.min(window.devicePixelRatio || 1, 2), s = ms.miniScale;
     const ent = cm.getActiveEntity(), px = ent.position.x, pz = ent.position.z, t = performance.now();
     ctx.save(); ctx.setTransform(dpr, 0, 0, dpr, dpr * w * 0.5, dpr * h * 0.5);
     const toX = (x) => (x - px) * s, toY = (z) => (z - pz) * s;
-    drawRoute(ctx, toX, toY, 3);
+    drawRoute(ctx, toX, toY, 5);
+    const tc = turns.cue;
+    if (tc && tc.kind === 'turn') { const x = toX(tc.at[0]), y = toY(tc.at[1]); if (Math.abs(x) < w * 0.5 - 8 && Math.abs(y) < h * 0.5 - 8) drawTurnMark(ctx, x, y, tc.ux, tc.uz); }
     const mx = w * 0.5 - 9, my = h * 0.5 - 9;
     for (const b of blips.values()) {
       let x = toX(b.x), y = toY(b.z);
@@ -469,13 +494,18 @@ export function createGPS(W) {
   ms.renderFullMap = function () {
     const wp = ms.waypoint; if (gps.dest || gps.user || blips.size) ms.waypoint = null;
     fullOrig(); ms.waypoint = wp;
+    turns.step();
     if ((!gps.dest && !gps.user && !blips.size) || !ms.isFullMapOpen || !ms.fullCtx) return;
     const ctx = ms.fullCtx, dpr = ms.fullDpr || 1, { w, h } = ms.fullSize(), s = ms.viewZoom, cx = ms.viewCenterX, cz = ms.viewCenterZ;
     const ent = cm.getActiveEntity(), t = performance.now();
     ctx.save(); ctx.setTransform(dpr, 0, 0, dpr, dpr * w * 0.5, dpr * h * 0.5);
     const toX = (x) => (x - cx) * s, toY = (z) => (z - cz) * s;
-    drawRoute(ctx, toX, toY, 4);
-    for (const b of blips.values()) drawBlip(ctx, toX(b.x), toY(b.z), b, 8, t);
+    drawRoute(ctx, toX, toY, 6);
+    for (const b of blips.values()) {
+      const x = toX(b.x), y = toY(b.z);
+      drawBlip(ctx, x, y, b, 8, t);
+      if (b.label && b.name) drawLabel(ctx, x, y, String(b.name).split(' · ')[0]);
+    }
     ctx.translate(toX(ent.position.x), toY(ent.position.z)); drawArrow(ctx, ent.heading, -11, 7.5, 8);
     ctx.restore();
   };

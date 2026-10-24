@@ -29,6 +29,7 @@ export const CREDITS = [
   { heading: 'Characters', lines: [
     { what: 'Quant, Gears, Juno and Fiona', who: 'built from MakeHuman\'s body, clothes and hair', note: 'original characters for Gen Z Quant', licence: 'CC0 1.0', licenceUrl: LICENCES['CC0 1.0'], src: 'http://www.makehuman.org' },
     { what: 'Motion capture', who: 'CMU Graphics Lab Motion Capture Database', note: 'free for all uses (the data may not be resold); created with funding from NSF EIA-0196217', licence: null, licenceUrl: null, src: 'http://mocap.cs.cmu.edu' },
+    { what: 'Motion capture', who: 'Bandai Namco Research Motion Dataset, © 2022 Bandai Namco Research Inc.', note: 'the Degens\' walks, idles and taunts, the rally crowd, Quant\'s footwork; retargeted; non-commercial use only (not MIT)', licence: 'CC BY-NC 4.0', licenceUrl: 'https://creativecommons.org/licenses/by-nc/4.0/', src: 'https://github.com/BandaiNamcoResearchInc/Bandai-Namco-Research-Motiondataset' },
   ] },
   { heading: 'Engine sounds', lines: [
     { what: '"Maserati GranTurismo S Exhaust"', who: 'lmartins', note: 'Quant\'s car: loops cut at five engine speeds', licence: 'CC BY 4.0', licenceUrl: 'https://creativecommons.org/licenses/by/4.0/', src: 'https://commons.wikimedia.org/wiki/File:Maserati_GranTurismo_S_Exhaust.ogg' },

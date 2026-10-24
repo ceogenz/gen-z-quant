@@ -26,6 +26,22 @@ the MIT License in LICENSE; they remain under their author's terms.
     ffFinisher) were retargeted from Spiderbench's clips.
 
 
+Bandai Namco Research Motion Dataset (motion capture)
+----------------------------------------------------
+Motion data: Bandai Namco Research Motion Dataset, (c) 2022 Bandai Namco Research Inc., CC BY-NC 4.0
+(https://creativecommons.org/licenses/by-nc/4.0/; https://github.com/BandaiNamcoResearchInc/Bandai-Namco-Research-Motiondataset).
+These files are NOT covered by the MIT License in LICENSE; they remain under CC BY-NC 4.0: they may be used and
+shared for non-commercial purposes only, with this credit. The licence's text is in assets/anim/bandai/LICENSE.txt.
+They were changed: retargeted from the dataset's BVH files to this game's rigs, trimmed to loops, their travel taken
+out (in place) and their feet set on the ground; in the game Quant's steps play on his legs alone, under his guard.
+  - assets/anim/bandai/degens.glb: the Degens' swagger walks, run, side-steps, back-step, idles and taunts
+    (dataset-1: walk, run, walk-back, walk-left, walk-right, bow, guide, bye, byebye; chimpira style)
+  - assets/anim/bandai/rally-crowd-ped.json: the rally crowd's dances and cheers (dataset-1: dance-long,
+    dance-short, normal; dataset-2: wave-both-hands, raise-up-both-hands, wave-right-hand; active, youthful)
+  - assets/anim/bandai/quant-footwork.glb: Quant's back-pedal and side-steps in a fight (dataset-1: walk-back,
+    walk-left, walk-right; normal, angry, proud)
+
+
 Props (street fight)
 --------------------
   - assets/props/trash-cans.glb: "Metal Trash Can" by GurJas Studios, from Poly Haven

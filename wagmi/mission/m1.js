@@ -300,6 +300,14 @@ function createMission(W, { keep = false } = {}) {
   };
   const ORDER = ['car', 'drive', 'arrival', 'fight', 'search'];
   const CHECKPOINT = { car: 'car', drive: 'car', arrival: 'fight', fight: 'fight', search: 'search' };
+  // the fail screen (ui.failed): a tip by the reason, what Retry does by the checkpoint it goes back to, what Skip does
+  // by the phase he failed in (a skip goes on past every phase of that checkpoint: M.run)
+  const TIPS = {
+    'Quant got rekt.': ['Hit them with [J]. When the cue over a Degen turns ', { yellow: 'yellow' }, ', counter with [Q]; when it is ', { red: 'red' }, ', roll away with [C].'],
+    'You left the fight.': ['Stay at Chelsea Park until the Degens are down: the fight is lost past 150 m.'],
+  };
+  const RETRY = { car: 'Retry: from the start', fight: 'Retry: the fight', search: 'Retry: the van search' };
+  const SKIP = { car: 'Skip the drive: start at Chelsea Park', drive: 'Skip the drive: start at Chelsea Park', arrival: 'Skip the fight: start at the van search', fight: 'Skip the fight: start at the van search' };
 
   /* ------------------------------------------------------- the scenes -- */
   // short scenes on the director: the arrival at the park, the collar in the van (hold Space to skip)
@@ -531,7 +539,7 @@ function createMission(W, { keep = false } = {}) {
           tidy(); cm.resetInput?.();
           if (e.rekt) { ui.rekt(true); sfx.play('failed'); await sleep(2600); ui.rekt(false); } else sfx.play('failed');
           const cp = CHECKPOINT[phase]; fails[cp] = (fails[cp] || 0) + 1;
-          const choice = await ui.failed(e.reason, { skip: fails[cp] >= 3 });
+          const choice = await ui.failed(e.reason, { skip: fails[cp] >= 3, tip: TIPS[e.reason], retryLabel: RETRY[cp], skipLabel: SKIP[phase], quitLabel: 'Quit: back to free roam' });
           W.combat?.clear?.();
           if (choice === 'quit') { holds([]); M.stop(); return; }
           if (choice === 'skip') { i = ORDER.indexOf(cp) + 1; while (i < ORDER.length && CHECKPOINT[ORDER[i]] === cp) i++; fresh = true; continue; }

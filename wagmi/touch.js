@@ -17,7 +17,8 @@
 // the stick at the same time (each its own pointer, captured), and let go on a blur, the page hidden, a turn of the
 // phone and any change of context. Hidden in cutscenes, the start gate, the pause menu, the full map, the fail screen.
 // While the last thing used was a finger (body.wg-touchlast: a touch sets it, a key or a mouse clears it, a game pad
-// too), every key cap on screen reads as the button that does it (CSS only: kbd[data-touch]; the text is never
+// too), every key cap on screen reads as the button that does it (CSS only: kbd[data-touch], named by the key, or by the
+// cap itself when it says, data-touch-as: mission/ui.js's [F|TAKE PHONE]; the text is never
 // changed, so wagmi/pad.js's swap still reads it), a cap with no button is hidden, and the key-only prompts are put away
 // (the F prompt, the fight's key lists, the radio card's keys, the end card's key line). In a fight the toolbar stays up, so Pause can be tapped.
 // Nothing here runs on a desktop: the buttons and the style are made only once body.touch-enabled is set (the city's
@@ -319,6 +320,8 @@ ${T} #wg .m2-prompt kbd::after { content: 'TAKE DOWN'; }`;
 
   /* ------------------------------------------------- the key caps' names -- */
   function capName(kbd) {
+    // (a cap that names its own button, ui.js's [F|TAKE PHONE]: that name, whatever the key)
+    if (kbd.dataset.touchAs) return kbd.dataset.touchAs.trim().toUpperCase();
     const k = (kbd.dataset.k ?? kbd.textContent).trim().replace(/\s+/g, ' ').toUpperCase();
     if (kbd.closest('.wg-skip')) return '';
     const inWf = !!kbd.closest('#wf');
@@ -364,8 +367,9 @@ ${T} #wg .m2-prompt kbd::after { content: 'TAKE DOWN'; }`;
     if (dup !== kbd.hasAttribute('data-touch-dup')) kbd.toggleAttribute('data-touch-dup', dup);
   }
   let scanWant = true, scanT = 0;
-  // (the game's own overlays: the city's toolbar and radar keep their look)
-  const CAPS = '#wg kbd, #wf kbd, #wg-thr kbd, #wg-toast kbd, .wr-card kbd, #m3o kbd';
+  // (the game's own overlays, and the objective tracker the mission puts in the city's HUD column: the city's toolbar
+  // and radar keep their look)
+  const CAPS = '#wg kbd, #wf kbd, #wg-thr kbd, #wg-toast kbd, .wr-card kbd, #m3o kbd, .wg-track kbd';
   const scan = () => { for (const k of document.querySelectorAll(CAPS)) mark(k); };
   const mo = new MutationObserver(() => { scanWant = true; });
   let observing = false;

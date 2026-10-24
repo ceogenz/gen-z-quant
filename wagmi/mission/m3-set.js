@@ -284,10 +284,18 @@ export function buildRally(W) {
     return R;
   });
 
-  /* the hype crowd: the city's own people (one instanced draw), facing the stage, bouncing; on the fight, they run */
+  /* the hype crowd: the city's own people (one instanced draw), facing the stage, dancing and cheering; on the fight,
+     they run. The dances and cheers are motion capture (assets/anim/bandai/rally-crowd-ped.json: Bandai Namco Research
+     Motion Dataset, CC BY-NC 4.0, see NOTICE), fetched with the set and played on each person's own rig, each their own
+     take, pace and moment in it (till they're in, or without them, a bounce on the spot) */
   const N = window.NYC;
   const crowd = (() => {
     if (!N?.PersonCrowd || !N?.PersonRig) return null;
+    let CL = null;
+    fetch('assets/anim/bandai/rally-crowd-ped.json').then((r) => (r.ok ? r.json() : null)).then((j) => { if (j?.clips) CL = Object.fromEntries(j.clips.map((c) => [c.name, c])); }).catch(() => {});
+    const TAKES = [['danceLong', 0.35], ['danceShort', 0.2], ['waveBothYouth', 0.12], ['waveRightYouth', 0.1], ['raiseBothYouth', 0.08], ['waveBoth', 0.05], ['waveRight', 0.05], ['raiseBoth', 0.05]];
+    const take = (x) => { for (const [n, w] of TAKES) { if (x < w) return n; x -= w; } return TAKES[0][0]; };
+    let s2 = 97; const rnd2 = () => ((s2 = (s2 * 1664525 + 1013904223) >>> 0) / 4294967296); // (their own: the crowd's places as they were)
     // (packed toward the barrier, thinning out back across the lawn; none in a park tree)
     const NC = 48, C = new N.PersonCrowd(NC, { farDistance: 40, name: 'RallyCrowd' });
     for (const m of C.meshes) { m.visible = false; scene.add(m); }
@@ -298,6 +306,7 @@ export function buildRally(W) {
       const female = rnd() < 0.45, x = -9 + rnd() * 18, z = 2816.3 + Math.pow(rnd(), 1.6) * 12;
       if (people.some((p) => Math.hypot(p.x0 - x, p.z0 - z) < 0.8) || trees.some((t) => Math.hypot(t.x - x, t.z - z) < t.r + 0.55) || Math.hypot(x - CROWD_CAM[0], z - CROWD_CAM[1]) < 1.5) continue;
       people.push({ x0: x, z0: z, x, z, h: PI + (rnd() - 0.5) * 0.5, ph: rnd() * 6, jump: rnd() < 0.4, run: null, gone: false,
+        clip: take(rnd2()), rate: 0.9 + rnd2() * 0.2, at: rnd2() * 15,
         rig: new N.PersonRig({ seed: 40 + i * 3.7, female, scale: female ? 0.93 : 1, girth: 0.92 + rnd() * 0.25, hair: female ? 1 : 0.2 }) });
       i++;
     }
@@ -317,7 +326,8 @@ export function buildRally(W) {
             p.run.t += dt; if (p.run.t > 0.4) { p.x += Math.sin(p.run.a) * p.run.v * dt; p.z += Math.cos(p.run.a) * p.run.v * dt; p.h = p.run.a; }
             const q = V(p.x, 0, p.z); cm.resolveHorizontalCollision?.(q, 0.3, 1.5); p.x = q.x; p.z = q.z;
             if (p.run.t > 9) { p.gone = true; continue; }
-          } else if (p.jump) air = Math.max(0, Math.sin(t * 7 + p.ph)) * 0.16;
+          } else if (CL?.[p.clip] && p.rig.playClip) { p.rig.playClip(CL[p.clip], t * p.rate + p.at, p.x, p.z, p.h, ground(p, p.x, p.z)); C.add(p.rig, cam ? Math.hypot(p.x - cam.x, p.z - cam.z) : 0); continue; }
+          else if (p.jump) air = Math.max(0, Math.sin(t * 7 + p.ph)) * 0.16;
           p.rig.update(Math.max(1e-4, dt), p.x, p.z, p.h, ground, p, air, true);
           C.add(p.rig, cam ? Math.hypot(p.x - cam.x, p.z - cam.z) : 0);
         }

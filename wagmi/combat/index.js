@@ -33,6 +33,10 @@
 //     2 cans, 3 bottles; or { cans, bottles, bats }; false: none)
 //   props(x, z, { cans, bottles, bats }) -> the items it set down
 //   clear() · player: { hp, maxHp, onDown(cb), autoGetUp, downTime, getUpHp, getUp(hp) } · dressDegen(obj, look) · enabled
+//   pressure({ max = 2, circle, calm }) / pressure(null): a mission's hold on a big fight (Mission 2's yard): at most
+//     `max` men go in at once (a bottle thrown from further out only while fewer swing: so 3 at the most), circle: the
+//     rest prowl round him 4.6-5.4 m out, side-stepping one way, then the other, instead of waiting on the ring, calm:
+//     no quicker turns for a bigger crowd. Cleared by clear() (a fail, a quit); null: the director's own rules again
 //   on(event, cb): 'fight' (started / ended: 1.5 s of fight time after the last man near him went out), 'down' (Quant),
 //     'enemyDown', 'cleared' (a crew), 'hit'
 //   items: the props themselves (make, place, scatter, give, arm, list)
@@ -57,6 +61,10 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 export async function install(W) {
   const app = W.app, cm = app.controllerManager, scene = app.scene, P = W.person, Q = W.quant;
+  // (the Degens' motion capture: swagger walks, a run, side-steps, a back-step, idles and taunts, clips on thug.glb's
+  // rig in a pack of their own, assets/anim/bandai (CC BY-NC 4.0, see NOTICE); fetched alongside the body, and the fight
+  // goes on with thug.glb's own clips when it can't be had)
+  const bandai = loadGLB('assets/anim/bandai/degens.glb').catch(() => null);
   const gltf = await loadGLB('assets/characters/thug.glb');
   // the Degens' looks: a (baked into the model), b, c, brute (textures riding in the same file)
   const looks = {};
@@ -67,6 +75,7 @@ export async function install(W) {
     W, app, cm, scene, camera: app.cameraSystem.camera, time: 0, rtime: 0, ts: 1, slowK: 0, enabled: true,
     enemies: [], crews: [], threats: [], loose: [], combo: { n: 0 }, tokens: [], globalCd: 0, standingN: 0,
     fixed: false, steps: 0, stepNow: false, debugScale: 1, quiet: false, cost: 0, frames: 0,
+    cap: null, // (a mission's pressure on the fight: { max, circle, calm }, see the API)
   };
   c.playerFeet = new THREE.Vector3().copy(P.position);
   // the rules (see the top): Mission 1's lesson, or the full ones; ?fightrules=lesson|full, or debug.rules(), pins them
@@ -78,6 +87,7 @@ export async function install(W) {
   const rulesNow = () => { if (rulesPin) return rulesPin; let m = null; try { m = W.missions?.active?.(); } catch (e) { /* (none) */ } return m && m.id === 'm1' ? RULES.lesson : RULES.full; };
   c.rules = rulesNow();
   c.thug = { gltf, ...prepareClips(gltf) };
+  for (const clip of (await bandai)?.animations || []) c.thug.clips.set(clip.name, clip); // (in place: their travel taken out)
   // Quant's car parked in the street is solid to the fight (the city's own collision only knows the buildings): a box
   // (its half width, half length and roof) the men are kept out of and walk round, and the camera won't look through
   const car = W.car, CAR = car?.body ? { hx: car.body.hx, hz: (car.body.z1 - car.body.z0) / 2, h: car.body.top + 0.05 } : { hx: 0.9, hz: 2.25, h: 1.3 };
@@ -227,8 +237,8 @@ export async function install(W) {
   // the right to attack: one man at a time with up to three on their feet; with four or five a second may follow the
   // first in, with six or more a third, and the bigger the crowd the sooner the next goes (about a blow a second at six).
   // A follower's blow lands at least 0.35 s after the one before it, or (a gang-up, now and then) with it: a double or
-  // triple counter
-  c.crowdK = () => (c.standingN >= 6 ? 0.55 : c.standingN >= 4 ? 0.75 : 1);
+  // triple counter. (A mission's pressure, c.cap: no more than cap.max in at once, and calm: no quicker for a crowd)
+  c.crowdK = () => (c.cap?.calm ? 1 : c.standingN >= 6 ? 0.55 : c.standingN >= 4 ? 0.75 : 1);
   c.ranged = null; // (a bottle thrown from further out goes outside the tokens)
   c.hasToken = (e) => c.tokens.includes(e) || c.ranged === e;
   c.releaseToken = (e) => {
@@ -449,7 +459,7 @@ export async function install(W) {
   }
   function clearAll() {
     for (const e of c.enemies) e.dispose();
-    c.enemies.length = 0; c.crews.length = 0; c.threats.length = 0; c.tokens.length = 0; c.ranged = null; c.linger = null;
+    c.enemies.length = 0; c.crews.length = 0; c.threats.length = 0; c.tokens.length = 0; c.ranged = null; c.linger = null; c.cap = null;
     c.items.clear(); c.fx.ring(null);
     c.me.reset(); c.combo.n = 0;
     if (c.lesson && c.lesson.step < LESSON.length) { c.lesson = null; c.hud.lesson(null); }
@@ -464,8 +474,8 @@ export async function install(W) {
     for (const cr of c.crews) if (!cr.awake && cr.aggro && c.live() && cr.enemies.some((e) => e.alive && hdist(e.pos, pf) < 22)) wake(cr);
     const standing = c.enemies.filter((e) => e.alive && ['hold', 'approach', 'attack', 'stagger', 'getup', 'dazed'].includes(e.state));
     // surround him at ~3 m (a brute further out), spread round, never a slot inside a wall
-    const items = standing.map((e) => ({ e, a: Math.atan2(e.pos.x - pf.x, e.pos.z - pf.z) }));
-    const minSep = Math.min(Math.PI * 2 / Math.max(1, items.length), 1.2);
+    const items = standing.map((e) => { const a = Math.atan2(e.pos.x - pf.x, e.pos.z - pf.z); return { e, a, a0: a }; });
+    const cap = c.cap, minSep = Math.min(Math.PI * 2 / Math.max(1, items.length), 1.2);
     for (let it = 0; it < 4; it++) for (let i = 0; i < items.length; i++) for (let j = i + 1; j < items.length; j++) {
       const d = angWrap(items[j].a - items[i].a);
       if (Math.abs(d) < minSep) { const push = (minSep - Math.abs(d)) * 0.5 * (d >= 0 ? 1 : -1); items[i].a -= push; items[j].a += push; }
@@ -484,6 +494,23 @@ export async function install(W) {
     items.forEach((o, i) => {
       let r = o.e.type === 'brute' ? 3.8 : 3.0 + (i % 2) * 0.7;
       if (c.me.down()) r += 1.5;
+      // (pressure's circling: a man waiting his turn prowls round him further out, his slot 0.22 rad on round from where
+      // he stands and, once he is out there (3.8-7 m), no more than 0.6 m in or out from him: a slot about a metre off, so he
+      // side-steps at hold's 1.3 m/s facing Quant (enemy.js); one way for a few seconds, then back the other, and back at
+      // once when a wall, the car or the next man along is in his way)
+      const e = o.e;
+      if (cap?.circle && e.state === 'hold' && !c.hasToken(e)) {
+        r = Math.max(r, 4.6 + (i % 2) * 0.8);
+        e.tokAt ??= c.time;
+        if (!e.orbit) { e.orbit = Math.random() < 0.5 ? 1 : -1; e.orbitAt = c.time - rnd(0, 2); e.orbitFor = rnd(2.5, 5.5); }
+        // (the way ahead hemmed in: a wall or the car closer than his round, and closer than where he is now)
+        const dirK = (a) => Math.round(((a % TAU) + TAU) % TAU / TAU * 16) % 16, ahead = room[dirK(o.a + e.orbit * 0.5)], here = room[dirK(o.a)];
+        const pushed = angWrap(o.a - o.a0) * e.orbit < -0.05, hemmed = ahead < 2.6 || (ahead < r - 1 && ahead < here - 0.3);
+        const since = c.time - e.orbitAt;
+        if (since > e.orbitFor || (since > 0.8 && (pushed || hemmed))) { e.orbit = -e.orbit; e.orbitAt = c.time; e.orbitFor = rnd(2.5, 5.5); }
+        o.a += e.orbit * 0.22;
+        const now = hdist(e.pos, pf); if (now > 3.8 && now < 7) r = now + clamp(r - now, -0.6, 0.6); // (further: he comes in at hold's pace)
+      }
       let k = Math.round(((o.a % TAU) + TAU) % TAU / TAU * 16) % 16;
       _v2.set(pf.x + Math.sin(o.a) * 3.2, pf.y, pf.z + Math.cos(o.a) * 3.2);
       if (room[k] < Math.min(r, 2.6) || carHit(pf, _v2, 0.5) >= 0) { // boxed in that way (a wall, the car): round to the nearest way with room
@@ -503,23 +530,26 @@ export async function install(W) {
       for (const e of standing) {
         if (e.state !== 'hold' || e.cd > 0 || c.hasToken(e)) continue;
         const d = hdist(e.pos, pf); if (d > 9) continue;
-        const sc = d + Math.random() * 2 - (e.type === 'brute' ? 2.5 : 0);
+        // (under a mission's pressure the man who has waited longest counts nearer too: up to 3 m after 12 s, so the
+        // ones circling furthest out still get their turns)
+        const sc = d + Math.random() * 2 - (e.type === 'brute' ? 2.5 : 0) - (cap ? Math.min(3, (c.time - (e.tokAt ?? c.time)) * 0.25) : 0);
         if (sc < bs && !c.lineBlocked(e.pos, pf)) { bs = sc; best = e; }
       }
-      if (best) { best.chooseBlow(hdist(best.pos, pf)); best.set('approach'); }
+      if (best) { best.chooseBlow(hdist(best.pos, pf)); best.set('approach'); best.tokAt = c.time; }
       return best;
     };
     c.standingN = standing.length;
     for (let i = c.tokens.length - 1; i >= 0; i--) { const e = c.tokens[i]; if (!e.alive || (e.state !== 'approach' && e.state !== 'attack')) c.releaseToken(e); }
-    const max = standing.length >= 5 ? 3 : standing.length >= 3 ? 2 : 1, last = c.tokens[c.tokens.length - 1];
-    // (a man with a bottle hanging back throws it from where he stands, whoever has the token, one bottle in the air at a time)
+    const max = Math.min(standing.length >= 5 ? 3 : standing.length >= 3 ? 2 : 1, cap ? cap.max : 9), last = c.tokens[c.tokens.length - 1];
+    // (a man with a bottle hanging back throws it from where he stands, whoever has the token, one bottle in the air at a
+    // time; under a mission's pressure only while fewer than cap.max are in)
     if (c.ranged && (!c.ranged.alive || (c.ranged.state !== 'approach' && c.ranged.state !== 'attack'))) c.ranged = null;
-    if (!c.ranged && !c.threats.some((t) => t.item) && Math.random() < 0.02) {
+    if (!c.ranged && (!cap || c.tokens.length < cap.max) && !c.threats.some((t) => t.item) && Math.random() < 0.02) {
       const th = standing.find((e) => e.state === 'hold' && e.cd <= 0 && e.weapon?.kind === 'bottle' && !c.hasToken(e) && hdist(e.pos, pf) > 4 && hdist(e.pos, pf) < 13 && !c.lineBlocked(e.pos, pf));
       if (th) { th.atk = 'bottleThrow'; th.set('approach'); c.ranged = th; }
     }
     if (c.globalCd <= 0 && c.tokens.length < max) {
-      if (!last && c.rules.pincer && standing.length >= 2 && c.time > pincerT && ((pincerT = c.time + rnd(5, 9)), Math.random() < 0.6) && pincer(standing, pf)) { /* (two at once) */ }
+      if (!last && c.rules.pincer && standing.length >= 2 && (!cap || cap.max >= 2) && c.time > pincerT && ((pincerT = c.time + rnd(5, 9)), Math.random() < 0.6) && pincer(standing, pf)) { /* (two at once) */ }
       else if (!last) { const e = pickNext(); if (e) c.tokens.push(e); }
       else {
         // (a gang-up or not: decided once for each man who goes first)
@@ -538,7 +568,7 @@ export async function install(W) {
       const d = Math.abs(angWrap(yawTo(pf, ok[i].pos) - yawTo(pf, ok[j].pos))); if (d > bs) { bs = d; a = ok[i]; b = ok[j]; }
     }
     if (!a) return false;
-    for (const e of [a, b]) { e.chooseBlow(hdist(e.pos, pf)); if (BLOWS[e.atk].feint || !BLOWS[e.atk].counter) e.atk = 'thugPunch1'; e.set('approach'); c.tokens.push(e); }
+    for (const e of [a, b]) { e.chooseBlow(hdist(e.pos, pf)); if (BLOWS[e.atk].feint || !BLOWS[e.atk].counter) e.atk = 'thugPunch1'; e.set('approach'); e.tokAt = c.time; c.tokens.push(e); }
     b.pincer = a; a.pincer = null; c.globalCd = 0.15;
     return true;
   }
@@ -816,6 +846,8 @@ export async function install(W) {
     spawnCrew, clear: clearAll, dressDegen: (obj, look = 'a') => c.dressDegen(obj, look, true),
     props: (x, z, o = {}) => c.items.scatter(x, z, o),
     get enabled() { return c.enabled; }, set enabled(v) { c.enabled = !!v; if (!v) { c.me.reset(); c.input.clear(); } },
+    // a mission's hold on a big fight (see the top); null lets go. Returns what is set
+    pressure(o) { c.cap = o ? { max: Math.max(1, o.max ?? 2), circle: !!o.circle, calm: !!o.calm } : null; return c.cap; },
     get fighting() { return c.me.fighting && c.live(); },
     get enemies() { return c.enemies; },
     get crews() { return c.crews; },

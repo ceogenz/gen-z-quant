@@ -8,11 +8,15 @@
 //                                                (over the radar) until the next one. The route with it: gps.objective
 //   brief(on) · recent()                         [B]: the tracker opened on the last lines; what the pause menu shows
 //   pause                                        the pause menu (mission/pause.js: Esc or P), installed with the UI
-//   help(text, secs)                             top-left; [F] draws a key cap
+//   help(text, secs)                             top-left; [F] draws a key cap, [F|TAKE PHONE] one that reads TAKE PHONE
+//                                                on a phone (data-touch-as, wagmi/touch.js; never a " in the name)
 //   skip(k)                                      'Hold SPACE to skip' with its ring (k 0..1, null hides)
 //   phone.show(screen, data) / phone.hide()      feed, incoming, video, ended, moontag
 //   caller(name, colour, status) / caller(null) · dm(from, text) · counter(label, value) / counter(null)
-//   passed({ title, stats, reward, note }) · failed(reason, { skip }) -> Promise<'retry'|'quit'|'skip'> · rekt()
+//   passed({ title, stats, reward, note }) · rekt()
+//   failed(reason, { skip, tip, retryLabel, skipLabel, quitLabel }) -> Promise<'retry'|'quit'|'skip'>   the reason, a
+//                                                TIP (objective-style parts, key caps and all) and the choices, each label
+//                                                'Main: sub' ('Retry: the tail': RETRY big, 'the tail' small under it)
 //   fade(to, secs) · gate({ when, onStart, hold, fine }) -> Promise (up once when() is true; any key or a click starts. Over
 //                                                the instant title, index.html: up at once in its place, a start
 //                                                taken before when() is true kept, resolving the moment it is;
@@ -220,6 +224,14 @@ body.wg-offering #wg .wg-help { opacity: 0 !important; }
 .wg-big .choices { display: flex; gap: 14px; margin-top: 26px; pointer-events: auto; }
 .wg-big button { font: 700 20px/1 'Barlow Condensed'; letter-spacing: 2px; text-transform: uppercase; color: #fff; padding: 12px 26px; border-radius: 10px; border: 1px solid rgba(255,255,255,.25); background: rgba(8,10,14,0.62); cursor: pointer; }
 .wg-big button.sel, .wg-big button:hover { background: #FFC93C; color: #0A0C10; border-color: #FFC93C; }
+/* (the fail screen's tip, and what each choice does, small under its name; not Episode 1's end card, episode.js) */
+.wg-big:not(.wg-ep) .tip { margin-top: 12px; max-width: min(620px, calc(100vw - 32px)); padding: 10px 14px; background: rgba(8,10,14,.62); border-left: 3px solid #FFC93C; border-radius: 10px; font: 600 19px/1.3 'Barlow Condensed'; text-align: left; }
+.wg-big:not(.wg-ep) .tip b { display: block; font: 700 12px/1 'Barlow Condensed'; letter-spacing: 2.5px; color: #FFC93C; margin-bottom: 5px; }
+.wg-big:not(.wg-ep) .why { text-align: center; padding: 0 16px; }
+.wg-big:not(.wg-ep) .choices { flex-wrap: wrap; justify-content: center; max-width: calc(100vw - 32px); }
+.wg-big:not(.wg-ep) button small { display: block; margin-top: 5px; font: 600 14px/1.15 'Barlow Condensed'; letter-spacing: .5px; text-transform: none; opacity: .85; }
+/* (while it is up the fight's own layer goes, its lesson card, prompts and arrows under the words, and a phone's stick) */
+body.wg-failing #wf, body.wg-failing #touch-controls, body.wg-failing .touch-look-hint { opacity: 0 !important; visibility: hidden; transition: opacity .3s, visibility 0s .3s; }
 body.wg-rekt #canvas-container { filter: grayscale(.85) contrast(1.05); transition: filter .6s; }
 #canvas-container { transition: filter .8s; }
 
@@ -314,6 +326,11 @@ body.touch-enabled #wg .wg-big .stats { min-width: min(340px, 100%); }
   body.touch-enabled #wg .wg-big .stats { margin-top: 10px; padding: 8px 18px; }
   body.touch-enabled #wg .wg-big .row { line-height: 1.45; }
   body.touch-enabled #wg .wg-big .choices { margin-top: 14px; }
+  body.touch-enabled #wg .wg-big:not(.wg-ep) .why { font-size: 22px; margin-top: 4px; }
+  body.touch-enabled #wg .wg-big:not(.wg-ep) .tip { font-size: 16px; margin-top: 6px; padding: 6px 10px; }
+  body.touch-enabled #wg .wg-big:not(.wg-ep) .choices { margin-top: 10px; gap: 10px; }
+  body.touch-enabled #wg .wg-big:not(.wg-ep) button { padding: 9px 18px; min-height: 44px; }
+  body.touch-enabled #wg .wg-big:not(.wg-ep) button small { margin-top: 3px; font-size: 13px; }
   body.touch-enabled #wg .wg-title .name { font-size: 48px; }
 }
 @media (orientation: portrait) {
@@ -334,6 +351,10 @@ body.touch-enabled #wg .wg-big .stats { min-width: min(340px, 100%); }
   body.touch-enabled #wg .wg-sub { font-size: 21px; }
   body.touch-enabled #wg .wg-title .name { font-size: min(64px, 13vw); }
   body.touch-enabled #wg .wg-big .choices { flex-wrap: wrap; justify-content: center; }
+  /* (the fail screen upright: the choices a column, one finger-sized button each, the tip as wide as the screen) */
+  body.touch-enabled #wg .wg-big:not(.wg-ep) .tip { font-size: 17px; max-width: 100%; }
+  body.touch-enabled #wg .wg-big:not(.wg-ep) .choices { flex-direction: column; align-items: stretch; width: min(340px, 100%); margin-top: 18px; gap: 10px; }
+  body.touch-enabled #wg .wg-big:not(.wg-ep) button { min-height: 52px; padding: 10px 16px; }
 }
 `;
 
@@ -376,7 +397,9 @@ export function createUI() {
 
   const timers = new Map();
   const later = (key, ms, fn) => { clearTimeout(timers.get(key)); timers.set(key, setTimeout(fn, ms)); };
-  const keycaps = (s) => esc(s).replace(/\[([^\]]+)\]/g, '<kbd>$1</kbd>');
+  // [F] a key cap; [F|TAKE PHONE] the same cap, named for a phone's button (wagmi/touch.js reads data-touch-as first;
+  // not data-k: wagmi/pad.js's restore() deletes that). The input is escaped for & < > but not ", so never a " in a name
+  const keycaps = (s) => esc(s).replace(/\[([^\]|]+)(?:\|([^\]]+))?\]/g, (_, k, t) => (t ? `<kbd data-touch-as="${t}">${k}</kbd>` : `<kbd>${k}</kbd>`));
   // objective parts: strings, and { noun: 'yellow' | 'red' | 'blue' | 'green' } for the one coloured noun
   const rich = (parts) => (Array.isArray(parts) ? parts : [parts]).map((p) => {
     if (typeof p === 'string') return keycaps(p);
@@ -579,15 +602,23 @@ export function createUI() {
       bigEl.classList.add('on'); bigEl.style.pointerEvents = 'none';
       return sleep(secs * 1000).then(() => bigEl.classList.remove('on'));
     },
-    failed(reason, { skip = false } = {}) {
+    // tip: what would have helped, for this reason (objective-style parts); each label 'Main: sub', the sub what the
+    // choice does ('Retry: the tail', 'Skip the tail: start at the yard'); none: RETRY, QUIT, SKIP as they were
+    failed(reason, { skip = false, tip = null, retryLabel = '', skipLabel = '', quitLabel = '' } = {}) {
       const opts = ['retry', 'quit', ...(skip ? ['skip'] : [])];
+      const labels = { retry: retryLabel, quit: quitLabel, skip: skipLabel };
+      const choice = (o, i) => {
+        const s = String(labels[o] || ''), at = s.indexOf(': '), main = at < 0 ? s || o : s.slice(0, at), sub = at < 0 ? '' : s.slice(at + 2);
+        return `<button data-o="${o}" class="${i === 0 ? 'sel' : ''}"><span class="m">${esc(main)}</span>${sub ? `<small>${esc(sub)}</small>` : ''}</button>`;
+      };
       bigEl.innerHTML = `<div class="h" style="color:#EF4444;font-size:72px">MISSION FAILED</div><div class="why">${esc(reason)}</div>
-        <div class="choices">${opts.map((o, i) => `<button data-o="${o}" class="${i === 0 ? 'sel' : ''}">${o}</button>`).join('')}</div>`;
-      bigEl.classList.add('on'); bigEl.style.pointerEvents = 'auto';
+        ${tip ? `<div class="tip"><b>TIP</b>${rich(tip)}</div>` : ''}
+        <div class="choices">${opts.map(choice).join('')}</div>`;
+      bigEl.classList.add('on'); bigEl.style.pointerEvents = 'auto'; document.body.classList.add('wg-failing');
       return new Promise((res) => {
         let sel = 0;
         const btns = [...bigEl.querySelectorAll('button')], t0 = performance.now();
-        const done = (o) => { removeEventListener('keydown', onKey, true); bigEl.classList.remove('on'); bigEl.style.pointerEvents = 'none'; res(o); };
+        const done = (o) => { removeEventListener('keydown', onKey, true); bigEl.classList.remove('on'); bigEl.style.pointerEvents = 'none'; document.body.classList.remove('wg-failing'); res(o); };
         // (the choices move only on fresh presses: a key still held from the fight, repeating, or pressed in the moment the
         // screen comes up moves nothing)
         const onKey = (e) => {

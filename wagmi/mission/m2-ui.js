@@ -8,7 +8,9 @@
 //   U.tail.set({ d, sus, note }) / .hide()                  the tail meter (bottom right)
 //   U.mark(id, { x, y, k, on })  / .unmark(id)              a lookout's '?' filling to '!' at screen x, y
 //   U.target(label, k) / U.target(null)                     a target's damage bar (Lev's car)
-//   U.prompt(text) / U.prompt(null)                         a small key prompt over the middle ('E · Take him down')
+//   U.prompt(text, { strong, soft }) / U.prompt(null)       a key prompt over the middle ('Press [E] to take him down'):
+//                                                           strong (in position: big, a gold key), soft (not yet: no key)
+//   U.banner(title, sub, { color, secs }) / U.banner(null)  a big word over the middle for a moment ('SPOTTED!')
 import { junoPortrait } from './juno.js';
 const CSS = `
 #wg .m2-tail { position: absolute; right: 24px; bottom: 228px; width: 250px; padding: 10px 14px 12px; background: rgba(8,10,14,0.62); border-radius: 10px; opacity: 0; transition: opacity .3s; z-index: 4; }
@@ -38,6 +40,18 @@ const CSS = `
 #wg .m2-target i s { display: block; height: 100%; background: #EF4444; transition: width .2s; }
 #wg .m2-prompt { position: absolute; left: 50%; top: 58%; transform: translate(-50%, -50%); padding: 8px 14px; background: rgba(8,10,14,0.62); border-radius: 10px; font: 700 17px/1 'Barlow Condensed'; letter-spacing: 1px; opacity: 0; transition: opacity .2s; z-index: 5; white-space: nowrap; }
 #wg .m2-prompt.on { opacity: 1; }
+/* (in position: it is the thing to do now; not yet: a quieter nudge, no key in it) */
+#wg .m2-prompt.strong { font-size: 22px; padding: 10px 18px; border: 2px solid #FFC93C; box-shadow: 0 0 24px rgba(255,201,60,.35); }
+#wg .m2-prompt.strong kbd { background: #FFC93C; color: #0A0C10; border-color: #FFC93C; }
+#wg .m2-prompt.soft { font-size: 16px; }
+/* (on a phone, a size down: clear of the gold TAKE DOWN button beside it) */
+body.wg-touchlast:not(.wg-pad) #wg .m2-prompt.strong { font-size: 18px; padding: 8px 14px; }
+#wg .m2-prompt.soft.on { opacity: .8; }
+/* a big word over the middle for a moment (SPOTTED!), under the mission's own cards (.wg-big) */
+#wg .m2-banner { position: absolute; left: 50%; top: 34%; width: max-content; max-width: calc(100vw - 32px); text-align: center; transform: translate(-50%, -50%) scale(1.12); opacity: 0; transition: opacity .2s, transform .35s cubic-bezier(.2,.7,.2,1); z-index: 6; pointer-events: none; }
+#wg .m2-banner.on { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+#wg .m2-banner .t { font: italic 800 clamp(48px, 9vw, 92px)/1 'Barlow Condensed'; letter-spacing: 1px; text-shadow: 0 4px 24px rgba(0,0,0,.6); }
+#wg .m2-banner .s { margin-top: 8px; font: 700 clamp(18px, 2.4vw, 26px)/1.15 'Barlow Condensed'; color: #fff; text-shadow: 0 2px 10px rgba(0,0,0,.75); }
 /* Juno's video call and her screen share, in the phone frame */
 .m2-call { position: absolute; inset: 0; background: #070B14; overflow: hidden; }
 .m2-call .feed, .m2-call svg.map { position: absolute; inset: 0; width: 100%; height: 100%; transition: opacity .35s; }
@@ -189,10 +203,28 @@ export function createM2UI(ui) {
   /* ---------------------------------------------------------- a prompt -- */
   const promptEl = el('m2-prompt');
   const keycaps = (s) => esc(s).replace(/\[([^\]]+)\]/g, '<kbd>$1</kbd>');
-  function prompt(text) { if (!text) { promptEl.classList.remove('on'); return; } promptEl.innerHTML = keycaps(text); promptEl.classList.add('on'); }
+  // (strong: in position, the thing to do now; soft: not yet, and no key in it: on a phone a key here is its button)
+  function prompt(text, { strong = false, soft = false } = {}) {
+    if (!text) { promptEl.classList.remove('on'); return; }
+    const html = keycaps(text); if (promptEl.innerHTML !== html) promptEl.innerHTML = html;
+    promptEl.classList.toggle('strong', !!strong); promptEl.classList.toggle('soft', !!soft && !strong); promptEl.classList.add('on');
+  }
+
+  /* ---------------------------------------------------------- a banner -- */
+  const bannerEl = el('m2-banner', '<div class="t"></div><div class="s"></div>');
+  let bannerT = 0;
+  function banner(title, sub = '', { color = '#EF4444', secs = 2.4 } = {}) {
+    clearTimeout(bannerT);
+    if (!title) { bannerEl.classList.remove('on'); return; }
+    bannerEl.querySelector('.t').textContent = title; bannerEl.querySelector('.t').style.color = color;
+    bannerEl.querySelector('.s').textContent = sub || '';
+    // (in again from its larger size each time)
+    bannerEl.classList.remove('on'); void bannerEl.offsetWidth; bannerEl.classList.add('on');
+    bannerT = setTimeout(() => bannerEl.classList.remove('on'), secs * 1000);
+  }
 
   return {
-    call, chat, tail, mark, unmark, target, prompt,
-    clear() { call.hide(); tail.hide(); target(null); prompt(null); for (const id of [...marks.keys()]) unmark(id); },
+    call, chat, tail, mark, unmark, target, prompt, banner,
+    clear() { call.hide(); tail.hide(); target(null); prompt(null); banner(null); for (const id of [...marks.keys()]) unmark(id); },
   };
 }

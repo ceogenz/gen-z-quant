@@ -971,6 +971,16 @@ function createMission(W, { keep = false } = {}) {
   const CHECKPOINT = { garage: 'garage', square: 'square', rally: 'square', rigs: 'rigs', dump: 'rigs', escape: 'escape', ret: 'return', home: 'return' };
   const PHASE_OF = { garage: 'garage', square: 'square', rigs: 'rigs', escape: 'escape', return: 'ret' };
   const LABELS = { garage: "Gears' garage", square: 'To Washington Square', rigs: 'The rigs', escape: 'Lose the Degens', return: 'Back to the garage' };
+  // the fail screen (ui.failed): a tip by the reason, what Retry does by the checkpoint it goes back to, what Skip does
+  // by the phase he failed in (a skip goes on to the phase after the checkpoint's own: the rigs' to the dump, Fiona's
+  // run, then the getaway)
+  const TIPS = {
+    'Quant got rekt.': ['Counter the ', { 'yellow cues': 'yellow' }, ' with [Q], roll away from ', { 'red ones': 'red' }, ' with [C], and grab a bat, trash can or bottle with [E]: it hits much harder. Out of reach for a few seconds, your health creeps back.'],
+    'You left the fight.': ['Stay by the rigs while the Degens are up: the fight is lost past 160 m.'],
+    'The Degens caught you.': ['Turn corners to break their ', { 'line of sight': 'yellow' }, ': out of sight, the escape bar under HEAT fills. [SPACE|HOP] jumps the car over traffic.'],
+  };
+  const RETRY = { garage: "Retry: from Gears' garage", square: 'Retry: to Washington Square', rigs: 'Retry: the rigs', escape: 'Retry: the getaway', return: "Retry: back to Gears' garage" };
+  const SKIP = { rigs: 'Skip the rigs: start at the getaway', dump: 'Skip the rigs: start at the getaway', escape: "Skip the getaway: start on the way back to Gears' garage" };
 
   // the calls on the way
   async function junoDrive() {
@@ -1049,7 +1059,7 @@ function createMission(W, { keep = false } = {}) {
           if (e.rekt) { ui.rekt(true); sfx?.play('failed'); await sleep(2600); ui.rekt(false); } else sfx?.play('failed');
           const cp = CHECKPOINT[phase]; fails[cp] = (fails[cp] || 0) + 1;
           // (the choices move only on fresh presses: ui.failed)
-          const choice = await ui.failed(e.reason, { skip: fails[cp] >= 3 });
+          const choice = await ui.failed(e.reason, { skip: fails[cp] >= 3, tip: TIPS[e.reason], retryLabel: RETRY[cp], skipLabel: SKIP[phase], quitLabel: 'Quit: back to free roam' });
           W.combat?.clear?.(); S.crew = null; S.brute = null; S.extra = null; S.awake = false; S.bruteUp = false;
           if (W.combat?.player) W.combat.player.hp = W.combat.player.maxHp;
           if (choice === 'quit') { M.stop(); toGarage(W, { quick: true }); return; }

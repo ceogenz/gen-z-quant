@@ -60,8 +60,13 @@ export const BLOWS = {
 const VARIETY = { grunt: ['thugPunch1', 'thugPunch2', 'thugKick', 'thugFeint', 'thugFeint', 'thugKickRed'], brute: ['bruteSlam', 'thugPunch1', 'bruteQuake', 'bruteQuake'] };
 const clipOfBlow = (atk) => BLOWS[atk].clip || atk;
 const STUMBLE = { back: 'thugStumbleBack', left: 'thugStumbleLeft', right: 'thugStumbleRight' };
-const LOCO = { walk: 1.25, jog: 3.2, run: 5.8, sprint: 9.0 };
-const LOOPS = new Set(['thugIdle', 'guard', 'walk', 'jog', 'run', 'sprint']);
+// the speed (m/s at scale 1) each walk was captured at. The degen* clips are the Degens' swagger (assets/anim/bandai/
+// degens.glb: Bandai Namco Research Motion Dataset, CC BY-NC 4.0, see NOTICE): two walks, a run, a back-step and
+// side-steps, in place; two idles that loop and two taunts (a wave-off) played once. index.js adds them to the library;
+// without the pack each falls back to the rig's own walk and idle
+const LOCO = { walk: 1.25, jog: 3.2, run: 5.8, sprint: 9.0, degenWalk: 1.458, degenWalk2: 1.211, degenRun: 3.361, degenBack: 0.868, degenLeft: 1.33, degenRight: 1.395 };
+const LOOPS = new Set(['thugIdle', 'guard', 'walk', 'jog', 'run', 'sprint', 'degenWalk', 'degenWalk2', 'degenRun', 'degenBack', 'degenLeft', 'degenRight', 'degenIdleBow', 'degenIdleGuide']);
+const IDLES = new Set(['thugIdle', 'degenIdleBow', 'degenIdleGuide']), TAUNTS = ['degenIdleBye', 'degenIdleByebye'];
 const STANDING = ['idle', 'hold', 'fetch', 'bang', 'approach', 'attack', 'stagger', 'dazed'];
 const ROOT_MOTION = new Set(['thugStumbleBack', 'thugStumbleLeft', 'thugStumbleRight', 'thugKnockdown', 'thugGetUp']);
 
@@ -95,6 +100,8 @@ export class Enemy {
     this.c = c; this.type = type; this.T = TYPES[type]; this.id = 'd' + (++seq);
     const lib = c.thug;
     this.lib = lib;
+    // his walk: most of them swagger (one of two takes), the rest walk the rig's own
+    this.swag = Math.random() < 0.7 ? (Math.random() < 0.5 ? 'degenWalk' : 'degenWalk2') : null;
     this.root = new THREE.Group(); this.root.name = 'Degen-' + this.id;
     this.inner = skClone(lib.gltf.scene); this.root.add(this.inner);
     this.look = look || pick(this.T.looks);
@@ -113,7 +120,7 @@ export class Enemy {
     this.out = false; this.lastHitT = -9; this.heavyHits = 0; this.spd = 0;
     this.rd = new THREE.Vector3(); this.loco = null; this.shove = new THREE.Vector3();
     this.weapon = null; if (weapon) c.items.arm(this, weapon);
-    this.play('thugIdle', { fade: 0 });
+    this.idle(0);
     this.mixer.update(rnd(0, 1.5));
   }
   get pos() { return this.root.position; }
@@ -163,17 +170,26 @@ export class Enemy {
     out.x = (dx * cs + dz * sn) * w * sc; out.z = (-dx * sn + dz * cs) * w * sc;
     return out;
   }
-  // locomotion clip for ground speed sp (hysteresis so a speed near a threshold never flips clips), stride-matched;
-  // back: walking backwards (the walk reversed)
-  locomote(sp, back = false, fade = 0.25) {
-    if (sp < 0.12) { this.loco = null; this.play('thugIdle', { fade: 0.3 }); return; }
-    const cur = this.loco;
-    let clip = sp > 4.6 ? 'run' : sp > 2.0 ? 'jog' : 'walk';
-    if (cur === 'run' && sp > 4.0) clip = 'run'; else if (cur === 'jog' && sp > 1.6 && sp < 5.2) clip = 'jog'; else if (cur === 'walk' && sp < 2.4) clip = 'walk';
-    if (back) clip = 'walk';
+  // locomotion clip for ground speed sp (hysteresis so a speed near a threshold never flips clips), stride-matched:
+  // walking, his swagger (or the rig's walk); jogging, the swagger's run; running, the rig's run. back: his back-step
+  // (or the walk reversed); side (+1 his left, -1 his right): a side-step while he watches Quant
+  locomote(sp, back = false, fade = 0.25, side = 0) {
+    if (sp < 0.12) { this.loco = null; this.idle(0.3); return; }
+    const has = (n) => this.lib.clips.has(n), b0 = this.loco ? this.band : null, sc = this.T.scale;
+    let band = sp > 4.6 ? 'run' : sp > 2.0 ? 'jog' : 'walk';
+    if (b0 === 'run' && sp > 4.0) band = 'run'; else if (b0 === 'jog' && sp > 1.6 && sp < 5.2) band = 'jog'; else if (b0 === 'walk' && sp < 2.4) band = 'walk';
+    this.band = band;
+    let clip = band === 'jog' ? (has('degenRun') ? 'degenRun' : 'jog') : band === 'walk' ? (this.swag && has(this.swag) ? this.swag : 'walk') : band, ts = null;
+    if (back) { clip = has('degenBack') ? 'degenBack' : 'walk'; ts = clip === 'walk' ? -0.85 * clamp(sp / LOCO.walk / sc, 0.55, 1.6) : clamp(sp / LOCO.degenBack / sc, 0.55, 2.2); } // (his back-step is short: quicker steps to keep up)
+    else if (side && band === 'walk' && has(side > 0 ? 'degenLeft' : 'degenRight')) clip = side > 0 ? 'degenLeft' : 'degenRight';
     this.loco = clip;
-    const ts = clamp(sp / LOCO[clip] / this.T.scale, 0.55, 1.6) * (back ? -0.85 : 1);
-    this.play(clip, { ts, fade });
+    this.play(clip, { ts: ts ?? clamp(sp / LOCO[clip] / sc, 0.55, 1.6), fade });
+  }
+  // standing about: the rig's idle mostly, now and then one of his attitude idles (kept while it plays)
+  idle(fade = 0.3) {
+    if (IDLES.has(this.curName)) return this.cur;
+    const n = Math.random() < 0.3 ? pick(['degenIdleBow', 'degenIdleGuide']) : 'thugIdle';
+    return this.play(this.lib.clips.has(n) ? n : 'thugIdle', { fade });
   }
   // ------------------------------------------------------------------ moving
   ground() { return this.c.world.ground(this.pos.x, this.pos.z); }
@@ -235,14 +251,20 @@ export class Enemy {
     const step = Math.min(L, this.spd * dt);
     this.moveXZ(to.x * step, to.z * step, this.spd > 0.9);
     const my = Math.atan2(to.x, to.z), rel = angWrap(my - faceYaw);
-    let body = faceYaw, back = false;
+    let body = faceYaw, back = false, side = 0;
     if (this.spd > 2.4) body = my; // running: faces where he runs
     else if (Math.abs(rel) < 0.8) body = faceYaw + rel * 0.7;
     else if (Math.abs(rel) > 2.35) { body = faceYaw; back = true; }
-    else body = faceYaw + rel * 0.6;
+    else {
+      // sideways, walking: his side-step (+1 to his left, +X), square to Quant within half the way off it (the twist
+      // turns his chest and head the rest); the rig's walk: the body turned half toward the way he goes
+      const sd = rel > 0 ? 1 : -1;
+      if (this.spd < 2.0 && this.lib.clips.has(sd > 0 ? 'degenLeft' : 'degenRight')) { side = sd; body = faceYaw + (rel - sd * Math.PI / 2) * 0.5; }
+      else body = faceYaw + rel * 0.6;
+    }
     this.yaw = dampAngle(this.yaw, body, 8, dt);
     this.twist = damp(this.twist, clamp(angWrap(faceYaw - this.yaw), -0.9, 0.9), 6, dt);
-    this.locomote(this.spd, back);
+    this.locomote(this.spd, back, 0.25, side);
     return this.spd;
   }
   // ------------------------------------------------------------------ damage taken
@@ -367,13 +389,25 @@ export class Enemy {
     switch (this.state) {
       case 'idle': { // a crew not in the fight yet: stands about, watches him come
         this.yaw = dampAngle(this.yaw, dist < 30 ? faceP : this.yaw, 2, dt);
-        if (this.curName !== 'thugIdle') this.play('thugIdle', { fade: 0.3 });
+        this.idle(0.3);
         break;
       }
       case 'hold': {
         const slot = c.slotFor(this), L = hdist(slot, this.pos);
+        // (a taunt playing: he stands it out facing Quant, then back to his idle; dropped when his place moves on, his
+        // turn comes, or another clip took over)
+        if (this.taunt) {
+          const a = this.cur;
+          if (L > 1.2 || c.hasToken(this) || !a || this.curName !== this.taunt || a.time >= a.getClip().duration - 0.15) { this.taunt = null; if (L <= 1.2 && this.curName !== 'hitReact') this.idle(0.3); }
+          else { this.spd = damp(this.spd, 0, 8, dt); this.yaw = dampAngle(this.yaw, faceP, 5, dt); this.twist = damp(this.twist, 0, 6, dt); break; }
+        }
         const sp = L > 6 ? this.T.speed * 1.5 : L > 1.4 ? this.T.speed * 0.6 : Math.min(1.3, L * 1.8);
         this.stepTo(slot, sp, faceP, dt);
+        // waiting his turn at his place, a few steps off: now and then a taunt (a wave-off, once)
+        if (!this.taunt && this.spd < 0.15 && L < 0.6 && dist > 2.6 && !c.hasToken(this) && c.time - (this.tauntT ?? -9) > 7 && Math.random() < dt * 0.15) {
+          const n = pick(TAUNTS);
+          if (this.lib.clips.has(n)) { this.taunt = n; this.tauntT = c.time; this.loco = null; this.play(n, { once: true, fade: 0.25 }); }
+        }
         // empty-handed with a moment to spare: a bat or a bottle lying near is worth going for
         if (this.type === 'grunt' && !this.weapon && !c.hasToken(this) && this.cd > 0.6 && c.attackable() && Math.random() < dt * 0.3) {
           const I = c.items.forDegen(this.pos, 6.5);
@@ -383,34 +417,34 @@ export class Enemy {
       }
       case 'fetch': { // to it, down for it (the slam's crouch: his hand by the street), up with it
         const I = this.fetchItem;
-        if (!I || I.holder || I.claim !== this || !(I.state === 'rest' || I.state === 'roll')) { if (!this.got) { this.set('hold'); this.play('thugIdle', { fade: 0.25 }); } }
+        if (!I || I.holder || I.claim !== this || !(I.state === 'rest' || I.state === 'roll')) { if (!this.got) { this.set('hold'); this.idle(0.25); } }
         if (this.state !== 'fetch') break;
         const ip = I.obj.position, d = hdist(this.pos, ip);
         if (!this.picking) {
           if (d > 0.62) this.stepTo(ip, d > 2.5 ? this.T.speed : 1.7, yawTo(this.pos, ip), dt);
           else { this.picking = true; this.got = false; this.loco = null; this.play('bruteSlam', { once: true, at: 0.54, ts: 1.0, fade: 0.16 }); }
-          if (this.st > 5) { this.set('hold'); this.play('thugIdle', { fade: 0.25 }); }
+          if (this.st > 5) { this.set('hold'); this.idle(0.25); }
         } else {
           this.yaw = dampAngle(this.yaw, yawTo(this.pos, ip) + 0.25, 8, dt);
           if (!this.got && this.cur && this.cur.time >= 0.64) { this.got = true; I.claim = null; c.items.give(this, I, 0.14); c.sfx('grab'); }
-          if (this.cur && this.cur.time >= 0.98) { this.picking = false; this.got = false; this.set('hold'); this.play('thugIdle', { fade: 0.3 }); this.cd = rnd(0.3, 0.9); }
+          if (this.cur && this.cur.time >= 0.98) { this.picking = false; this.got = false; this.set('hold'); this.idle(0.3); this.cd = rnd(0.3, 0.9); }
         }
         break;
       }
       case 'bang': {
         const car = c.W.car;
-        if (c.cm.activeMode !== 'car' || Math.abs(car.speed || 0) > 3) { this.set('hold'); this.play('thugIdle', { fade: 0.25 }); break; }
+        if (c.cm.activeMode !== 'car' || Math.abs(car.speed || 0) > 3) { this.set('hold'); this.idle(0.25); break; }
         const faceCar = yawTo(this.pos, car.position), d = hdist(this.pos, this.bangAt);
         if (!this.banging) {
           if (d > 0.3 && this.st < 4) { this.stepTo(this.bangAt, d > 2 ? this.T.speed * 1.3 : 2.2, faceCar, dt); break; }
-          if (this.st >= 4) { this.set('hold'); this.play('thugIdle', { fade: 0.25 }); this.cd = rnd(0.6, 1.2); break; }
+          if (this.st >= 4) { this.set('hold'); this.idle(0.25); this.cd = rnd(0.6, 1.2); break; }
           this.banging = true; this.spd = 0; this.loco = null; this.bangClip = pick(['thugPunch1', 'thugKick', 'thugPunch2']);
           this.play(this.bangClip, { fade: 0.12, once: true, ts: 0.9 });
         }
         this.yaw = dampAngle(this.yaw, faceCar, 10, dt);
         const a = this.cur;
         if (!this.swung && a && a.time >= BLOWS[this.bangClip].hit) { this.swung = true; c.onCarBang(this); }
-        if (this.state === 'bang' && this.swung && a && a.time >= a.getClip().duration - 0.12) { this.set('hold'); this.play('thugIdle', { fade: 0.25 }); this.cd = rnd(0.7, 1.5) * c.crowdK(); }
+        if (this.state === 'bang' && this.swung && a && a.time >= a.getClip().duration - 0.12) { this.set('hold'); this.idle(0.25); this.cd = rnd(0.7, 1.5) * c.crowdK(); }
         break;
       }
       case 'approach': { // his turn: closes in, starts the swing about a metre out (he steps in during the wind-up)
@@ -436,7 +470,7 @@ export class Enemy {
       }
       case 'attack': {
         const a = this.cur, B = BLOWS[this.atk], hitT = B.hit, tele = B.tele, range = this.blowRange();
-        if (B.weapon && !this.weapon && !this.swung) { this.set('hold'); this.play('thugIdle', { fade: 0.2 }); c.releaseToken(this); c.clearThreats(this); break; }
+        if (B.weapon && !this.weapon && !this.swung) { this.set('hold'); this.idle(0.2); c.releaseToken(this); c.clearThreats(this); break; }
         // the wind-up (to hitT - 0.06) stretched to fill the telegraph, then he snaps through the blow
         const k0 = hitT - 0.06;
         if (a && B.feint) {
@@ -453,7 +487,7 @@ export class Enemy {
         if (B.thrown) {
           this.yaw = dampAngle(this.yaw, faceP, 10, dt);
           if (!this.swung && a && a.time >= hitT) { this.swung = true; this.throwWeapon(); }
-          if (this.swung && a && a.time >= B.end) { this.set('hold'); this.play('thugIdle', { fade: 0.3 }); this.cd = rnd(1.4, 2.6); c.releaseToken(this); }
+          if (this.swung && a && a.time >= B.end) { this.set('hold'); this.idle(0.3); this.cd = rnd(1.4, 2.6); c.releaseToken(this); }
           break;
         }
         // (a slam is committed for its last 0.4 s: it comes down where he aimed it, so a dodge on the cue gets clear; the
@@ -467,21 +501,21 @@ export class Enemy {
         }
         if (!this.swung && a && a.time >= hitT) { this.swung = true; if (B.quake) c.fx.ring(null); c.enemyStrike(this); }
         if (this.swung && a && a.time >= a.getClip().duration - 0.12) {
-          this.set('hold'); this.play('thugIdle', { fade: 0.25 }); this.cd = rnd(1.0, 2.2) * (this.type === 'brute' ? 1.3 : 1) * c.crowdK(); c.releaseToken(this);
+          this.set('hold'); this.idle(0.25); this.cd = rnd(1.0, 2.2) * (this.type === 'brute' ? 1.3 : 1) * c.crowdK(); c.releaseToken(this);
         }
         break;
       }
       case 'stagger': {
         if (this.st > this.stagT) {
           if (this.dazeNext) this.daze_();
-          else { this.set('hold'); this.play('thugIdle', { fade: 0.25 }); this.cd = Math.max(this.cd, rnd(0.6, 1.4)); }
+          else { this.set('hold'); this.idle(0.25); this.cd = Math.max(this.cd, rnd(0.6, 1.4)); }
         }
         break;
       }
       case 'dazed': { // off balance: swaying on the spot, open to a grab, recovers after a beat
         if (this.cur && this.st > 0.5) this.cur.timeScale = 0;
         this.flinch = Math.max(this.flinch, 0.25 + 0.2 * Math.sin(this.st * 5));
-        if (this.st > this.dazeEnd) { this.set('hold'); this.play('thugIdle', { fade: 0.35 }); this.cd = rnd(0.6, 1.2); }
+        if (this.st > this.dazeEnd) { this.set('hold'); this.idle(0.35); this.cd = rnd(0.6, 1.2); }
         break;
       }
       case 'knock': {
@@ -510,7 +544,7 @@ export class Enemy {
         }
         break;
       }
-      case 'getup': if (this.st > 1.4 / 1.1 - 0.12) { this.set('hold'); this.play('thugIdle', { fade: 0.25 }); this.cd = rnd(0.8, 1.8); } break;
+      case 'getup': if (this.st > 1.4 / 1.1 - 0.12) { this.set('hold'); this.idle(0.25); this.cd = rnd(0.8, 1.8); } break;
       case 'grabbed': break; // the slam moves him
       case 'out': this.pitch = damp(this.pitch, 0, 8, dt); break;
     }

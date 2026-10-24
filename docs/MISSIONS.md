@@ -152,10 +152,16 @@ minimum. Phone calls show the caller card bottom-right (name, small avatar, "On 
   player, car and enemies placed as the phase begins.
 - Knocked out: **REKT** (our WASTED): 96 px, #EF4444, Barlow Condensed 800 italic, the world desaturated and in
   0.3x slow motion for 2.5 s. In a mission it leads to the fail screen; in free roam Quant wakes at the last safehouse.
-- Fail screen: **MISSION FAILED** (72 px, #EF4444), the reason under it (26 px, white), then "Retry" and "Quit".
-  After 3 failures at the same checkpoint, a third option: "Skip" (to the next checkpoint). As built (ui.js
-  `failed()`): only fresh presses move or pick (a key repeating, or pressed in the first 0.45 s, is ignored), so a
-  key still held from the fight can't choose for the player.
+- Fail screen: **MISSION FAILED** (72 px, #EF4444), the reason under it (26 px, white), a **TIP** for that reason
+  (what would have helped, with its key caps: a gold-edged panel), then "Retry" and "Quit". After 3 failures at the
+  same checkpoint, a third option: "Skip" (to the next checkpoint). Each choice says what it does, small under its
+  name: "RETRY / the tail", "SKIP THE TAIL / start at the yard", "QUIT / back to free roam". As built (ui.js
+  `failed(reason, { skip, tip, retryLabel, skipLabel, quitLabel })`, each label `'Main: sub'`; every mission keeps
+  `TIPS` by reason, `RETRY` by checkpoint and `SKIP` by the phase failed in): only fresh presses move or pick (a key
+  repeating, or pressed in the first 0.45 s, is ignored), so a key still held from the fight can't choose for the
+  player. On a phone the tip's caps read as the buttons (COUNTER, DODGE, GRAB) and, upright, the choices stack.
+- Key caps in any mission text: `[F]` draws a cap; `[F|TAKE PHONE]` draws the same cap and names it for a phone's
+  button (`data-touch-as`, read first by wagmi/touch.js), for a key whose button isn't the usual one.
 - Pause (as built, mission/pause.js): Esc or P pauses in play and in cutscenes too (the cutscene's clock stops with the
   city's; Space held still skips it, and a Space held into the pause is let go); "Restart checkpoint" from inside a
   cutscene skips it first. The mission timers (TIME on MISSION PASSED) are game time (`W.clock.now()`): paused time
@@ -376,6 +382,16 @@ Twilight (Times Square lights on). Juno traces the burner's twin to a Degens cou
     at most); on a restart his car is on 12th Ave facing south toward W 55th St (-1880, -1056; the old spot faced the building line) and Lev waits till Quant is rolling (or 4 s) and builds up (9 m/s + 3 a second); Skip after three
     fails plays the crash scene (it used to drop him by the phone with no wreck). Lev's phone: the hold-F ring from 8 m,
     the pick-up within 2.8 m.
+  - Batch F (24 Oct): the yard tells him how the moment he is on foot ("Sneak: walk, don't sprint... Come up behind a
+    lookout and press [E]. Each one you drop quietly is one less in the fight."); the takedown prompt says "Closer:
+    right behind him" (no key) until he is in reach, then a big gold "[E] Take him down"; seen: a **SPOTTED!** banner
+    with who saw him ("The side-gate lookout saw you."), a sting, and the lookouts' marks keep up through Lev's line.
+    The fight runs under `W.combat.pressure({ max: 2, circle: true, calm: true })`: two in at once at most (a thrower
+    only while fewer swing), the rest prowling round him at 4.6-5.4 m, and no quicker for the crowd. Lev's phone:
+    "Take **Lev's phone**: walk up to it and hold [F|TAKE PHONE]." with a route to it, its green blip named on the
+    full map, a tall green marker and a green chevron over it, the ring from 14 m, and a hint back to it when he
+    wanders off; its checkpoint puts him 3.5 m off it, facing it, clear of the wreck. Driving to a fixed place, a
+    turn-by-turn cue at the top (gps.js + turns.js: "Left on W 51st St · 790 m"), and a bolder route line.
 
 #### M3 · Pump and Dump (Act II) · West Chelsea -> Washington Square -> West Village
 Midday. The Degens launch $MOON2, a copycat coin with Moon's photo on it, at a rally under the Washington Square arch.
@@ -581,8 +597,8 @@ call: keep it. Skippable after 1 s (hold Space or Enter).
 
 | # | Time | What happens | Dialogue |
 |---|---|---|---|
-| 1 | 0-6 s | Aerial over Murray Hill's roofs to the Empire State Building. Title: **GEN Z QUANT**. | Ambient city, a stinger. |
-| 2 | 6-11 s | E 37th St from the Madison end, craning down to Quant's car at the curb. Place: *Murray Hill* · E 37th St · Midtown · 5:45 PM. | |
+| 1 | 0-6 s | Aerial over Murray Hill's roofs to the Empire State Building. Place: *Murray Hill* · E 37th St · Midtown · 5:45 PM (no title here: the name is already on the start gate and in the trailer). | Ambient city, a stinger. |
+| 2 | 6-11 s | E 37th St from the Madison end, craning down to Quant's car at the curb. | |
 | 3 | 11-14.8 s | The door: Moon trots out first, Quant follows reading his phone. Captions *Moon* · very good dog, *Quant* · the coin kid. | QUANT: "'Delete your account.' Good morning to you too." |
 | 4 | 14.8-21 s | His phone over the right of the frame: the comments scroll. Then Moon's eye level: she looks up, wags, pulls for the car. | QUANT: "Okay, okay. Car, then the park, then we log off forever." "Kidding. Obviously." |
 | 5 | 21-24.5 s | Low on the street, a long lens: the van swings in from Madison and comes on, braking hard, tyres screaming. | |

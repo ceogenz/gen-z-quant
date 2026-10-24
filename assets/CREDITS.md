@@ -91,6 +91,14 @@ The street fight's design and code, the Degens' rig and the freeflow clips are p
 They are used with the author's permission and are **not** covered by the MIT License. `NOTICE` lists exactly which
 parts.
 
+## Motion capture (Bandai Namco)
+
+Motion data: [Bandai Namco Research Motion Dataset](https://github.com/BandaiNamcoResearchInc/Bandai-Namco-Research-Motiondataset),
+© 2022 Bandai Namco Research Inc., [CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/). Retargeted to the
+game's rigs, trimmed to loops and played in place (the Degens' walks, idles and taunts, the rally crowd's dances and
+cheers, Quant's footwork in a fight). Used under CC BY-NC 4.0 and **not** covered by the MIT License: non-commercial
+use only. `NOTICE` lists exactly which files; `assets/anim/bandai/LICENSE.txt` is the licence.
+
 ## Props
 
 The trash cans in `assets/props/trash-cans.glb` are "Metal Trash Can" by GurJas Studios, from

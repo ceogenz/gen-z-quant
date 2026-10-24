@@ -3,18 +3,23 @@
 // gate. Each sees down a cone (drawn on the ground, yellow going red) as far as the containers and walls let him:
 // in it, Quant fills his suspicion (faster close up, running, or in a car); a sprint near him is heard. Full: 'You were
 // spotted.' From behind, a step away, E takes him down (the fight's takedown), and whoever sees that gets suspicious.
-//   const S = createStealth(W, { posts, U });  await S.spawn();  S.step(dt) -> null | 'spotted';  S.alarm();  S.dispose()
-//   S.lookouts: [{ e, sus, quiet, ... }] · S.down (taken down) · S.quiet (taken down unseen) · S.grace (s: nobody's
-//   suspicion fills yet: pulling up behind the van, he has a moment to stop and get out)
+// The prompt says so: 'Press E to take him down' (strong) in position, 'Closer: right behind him' (soft, no key) a
+// few steps short of it.
+//   const S = createStealth(W, { posts, U });  await S.spawn();  S.step(dt) -> null | 'seen' | 'hit';  S.alarm();  S.dispose()
+//   S.lookouts: [{ e, name, sus, quiet, ... }] · S.by (the lookout who saw him, or was hit: his name for the banner) ·
+//   S.down (taken down) · S.quiet (taken down unseen) · S.grace (s: nobody's suspicion fills yet: pulling up behind the
+//   van, he has a moment to stop and get out)
 import * as THREE from 'three/webgpu';
 
 const PI = Math.PI;
 const RANGE = 15, HALF = 0.72, CLOSE = 3.2;
+// (who they are, for 'SPOTTED! The side-gate lookout saw you.': by post, m2-set.js's order; a post's own name first)
+const NAMES = ['The gate lookout', 'The lookout on the west row', 'The side-gate lookout'];
 const angWrap = (a) => { a = (a + PI) % (2 * PI); if (a < 0) a += 2 * PI; return a - PI; };
 
 export function createStealth(W, { posts, U, center }) {
   const app = W.app, cm = app.controllerManager, P = W.person, car = W.car, combat = W.combat, scene = app.scene, cam = app.cameraSystem.camera;
-  const S = { lookouts: [], crew: null, down: 0, quiet: 0, alarmed: false, grace: 0 };
+  const S = { lookouts: [], crew: null, down: 0, quiet: 0, alarmed: false, grace: 0, by: null };
   // a wall, a container or a building between two points (the city's colliders, the yard's among them)
   function blocked(ax, ay, az, bx, by, bz) {
     const L = Math.hypot(bx - ax, bz - az), n = Math.ceil(L / 0.6);
@@ -40,7 +45,7 @@ export function createStealth(W, { posts, U, center }) {
     const crews = posts.map((post) => { const [x, z] = post.at || post.path[0]; return combat.spawnCrew({ x, z, count: 1, aggro: false, props: false }); });
     S.crew = { enemies: crews.flatMap((c) => c.enemies), alive: () => crews.reduce((n, c) => n + c.alive(), 0), engage() { for (const c of crews) c.engage(); return this; } };
     S.crew.enemies.forEach((e, i) => {
-      const post = posts[i], L = { e, post, id: 'lk' + i, sus: 0, yaw: post.yaw ?? 0, t: Math.random() * 10, leg: 0, wait: 0, quiet: false, cone: cone(), watching: true, look: null };
+      const post = posts[i], L = { e, post, id: 'lk' + i, name: post.name || NAMES[i] || 'A lookout', sus: 0, yaw: post.yaw ?? 0, t: Math.random() * 10, leg: 0, wait: 0, quiet: false, cone: cone(), watching: true, look: null };
       const [x, z] = post.at || post.path[0];
       e.pos.set(x, cm.getGroundHeight(x, z, 'person'), z); e.yaw = L.yaw; e.root.rotation.y = L.yaw;
       // (on watch: his own heading, not Quant's; walking his beat, his walk not the crew's idle)
@@ -56,7 +61,7 @@ export function createStealth(W, { posts, U, center }) {
   const inCar = () => cm.activeMode === 'car';
   // the one Quant could take down now: on foot, a step away, behind him (not in his face)
   function takeable() {
-    if (inCar() || S.alarmed) return null;
+    if (inCar() || S.alarmed || S.by) return null;
     let best = null, bd = 2.4;
     for (const L of S.lookouts) {
       const e = L.e; if (!L.watching || !e.alive || e.state !== 'idle') continue;
@@ -101,7 +106,7 @@ export function createStealth(W, { posts, U, center }) {
     for (const L of S.lookouts) {
       const e = L.e;
       // taken down some other way (a fist from the front, the car): that is the alarm
-      if (L.watching && (!e.alive || e.state !== 'idle')) { L.watching = false; L.restore(); L.cone.visible = false; U.unmark(L.id); if (e.alive || !L.quiet) spotted = spotted || 'hit'; continue; }
+      if (L.watching && (!e.alive || e.state !== 'idle')) { L.watching = false; L.restore(); L.cone.visible = false; U.unmark(L.id); if (e.alive || !L.quiet) { spotted = spotted || 'hit'; S.by = S.by || L; } continue; }
       if (!L.watching) continue;
       L.t += dt;
       // where he looks: his sweep, his beat, or toward what made him suspicious
@@ -127,7 +132,9 @@ export function createStealth(W, { posts, U, center }) {
       if (sees) { L.sus += dt * (0.55 + (range - d) / range * 1.6) * (sp > 4 ? 1.6 : 1) * (car_ ? 1.8 : 1); if (d < CLOSE) L.sus = 1; L.look = { x: p.x, z: p.z }; }
       else if (heard) { L.sus += dt * 0.9; L.look = { x: p.x, z: p.z }; }
       else L.sus = Math.max(0, L.sus - dt * 0.22);
-      if (L.sus >= 1) { L.sus = 1; spotted = spotted || 'seen'; }
+      // (the one who saw him stays sure of it: his mark red until the alarm)
+      if (L === S.by) L.sus = 1;
+      if (L.sus >= 1) { L.sus = 1; spotted = spotted || 'seen'; S.by = S.by || L; }
       // the cone, the mark over his head
       L.cone.visible = true;
       L.cone.position.set(e.pos.x, Math.max(e.pos.y, 0.22) + 0.06, e.pos.z); L.cone.rotation.y = L.yaw - PI / 2;
@@ -136,8 +143,15 @@ export function createStealth(W, { posts, U, center }) {
       const onScreen = _v.z < 1 && Math.abs(_v.x) < 1.05 && Math.abs(_v.y) < 1.05 && d < 45;
       U.mark(L.id, { x: (_v.x * 0.5 + 0.5) * innerWidth, y: (-_v.y * 0.5 + 0.5) * innerHeight, k: L.sus, on: onScreen && (L.sus > 0.02 || d < 30) });
     }
+    // the takedown, said: in position (a step away, behind him) the key; a few steps short of it, closer, and no key
     const T = takeable();
-    U.prompt(T ? 'Press [E] to take him down' : null);
+    if (T) U.prompt('Press [E] to take him down', { strong: true });
+    else if (!car_ && !S.by && S.lookouts.some((L) => {
+      const e = L.e; if (!L.watching || !e.alive || e.state !== 'idle') return false;
+      const dx = P.position.x - e.pos.x, dz = P.position.z - e.pos.z, d = Math.hypot(dx, dz);
+      return d > 2.4 && d < 5 && Math.abs(angWrap(Math.atan2(dx, dz) - L.yaw)) >= 1.75;
+    })) U.prompt('Closer: right behind him', { soft: true });
+    else U.prompt(null);
     return spotted;
   };
   // the alarm: every one still up joins the fight

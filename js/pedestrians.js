@@ -1000,6 +1000,20 @@ const qX = (out, a) => out.setFromAxisAngle(AX, a);
 const qY = (out, a) => out.setFromAxisAngle(AY, a);
 const qZ = (out, a) => out.setFromAxisAngle(AZ, a);
 
+// (Gen Z Quant) a captured clip's pose (PersonRig.playClip): each bone's parent, and the working rotations and joints
+const CLIP_PARENT = [-1, 0, 1, 1, 3, 1, 5, 0, 7, 8, 9, 0, 11, 12, 13];
+const _cq = Array.from({ length: BONE_COUNT }, () => new THREE.Quaternion());
+const _cj = Array.from({ length: BONE_COUNT }, () => new THREE.Vector3());
+const _cA = new THREE.Quaternion();
+const _cB = new THREE.Quaternion();
+const _cY = new THREE.Quaternion();
+const _cv = new THREE.Vector3();
+const b64i16 = (b64) => {
+  const s = atob(b64), u = new Uint8Array(s.length);
+  for (let i = 0; i < s.length; i++) u[i] = s.charCodeAt(i);
+  return new Int16Array(u.buffer);
+};
+
 function makeFoot(side) {
   return {
     side,
@@ -1478,6 +1492,47 @@ class PersonRig {
       _v.copy(j[LIMB.toe[i]]).sub(j[LIMB.foot[i]]).multiplyScalar(s).applyQuaternion(_qRoot).add(_ankle);
       this.writeBone(LIMB.toe[i], _qRoot, _v);
     }
+  }
+
+  /**
+   * (Gen Z Quant) A captured clip played in place: the rally crowd's dances and cheers (wagmi/mission/m3-set.js,
+   * assets/anim/bandai/rally-crowd-ped.json: Bandai Namco Research Motion Dataset, CC BY-NC 4.0, see NOTICE).
+   * C = { fps, n, q, p }: per frame, each bone's world rotation from the bind (facing +Z, +X its left) and the pelvis
+   * joint from the ground point (mm), int16. At clip time t (looping), standing at (x, z) facing yaw on the ground at
+   * groundY: the bones posed by forward kinematics from the pelvis as in tumble(), on this person's own bind and scale
+   * (a woman's, a broader build). The walk picks up afresh after it.
+   */
+  playClip(C, t, x, z, yaw, groundY) {
+    if (!C.Q) { C.Q = b64i16(C.q); C.P = b64i16(C.p); }
+    const s = this.s;
+    const j = this.bind;
+    const Q = C.Q;
+    const P = C.P;
+    const last = C.n - 1;
+    const f = (((t * C.fps) % last) + last) % last;
+    const i0 = Math.floor(f);
+    const i1 = Math.min(last, i0 + 1);
+    const u = f - i0;
+    this.placed = false;
+    this.x = x;
+    this.z = z;
+    this.yaw = yaw;
+    qY(_cY, yaw);
+    for (let k = 0; k < BONE_COUNT; k++) {
+      const a = (i0 * BONE_COUNT + k) * 4;
+      const b = (i1 * BONE_COUNT + k) * 4;
+      _cA.set(Q[a], Q[a + 1], Q[a + 2], Q[a + 3]).normalize();
+      _cB.set(Q[b], Q[b + 1], Q[b + 2], Q[b + 3]).normalize();
+      _cq[k].slerpQuaternions(_cA, _cB, u).premultiply(_cY);
+    }
+    _cv.set(lerp(P[i0 * 3], P[i1 * 3], u), lerp(P[i0 * 3 + 1], P[i1 * 3 + 1], u), lerp(P[i0 * 3 + 2], P[i1 * 3 + 2], u))
+      .multiplyScalar(0.001 * s).applyQuaternion(_cY);
+    _cj[BONE.PELVIS].set(x + _cv.x, groundY + _cv.y, z + _cv.z);
+    for (let k = 1; k < BONE_COUNT; k++) {
+      const pa = CLIP_PARENT[k];
+      _cj[k].copy(j[k]).sub(j[pa]).multiplyScalar(s).applyQuaternion(_cq[pa]).add(_cj[pa]);
+    }
+    for (let k = 0; k < BONE_COUNT; k++) this.writeBone(k, _cq[k], _cj[k]);
   }
 
   /**

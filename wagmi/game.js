@@ -381,7 +381,7 @@ installDriveMode(WAGMI);
   body.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; o.frustumCulled = false; } });
   for (const m of person.crowd.meshes) m.visible = false;
   person.mesh.add(body);
-  const mixer = new THREE.AnimationMixer(body), clips = gltf.animations, A = {};
+  const mixer = new THREE.AnimationMixer(body), clips = gltf.animations.slice(), A = {};
   const clipOf = (n) => THREE.AnimationClip.findByName(clips, n);
   const act = (n) => A[n] || (A[n] = mixer.clipAction(clipOf(n)));
   const bones = {}; body.traverse((o) => { if (o.isBone) bones[o.name] = o; });
@@ -398,6 +398,44 @@ installDriveMode(WAGMI);
   const LOCO = [...GAITS.map((g) => g[0]), ...STEPS.map((s) => s[0])];
   for (const n of LOCO) { const a = act(n); a.play(); a.setEffectiveWeight(n === 'idle' ? 1 : 0); }
   const W = Object.fromEntries(LOCO.map((n) => [n, n === 'idle' ? 1 : 0]));
+  // the fight's footwork back, left and right (fwB, fwL, fwR): motion capture (assets/anim/bandai/quant-footwork.glb:
+  // Bandai Namco Research Motion Dataset, CC BY-NC 4.0, see NOTICE), fetched the first time he squares up (till then, or
+  // without it, the guard's own steps). The legs only: the guard ('fight', and under the steps 'fight/upper') keeps his
+  // spine, arms and head, so his chest and head stay up in his guard while his feet go. The takes walk with the hips
+  // turned the way they go (70-75 deg on a side-step) and a little forward: his root keeps the guard's own set (plus
+  // FW_TURN of the take's turn, a bladed lean into a side-step) and each hip carries the rest, so the legs land as
+  // captured. Back: the normal take (it keeps up with the fight's 2.3 m/s); the sides: the compact 'angry' ones
+  const FW_LEGS = /^(root|pelvis_|upperleg|lowerleg|foot_)/, FW_TURN = 0.3;
+  const FW = [['fwBack', 'fwB', 1.283], ['fwLeftAngry', 'fwL', 0.942], ['fwRightAngry', 'fwR', 1.142]];
+  let fwPack = null, fwOn = false;
+  function footwork() {
+    fwPack = loadGLB('assets/anim/bandai/quant-footwork.glb').then((g) => {
+      const guard = clipOf('fight'); if (!guard) return;
+      const q0 = new THREE.Quaternion(), qr = new THREE.Quaternion(), qn = new THREE.Quaternion(), qh = new THREE.Quaternion(), f = new THREE.Vector3(), UP = new THREE.Vector3(0, 1, 0);
+      const r0 = guard.tracks.find((t) => t.name === 'root.quaternion');
+      if (r0) q0.fromArray(r0.values, 0); else if (bones.root) q0.copy(bones.root.quaternion);
+      const add = [];
+      for (const [src, name, sp] of FW) {
+        const c = THREE.AnimationClip.findByName(g.animations, src), rt = c?.tracks.find((t) => t.name === 'root.quaternion'); if (!rt) continue;
+        const ri = rt.createInterpolant(), times = rt.times, n = times.length, rootV = new Float32Array(n * 4);
+        const hips = c.tracks.filter((t) => /^pelvis_[LR]\.quaternion$/.test(t.name)).map((t) => ({ t, i: t.createInterpolant(), v: new Float32Array(n * 4) }));
+        for (let k = 0; k < n; k++) {
+          qr.fromArray(ri.evaluate(times[k]));
+          f.set(0, 0, 1).applyQuaternion(qr);
+          qn.setFromAxisAngle(UP, Math.atan2(f.x, f.z) * FW_TURN).multiply(q0).toArray(rootV, k * 4);
+          qr.premultiply(qn.invert()); // (the rest of the take's root, for the hips)
+          for (const h of hips) qh.fromArray(h.i.evaluate(times[k])).premultiply(qr).toArray(h.v, k * 4);
+        }
+        const tracks = [new THREE.QuaternionKeyframeTrack('root.quaternion', times.slice(), rootV), ...hips.map((h) => new THREE.QuaternionKeyframeTrack(h.t.name, times.slice(), h.v))];
+        for (const t of c.tracks) if (FW_LEGS.test(t.name.split('.')[0]) && t.name !== 'root.quaternion' && !hips.some((h) => h.t === t)) tracks.push(t);
+        add.push([new THREE.AnimationClip(name, c.duration, tracks), sp]);
+      }
+      if (!add.length) return;
+      add.push([new THREE.AnimationClip('fight/upper', guard.duration, guard.tracks.filter((t) => !FW_LEGS.test(t.name.split('.')[0]))), 0]);
+      for (const [clip, sp] of add) { clips.push(clip); STEPS.push([clip.name, sp]); LOCO.push(clip.name); W[clip.name] = 0; const a = act(clip.name); a.play(); a.setEffectiveWeight(0); }
+      fwOn = true;
+    }, () => {});
+  }
   // one-shot moves: a few copies of each clip, so a move can cross-fade from itself (jab, jab)
   const pool = {};
   function copyOf(name) {
@@ -504,6 +542,7 @@ installDriveMode(WAGMI);
       if (directed) { directed = false; for (const n of LOCO) { const a = act(n); a.enabled = true; a.play(); W[n] = a.getEffectiveWeight(); } }
       Q.pre?.(dt, p, air);
       const d = dt * Q.timeScale, L = Q.loco;
+      if (L && L.fight && !fwPack) footwork();
       const v = L ? L.speed : Math.abs(p.speed);
       // the street's gaits: which, by speed (the two nearest blended), and how fast its clip runs
       let k = 0; while (k < GAITS.length - 1 && v > GAITS[k + 1][1]) k++;
@@ -517,11 +556,14 @@ installDriveMode(WAGMI);
       if (fight) {
         for (const n in want) want[n] = 0;
         const m = smooth((v - 0.12) / 0.5), c = Math.cos(L.dir || 0), s = Math.sin(L.dir || 0);
-        const sh = { guardF: Math.max(0, c), guardB: Math.max(0, -c), guardL: Math.max(0, s), guardR: Math.max(0, -s) };
+        // (back and to the sides: the motion-capture steps once they're in, the legs alone, his guard over them)
+        const sh = fwOn ? { guardF: Math.max(0, c), fwB: Math.max(0, -c), fwL: Math.max(0, s), fwR: Math.max(0, -s) }
+          : { guardF: Math.max(0, c), guardB: Math.max(0, -c), guardL: Math.max(0, s), guardR: Math.max(0, -s) };
         for (const n in sh) if (!clipOf(n)) sh[n] = 0;
-        const tot = sh.guardF + sh.guardB + sh.guardL + sh.guardR || 1;
+        let tot = 0; for (const n in sh) tot += sh[n]; tot = tot || 1;
         want.fight = 1 - m;
-        for (const [n, sp] of STEPS) if (sp) { want[n] = m * sh[n] / tot; act(n).timeScale = Math.max(0.6, Math.min(2.2, v / sp)); }
+        if (fwOn) want['fight/upper'] = m * (1 - sh.guardF / tot);
+        for (const [n, sp] of STEPS) if (sp) { want[n] = m * (sh[n] || 0) / tot; act(n).timeScale = Math.max(0.6, Math.min(n.startsWith('fw') ? 2.5 : 2.2, v / sp)); }
       }
       // the moves over them: newest on top, each over what is below by its own blend; the legs get what is left
       for (const t of tracks) {
@@ -542,6 +584,7 @@ installDriveMode(WAGMI);
         if (t.env >= 0.999) covered = true;
       }
       for (const n of LOCO) { W[n] += (want[n] - W[n]) * Math.min(1, dt * 10); act(n).setEffectiveWeight(W[n] * rem); }
+      if (fwOn) act('fight/upper').time = act('fight').time; // (in step with the guard below it)
       mixer.update(d);
       body.position.y = 0;
       // standing still: not stepping, not in the fight's guard, no move on him (a blow, a vault, down, a pick-up), on

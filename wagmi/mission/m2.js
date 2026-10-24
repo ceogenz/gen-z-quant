@@ -13,21 +13,26 @@
 //             west, 10th Ave north, W 55th St west (the traffic held off its blocks, met at the corners: held up, it
 //             honks and noses through) to the Degens' container yard on 12th Ave; about a minute and a half
 //                                                                                            checkpoint 'tail'
-//   yard      'Sneak up on the stash.' three lookouts with sight cones; E from behind takes one down; seen: the alarm
-//             (arriving spotted: the alarm at once; pulling up behind the van, 6 s to get out of the car unseen)
+//   yard      'Sneak up on the stash.' three lookouts with sight cones; E from behind takes one down (the prompt says
+//             so: closer, then the key); the how in a tip the moment he is on foot; seen: SPOTTED! and who saw him, the
+//             alarm (arriving spotted: the alarm at once; pulling up behind the van, 6 s to get out of the car unseen)
 //                                                                                            checkpoint 'yard'
 //   fight     'Beat up the Degens.' DEGENS 0/n, trash cans and bottles about (their help), Lev shouting from his car:
 //             the lookouts still up and three at the stash, then (down to their last man) a second wind and two more
-//             out of the containers; health 130 for it, a slow regen out of reach. Lost: back to 'yard'
+//             out of the containers; health 130 for it, a slow regen out of reach; two in at once at most, the rest
+//             prowling round him further out (W.combat.pressure). Lost: back to 'yard'
 //   chase     Lev bolts: 'Take down Lev.' W 55th St, 11th Ave south past Javits, W 34th St east through
 //             the traffic (he plows it), rubber-banded; ram him (LEV'S CAR damage) or keep up; he crashes at Greeley
 //             Square (or where the rams wreck him); over 260 m for 6 s: 'Lev got away.'      checkpoint 'chase'
-//   crash     (a scene) Lev climbs out, drops his phone, runs; 'Take Lev's phone.' hold F    checkpoint 'phone'
+//   crash     (a scene) Lev climbs out, drops his phone, runs; 'Take Lev's phone: walk up to it and hold F.' the route,
+//             its green blip (named on the full map), a green chevron and a tall marker over it; the ring from 14 m;
+//             wandered off: a hint back to it (the checkpoint puts him 3.5 m off it, facing it)  checkpoint 'phone'
 //   phone     (a scene) the Degens' group chat: a photo of Quant's own door
 //   then MISSION PASSED (TIME, DEGENS REKT, QUIET TAKEDOWNS, HITS TAKEN, FOLLOWERS +9,800), Juno's call, Pete's DM
 //   (he knows where the dog is going, but Lev is checking all their phones tonight: 'i'll DM you tomorrow'), Quant
 //   placing him ("The 'it's a dog' guy", from the chat), and the G at Gears' garage: 'Pete will DM you tomorrow.'
-// Fails: 'Quant got rekt.', 'The van got away.', 'You left the fight.', 'Lev got away.' Retry, Quit, Skip (after three).
+// Fails: 'Quant got rekt.', 'The van got away.', 'You left the yard.', 'You left the fight.', 'Lev got away.' Retry,
+// Quit, Skip (after three), each saying what it does, and a tip for the reason (TIPS, RETRY, SKIP: ui.failed).
 // URL: ?m2=handoff|start|go|tail|yard|fight|chase|phone (with ?nointro until intro.js knows ?m2 the way it knows ?m1).
 import * as THREE from 'three/webgpu';
 import { place, getCast } from '../intro.js';
@@ -219,8 +224,9 @@ function createMission(W, { keep = false } = {}) {
       ui.sub(null); await gsleep(pause * 1000);
     }
   }
-  const objective = (parts, target = null) => {
-    if (gps.objective) gps.objective(parts, target, { blip: !!target && !target.follow });
+  // (o.blip false: the target has a blip of its own, its kind's)
+  const objective = (parts, target = null, o = {}) => {
+    if (gps.objective) gps.objective(parts, target, { blip: o.blip ?? (!!target && !target.follow) });
     else { ui.objective(parts); if (target && !target.follow) gps.set(target); else gps.clear(); }
   };
   const holds = (rects) => app.trafficSystem.hold?.(rects);
@@ -246,12 +252,13 @@ function createMission(W, { keep = false } = {}) {
   const frameDt = () => { const t = now(), d = Math.min(0.05, (t - lastT) / 1000); lastT = t; return d; };
 
   /* -------------------------------------------------------- the cast -- */
-  const S = { chev: null, C: null, Y: null, L: null, lev: null, phone: null, stealth: null, crew: null, vanD: null, levD: null, levHp: 100, alarm: false, flee: false, engine: null, crashAt: null, phoneAt: null };
+  const S = { chev: null, chevG: null, C: null, Y: null, L: null, lev: null, phone: null, stealth: null, crew: null, vanD: null, levD: null, levHp: 100, alarm: false, flee: false, engine: null, crashAt: null, phoneAt: null };
   async function sets() {
     if (!S.C) S.C = await getCast(W);
     if (!S.Y) { S.Y = buildYard(W); S.Y.warm(); }
     if (!S.L) S.L = buildLevCar(W);
     if (!S.chev) S.chev = buildChevron(W);
+    if (!S.chevG) S.chevG = buildChevron(W, '#4ADE80');
     if (!S.phone) {
       const g = new THREE.Group();
       const body = new THREE.Mesh(new THREE.BoxGeometry(0.075, 0.011, 0.15), new THREE.MeshStandardMaterial({ color: '#111214', roughness: 0.4, metalness: 0.5 }));
@@ -287,7 +294,7 @@ function createMission(W, { keep = false } = {}) {
     if (S.phone) S.phone.visible = false;
     if (S.lev) S.lev.root.visible = false;
     if (S.C) S.C.van.group.visible = false;
-    S.chev?.hide();
+    S.chev?.hide(); S.chevG?.hide();
   }
   // (x, z) in the camera's view
   const _fr = new THREE.Frustum(), _pm = new THREE.Matrix4(), _sp = new THREE.Sphere(new THREE.Vector3(), 3.5);
@@ -302,6 +309,17 @@ function createMission(W, { keep = false } = {}) {
       if (Math.abs(v.x - qx) + Math.abs(v.z - qz) < 0.01) return [qx, qz, Math.atan2(-dx, -dz)];
     }
     return null;
+  }
+  // where he stands for the phone's checkpoint: 3.5 m past it on its open side (away from the wreck), clear of the
+  // colliders; a little round either way if that is blocked
+  function phoneSpot(drop, at) {
+    const ox = drop[0] - at.x, oz = drop[1] - at.z, a0 = Math.atan2(ox, oz), v = new THREE.Vector3();
+    for (const da of [0, 0.4, -0.4, 0.8, -0.8]) for (const r of [3.5, 4.5]) {
+      const qx = drop[0] + Math.sin(a0 + da) * r, qz = drop[1] + Math.cos(a0 + da) * r;
+      v.set(qx, 0.2, qz); cm.resolveHorizontalCollision(v, 0.5, 1.2);
+      if (Math.abs(v.x - qx) + Math.abs(v.z - qz) < 0.01) return [qx, qz];
+    }
+    const ol = Math.hypot(ox, oz) || 1; return [drop[0] + ox / ol * 3.5, drop[1] + oz / ol * 3.5];
   }
   // into the car at (x, z), facing h
   function inTheCar(x, z, h) { place(W, { car: [x, z, h] }); P.inVehicle = true; P.mesh.visible = false; P.speed = 0; app.selectMode('car'); }
@@ -465,24 +483,37 @@ function createMission(W, { keep = false } = {}) {
       sfx?.play('buzz', { gain: 0.14, times: 1 }); W.audio?.play?.('phoneBuzz');
       ui.dm('Juno', "that's a lot of shipping containers for a moving company. lookouts on the gates. go quiet.", 8);
       gps.blip('stash', { x: S.Y.stash.x, z: S.Y.stash.z, kind: 'object', edge: true, name: 'The stash' });
-      delay(stealth?.grace > 0 ? 7 : 1.2).then(() => ui.help(['Lookouts see down the ', { 'yellow cones': 'yellow' }, '. Get behind one and press [E] to take him down quietly.'], 10)).catch(() => {});
-      let spotted = null, reached = false;
+      let spotted = null, reached = false, tipped = false;
+      // (the hook runs on through Lev's line after it, so the lookouts' marks and cones keep up with the camera)
       const off = hook(() => {
         const dt = frameDt();
         spotted = stealth?.step(dt) || spotted;
+        // the how, the first moment he is on foot in the yard (pulled up in the car: once he is out of it), and the
+        // point of it: each one dropped quietly is one less in the fight
+        if (!tipped && !inCar() && !spotted && !reached) {
+          tipped = true;
+          ui.help(['Sneak: ', { walk: 'yellow' }, ", don't sprint. Stay out of the ", { 'yellow cones': 'yellow' }, '. Come up ', { behind: 'yellow' }, ' a lookout and press [E]. Each one you drop quietly is one less in the fight.'], 12, { mode: 'foot' });
+        }
         // the crew at the stash, and the stash itself
         if (dist(me(), S.Y.stash.x, S.Y.stash.z) < 6.5) reached = true;
         for (const e of S.crew?.enemies || []) if (e.alive && dist(me(), e.pos.x, e.pos.z) < 7) reached = true;
         if (dist(me(), YARD.cx, YARD.cz) > 400) fail('You left the yard.');
       });
-      try { await wait(() => spotted || reached); } finally { off(); }
-      stats.quiet = stealth?.quiet || 0; stats.lookouts = stealth?.down || 0;
-      gps.unblip('stash');
-      if (spotted) {
-        ui.objective(['You were ', { spotted: 'red' }, '.']);
-        W.audio?.play?.('horn', { pos: [YARD.cx, 1, YARD.cz] }); sfx?.play('shout', { gain: 0.4, f0: 150, vowel: 'a', dur: 0.6 });
-        await say([['Lev', ACID, "Who's that? Liquidate him!"]]);
-      } else await say([['Lev', ACID, 'Wait. Coin kid? In MY yard? Liquidate him!']]);
+      try {
+        await wait(() => spotted || reached);
+        stats.quiet = stealth?.quiet || 0; stats.lookouts = stealth?.down || 0;
+        gps.unblip('stash');
+        if (spotted) {
+          // SPOTTED! and who: the one who saw him (a lookout hit from the front: the alarm raised)
+          const by = stealth?.by, hit = spotted === 'hit';
+          ui.help(null); U.prompt(null);
+          U.banner('SPOTTED!', hit ? 'A lookout raised the alarm.' : by ? `${by.name} saw you.` : 'They saw you.');
+          ui.objective(hit ? ['A lookout raised the ', { alarm: 'red' }, '.'] : by ? ['You were ', { spotted: 'red' }, ' by ', { [by.name.toLowerCase()]: 'red' }, '.'] : ['You were ', { spotted: 'red' }, '.']);
+          sfx?.play('stinger', { gain: 0.45, notes: [233.08, 277.18, 329.63, 466.16] });
+          W.audio?.play?.('horn', { pos: [YARD.cx, 1, YARD.cz] }); sfx?.play('shout', { gain: 0.4, f0: 150, vowel: 'a', dur: 0.6 });
+          await say([['Lev', ACID, "Who's that? Liquidate him!"]]);
+        } else await say([['Lev', ACID, 'Wait. Coin kid? In MY yard? Liquidate him!']]);
+      } finally { off(); }
       S.alarm = true;
     },
     // the fight in the yard
@@ -501,6 +532,9 @@ function createMission(W, { keep = false } = {}) {
       let offFight = null;
       try {
         S.alarm = true; S.stealth?.alarm(); wakeCrew();
+        // (a yard of them, not a mob: two in at once at most, the rest prowling round him further out, and no quicker
+        // for the crowd: combat/index.js pressure; let go after, and by clearAll on a fail or a quit)
+        combat.pressure?.({ max: 2, circle: true, calm: true });
         // two waves: the lookouts still up and the crew at the stash; down to their last man, two more out of the
         // containers at the back (a brute among them)
         const crews = [S.crew, S.stealth?.crew].filter(Boolean), WAVE2 = 2;
@@ -538,7 +572,7 @@ function createMission(W, { keep = false } = {}) {
         });
         await wait(() => wave2 && crews.every((c) => c.alive() === 0));
         stats.rekt = total;
-      } finally { offFight?.(); offDown?.(); combat.player.autoGetUp = autoGetUp; combat.player.maxHp = maxHp0; combat.player.hp = Math.min(combat.player.hp, maxHp0); }
+      } finally { offFight?.(); offDown?.(); combat.pressure?.(null); combat.player.autoGetUp = autoGetUp; combat.player.maxHp = maxHp0; combat.player.hp = Math.min(combat.player.hp, maxHp0); }
       for (const id of [...gps.blips.keys()]) if (id.startsWith('e:')) gps.unblip(id);
       ui.counter(null);
       await delay(1.0);
@@ -631,28 +665,48 @@ function createMission(W, { keep = false } = {}) {
     async phone(fresh) {
       await sets(); twilight();
       const at = S.crashAt || { ...CRASH };
+      const drop = S.phoneAt || crashScene(W, { levCar: S.L, lev: null, phone: S.phone, say, at }).drop;
       if (fresh) {
         S.L.group.visible = true; S.L.group.position.set(at.x, 0, at.z); S.L.group.rotation.set(0, at.h, 0.04); S.L.smoke(true);
-        place(W, { car: [at.x + 14, at.z - 16, PI], quant: [at.x + 7, at.z - 6, -PI * 0.75] });
+        // (straight in: 3.5 m past the phone on its open side, away from the wreck, facing it: the phone in front of
+        // him and the wreck behind it, nothing between it and the camera)
+        const q = phoneSpot(drop, at);
+        place(W, { car: [at.x + 14, at.z - 16, PI], quant: [q[0], q[1], Math.atan2(drop[0] - q[0], drop[1] - q[1])] });
+        app.cameraSystem.resetForTeleport?.();
       }
-      const drop = S.phoneAt || crashScene(W, { levCar: S.L, lev: null, phone: S.phone, say, at }).drop;
       holds([{ minX: Math.min(at.x, drop[0]) - 18, maxX: Math.max(at.x, drop[0]) + 18, minZ: Math.min(at.z, drop[1]) - 18, maxZ: Math.max(at.z, drop[1]) + 18 }]);
-      S.phone.visible = true; S.phone.position.set(drop[0], cm.getGroundHeight(drop[0], drop[1], 'person') + 0.012, drop[1]); S.phone.rotation.set(0, 0.6, 0);
-      objective(['Take ', { "Lev's phone": 'green' }, '.'], null);
-      gps.blip('phone', { x: drop[0], z: drop[1], kind: 'object', edge: true, name: "Lev's phone" });
-      const spot = createMarker(THREE, app.scene, { color: '#4ADE80', radius: 0.7, height: 0.8, alpha: 0.3 }); spot.at(drop[0], cm.getGroundHeight(drop[0], drop[1], 'person'), drop[1]);
-      let carTold = false;
-      // (the ring a few metres out, the pick-up from anywhere near it: ui.holdAct)
-      const act = ui.holdAct({ label: "take Lev's phone", noun: "Lev's phone", secs: 1.0, show: 8, reach: 2.8 });
+      const gy = cm.getGroundHeight(drop[0], drop[1], 'person');
+      S.phone.visible = true; S.phone.position.set(drop[0], gy + 0.012, drop[1]); S.phone.rotation.set(0, 0.6, 0);
+      // the objective says how; the route to it (on foot close by, a straight line); its green blip, named on the full map
+      const NAME = "Lev's phone";
+      objective(['Take ', { [NAME]: 'green' }, ': walk up to it and hold [F|TAKE PHONE].'], { x: drop[0], z: drop[1], name: NAME }, { blip: false });
+      const blip = (pulse) => gps.blip('phone', { x: drop[0], z: drop[1], kind: 'object', edge: true, name: NAME, label: true, pulse });
+      blip(8);
+      // seen from afar: a tall green marker over it (it rises over the wreck) and a green chevron above that (the loop)
+      const spot = createMarker(THREE, app.scene, { color: '#4ADE80', radius: 0.9, height: 2.6, alpha: 0.4 }); spot.at(drop[0], gy, drop[1]);
+      let carTold = false, best = Infinity, hintT = -1e9;
+      // (the ring from 14 m out, 'Walk up to Lev's phone, then hold F'; the pick-up from anywhere near it: ui.holdAct)
+      const act = ui.holdAct({ label: "take Lev's phone", noun: NAME, secs: 1.0, show: 14, reach: 2.8 });
       try {
         await wait(() => {
           const dt = frameDt();
           S.L.update(dt);
-          if (inCar() && !carTold && dist(car.position, drop[0], drop[1]) < 30) { carTold = true; ui.help('Press [F] to get out.', 6, { mode: 'car' }); }
-          return act.step(dt, dist(P.position, drop[0], drop[1]), !inCar());
+          const foot = !inCar(), d = dist(foot ? P.position : car.position, drop[0], drop[1]);
+          // (the chevron over the marker's top, out of his face once he is at it)
+          if (foot && d < 3) S.chevG.hide(); else S.chevG.at(drop[0], gy + 3.2, drop[1], dt);
+          if (inCar() && !carTold && d < 30) { carTold = true; ui.help('Press [F] to get out.', 6, { mode: 'car' }); }
+          // wandered off from it (on foot, 8 m further than he has been; in the car, 45 m out): where it is, and its
+          // blip pulsing again (at most every 20 s)
+          if (foot) best = Math.min(best, d);
+          if ((foot ? d > 10 && d > best + 8 : d > 45) && now() - hintT > 20000) {
+            hintT = now(); best = foot ? d : best;
+            ui.help(["Lev's phone is back by his wrecked car. Follow the ", { 'green marker': 'green' }, '.'], 7, { mode: null });
+            gps.unblip('phone'); blip(6);
+          }
+          return act.step(dt, dist(P.position, drop[0], drop[1]), foot);
         });
-      } finally { act.stop(); spot.hide(); app.scene.remove(spot.group); }
-      gps.unblip('phone'); S.phone.visible = false;
+      } finally { act.stop(); spot.hide(); app.scene.remove(spot.group); S.chevG.hide(); }
+      gps.unblip('phone'); gps.clear(); S.phone.visible = false;
       const h = Math.atan2(drop[0] - P.position.x, drop[1] - P.position.z) + PI;
       const def = phoneScene(W, { U, say, at: [P.position.x, P.position.z, h] });
       def.setup();
@@ -665,6 +719,17 @@ function createMission(W, { keep = false } = {}) {
   // (a skip goes on to the next thing that happens: the chase's skip still plays the crash, Lev's car and all)
   const SKIP_TO = { chase: 'crash' };
   const LABELS = { start: 'Bryant Park', go: 'To Times Square', tail: 'Times Square · the tail', yard: 'The yard', fight: 'The fight', chase: 'The chase', phone: "Lev's phone" };
+  // the fail screen (ui.failed): a tip by the reason, what Retry does by the checkpoint it goes back to, what Skip does
+  // by the phase he failed in (a skip goes on past every phase of that checkpoint: M.run; the fight's, past the yard's)
+  const TIPS = {
+    'Quant got rekt.': ['Counter the ', { 'yellow cues': 'yellow' }, ' with [Q], roll away from ', { 'red ones': 'red' }, ' with [C], and grab a trash can or a bottle with [E]: it hits much harder. Out of reach for a few seconds, your health creeps back.'],
+    'The van got away.': ['Keep the van in the ', { GOOD: 'yellow' }, ' band on the meter, 18 to 70 m back. Fall behind and it slows down; too close and they spot you.'],
+    'You left the yard.': ['The stash is in the container yard at 12th Ave and W 55th St. Stay near it.'],
+    'You left the fight.': ['Stay in the yard while the Degens are up. To catch your breath, back off a few metres, not out of the yard.'],
+    'Lev got away.': ["Keep Lev's ", { 'red blip': 'red' }, ' within 150 m. Ram his car to wreck it, or just keep up: he crashes at Greeley Square.'],
+  };
+  const RETRY = { start: 'Retry: from Bryant Park', go: 'Retry: the drive to Times Square', tail: 'Retry: the tail', yard: 'Retry: from the yard, sneak in again', chase: 'Retry: the chase', phone: "Retry: Lev's phone" };
+  const SKIP = { tail: 'Skip the tail: start at the yard', yard: 'Skip the yard: start at the chase', fight: 'Skip the fight: start at the chase', chase: "Skip the chase: start at Lev's crash" };
   // the checkpoint he'd restart from now: Times Square reached, the tail's (in his car behind the van), not the park's
   const checkpointNow = () => (M._phase === 'go' && S.square ? 'tail' : CHECKPOINT[M._phase] || 'start');
 
@@ -776,7 +841,8 @@ function createMission(W, { keep = false } = {}) {
           tidy(); cm.resetInput?.();
           if (e.rekt) { ui.rekt(true); sfx?.play('failed'); await sleep(2600); ui.rekt(false); } else sfx?.play('failed');
           const cp = checkpointNow(); fails[cp] = (fails[cp] || 0) + 1;
-          const choice = await ui.failed(e.reason, { skip: fails[cp] >= 3 });
+          // (failed on the way to Times Square once it is reached: the tail's checkpoint, and its skip)
+          const choice = await ui.failed(e.reason, { skip: fails[cp] >= 3, tip: TIPS[e.reason], retryLabel: RETRY[cp], skipLabel: SKIP[phase === 'go' ? cp : phase], quitLabel: 'Quit: back to free roam' });
           W.combat?.clear?.(); S.stealth?.dispose(); S.stealth = null; S.crew = null; S.alarm = false;
           if (choice === 'quit') { M.stop(); return; }
           // (a retry starts the tail over unspotted)
