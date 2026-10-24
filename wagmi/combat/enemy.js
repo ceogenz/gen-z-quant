@@ -32,8 +32,9 @@ export const TYPES = {
 // hand), then meets Quant), its share of his damage, and whether a counter can stop it. Armed: the weapon it needs;
 // thrown: hit is the moment it leaves his hand
 export const BLOWS = {
-  thugPunch1: { hit: 0.33, tele: 0.66, range: 1.0, dmg: 1, counter: true },
-  thugPunch2: { hit: 0.20, tele: 0.56, range: 0.95, dmg: 0.8, counter: true },
+  // (Quant stands upright since 23 Oct: the unarmed punches' reach re-measured against his body)
+  thugPunch1: { hit: 0.33, tele: 0.66, range: 0.82, dmg: 1, counter: true },
+  thugPunch2: { hit: 0.20, tele: 0.56, range: 0.76, dmg: 0.8, counter: true },
   thugKick: { hit: 0.30, tele: 0.6, range: 0.9, dmg: 1.1, counter: true },
   bruteSlam: { hit: 0.57, tele: 1.0, range: 1.2, dmg: 1.6, counter: false, heavy: true },
   batChop: { clip: 'bruteSlam', hit: 0.51, tele: 0.95, range: 1.1, dmg: 1.9, counter: true, weapon: 'bat', glint: 0.36 },

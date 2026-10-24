@@ -242,6 +242,12 @@ installDriveMode(WAGMI);
 {
   const gltf = await new GLTFLoader().loadAsync('assets/characters/quant.glb');
   const body = gltf.scene;
+  // (the export's armature node, the parent of the bone 'root', carries a fixed turn of 12.8 deg that no clip moves: 11
+  // deg forward and 6 deg over to his right. Every clip stood him on it, his hips 24 cm ahead of his feet and 12 cm to
+  // the side, his chest and head down. Taken out (its scale kept), he stands over his feet; lifted 2 cm, his soles are
+  // on the pavement in the idle and the guard (measured: they were 2-3.5 cm into it))
+  const armature = body.getObjectByName('root')?.parent;
+  if (armature && armature !== body) { armature.quaternion.identity(); armature.position.y += 0.02; }
   body.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; o.frustumCulled = false; } });
   for (const m of person.crowd.meshes) m.visible = false;
   person.mesh.add(body);

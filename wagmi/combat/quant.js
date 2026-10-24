@@ -32,26 +32,28 @@ const _v = new THREE.Vector3(), _v2 = new THREE.Vector3(), _v3 = new THREE.Vecto
 const UP = new THREE.Vector3(0, 1, 0);
 // [clip, moment of contact (clip s), pace, root-to-root distance at contact (m, a grunt; a brute is bigger), damage,
 // kind, side (where it lands: +1 his left, -1 his right, the way his head snaps), the limb that lands]
+// (measured again 23 Oct, Quant standing upright over his feet: his fists land 0.27-0.35 m nearer him than they did when
+// he leaned 11 deg into every move, his kicks ~0.15 m; the ranges brought in to match, so they still meet the body)
 const MOVES = {
   // (the jab and the cross snap out: their wind-up mostly skipped, the fist lands ~0.11-0.13 s after the press)
-  jab: { clip: 'ffJab', from: 0.07, hit: 0.24, ts: 1.55, range: 1.1, dmg: 8, kind: 'light', side: 0, limb: 'fl' },
-  cross: { clip: 'ffCross', from: 0.06, hit: 0.26, ts: 1.5, range: 1.2, dmg: 9, kind: 'light', side: 1, limb: 'fr' },
-  hook: { clip: 'ffHook', hit: 0.29, ts: 1.35, range: 0.86, dmg: 10, kind: 'light', side: -1, limb: 'fr' },
-  kick: { clip: 'ffKick', hit: 0.30, ts: 1.4, range: 1.12, dmg: 10, kind: 'light', side: 1, limb: 'footR' },
-  uppercut: { clip: 'ffRiser', hit: 0.30, ts: 1.2, range: 1.02, dmg: 15, kind: 'ender', side: 0, limb: 'fr', up: 4.4, fly: 3.2 },
-  roundhouse: { clip: 'ffKick', hit: 0.30, ts: 1.15, range: 1.12, dmg: 16, kind: 'ender', side: 1, limb: 'footR' },
-  leap: { clip: 'ffLeap', hit: 0.22, ts: 1.15, range: 1.2, dmg: 16, kind: 'ender', side: 0, limb: 'footR' },
+  jab: { clip: 'ffJab', from: 0.07, hit: 0.24, ts: 1.55, range: 0.83, dmg: 8, kind: 'light', side: 0, limb: 'fl' },
+  cross: { clip: 'ffCross', from: 0.06, hit: 0.26, ts: 1.5, range: 0.93, dmg: 9, kind: 'light', side: 1, limb: 'fr' },
+  hook: { clip: 'ffHook', hit: 0.29, ts: 1.35, range: 0.62, dmg: 10, kind: 'light', side: -1, limb: 'fr' },
+  kick: { clip: 'ffKick', hit: 0.30, ts: 1.4, range: 1.0, dmg: 10, kind: 'light', side: 1, limb: 'footR' },
+  uppercut: { clip: 'ffRiser', hit: 0.30, ts: 1.2, range: 0.72, dmg: 15, kind: 'ender', side: 0, limb: 'fr', up: 4.4, fly: 3.2 },
+  roundhouse: { clip: 'ffKick', hit: 0.30, ts: 1.15, range: 1.0, dmg: 16, kind: 'ender', side: 1, limb: 'footR' },
+  leap: { clip: 'ffLeap', hit: 0.22, ts: 1.15, range: 1.05, dmg: 16, kind: 'ender', side: 0, limb: 'footR' },
   // heavies (slower, harder: a man down, a brute's armour wearing through)
-  heavyKick: { clip: 'ffKick', from: 0.05, hit: 0.30, ts: 1.1, range: 1.12, dmg: 18, kind: 'heavy', side: 1, limb: 'footR', fly: 6.8, up: 3.4 },
-  heavyRiser: { clip: 'ffRiser', from: 0.04, hit: 0.30, ts: 1.1, range: 1.02, dmg: 17, kind: 'heavy', side: 0, limb: 'fr', fly: 3, up: 5.4 },
+  heavyKick: { clip: 'ffKick', from: 0.05, hit: 0.30, ts: 1.1, range: 1.0, dmg: 18, kind: 'heavy', side: 1, limb: 'footR', fly: 6.8, up: 3.4 },
+  heavyRiser: { clip: 'ffRiser', from: 0.04, hit: 0.30, ts: 1.1, range: 0.72, dmg: 17, kind: 'heavy', side: 0, limb: 'fr', fly: 3, up: 5.4 },
   // a counter: the cross, through him
-  counter: { clip: 'ffCross', from: 0.06, hit: 0.26, ts: 1.5, range: 1.2, dmg: 14, kind: 'counter', side: 1, limb: 'fr', fly: 5.5, up: 3.4 },
+  counter: { clip: 'ffCross', from: 0.06, hit: 0.26, ts: 1.5, range: 0.93, dmg: 14, kind: 'counter', side: 1, limb: 'fr', fly: 5.5, up: 3.4 },
   // armed (from: where the clip starts, until: where it stops; the ranges measured with the item in his fist):
   //   bat: a rising swing (low across his front, then up on his left: he squares up turned right of the man, yawOff,
   //   so it meets his ribs), then the big one, down from over his right shoulder (turned left of him: it comes down on
   //   his shoulder and head); heavy, a low sweep that takes the legs. lo: the lowest it may meet him (x his height)
   batRise: { clip: 'slash1', from: 0.12, until: 0.33, hit: 0.258, ts: 1.0, range: 1.45, dmg: 15, kind: 'light', side: -1, limb: 'item', w: 0.6, up: 2, yawOff: -0.75, lo: 0.9 },
-  batSmash: { clip: 'smash', from: 0.24, until: 0.47, hit: 0.386, ts: 1.0, range: 1.55, dmg: 24, kind: 'ender', side: 1, limb: 'item', fly: 7.5, up: 3.6, yawOff: 0.9, lo: 1.25 },
+  batSmash: { clip: 'smash', from: 0.24, until: 0.47, hit: 0.386, ts: 1.0, range: 1.27, dmg: 24, kind: 'ender', side: 1, limb: 'item', fly: 7.5, up: 3.6, yawOff: 0.9, lo: 1.25 },
   batSweep: { clip: 'slash3', from: 0.03, until: 0.3, hit: 0.155, ts: 0.9, range: 1.05, dmg: 18, kind: 'heavy', side: 0, limb: 'item', fly: 2.5, up: 4.8, low: true },
   //   bottle: over his head (the swing comes round from high on Quant's right: he squares up turned a little to his left
   //   (yawOff, rad) so it comes down on the man's head)
