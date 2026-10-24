@@ -72,7 +72,7 @@ Music (the car radio: wagmi/radio/stations.js)
 The same list is in assets/CREDITS.md, and in the game on the pause menu's Credits page
 (wagmi/credits.js). The game's theme is "Pyro Flow" by Kevin MacLeod (WAGMI FM's first track).
 
-  - "We All Gonna Make It", "Pump & Dump" and "Fifth Ave Glide" (WAGMI FM;
+  - "We All Gonna Make It", "Number Go Up" and "Fifth Ave Glide" (WAGMI FM;
     assets/music/wagmi-theme.m4a, wagmi-pump.m4a, wagmi-glide.m4a) are original to this game,
     composed as code and rendered offline by wagmi/radio/build/music/ (no samples, no loops from
     anyone else).

@@ -1,5 +1,5 @@
 // Gen Z Quant: Unfinished Business. The cold open: a 40 s trailer, live in the engine, between "Tap to start" and the
-// opening: cut on the beat of the game's own "Pump & Dump" (140 BPM, assets/music/wagmi-pump.m4a, MIT), letterboxed and
+// opening: cut on the beat of the game's own "Number Go Up" (140 BPM, assets/music/wagmi-pump.m4a, MIT), letterboxed and
 // graded, then the opening (wagmi/intro.js) from its first frame exactly as before. Hold to skip it at any moment (the
 // cutscenes' own skip: Space or Enter held, a long press anywhere, the pad's A).
 //   ?trailer=0  without it        ?trailer=only  it alone, held on the title at the end (for looking at it;

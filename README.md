@@ -4,7 +4,7 @@
 
 **▶ [Play now at genzquant.com](https://genzquant.com)** (free, in your browser, desktop or phone) · [Watch the trailer](https://genzquant.com/trailer.mp4) · [Contribute](CONTRIBUTING.md) · [Roadmap](ROADMAP.md)
 
-**GEN Z QUANT: Unfinished Business** is an open-world mission game in the browser. Quant went viral for a joke coin. It pumped, it dumped, and the people who lost their bags want someone to blame. Now a crew called the Degens has taken his dog, Moon. Their boss, a masked streamer called ZK, wants the community paid back, and Quant to stop posting. Quant wants his dog back.
+**GEN Z QUANT: Unfinished Business** is an open-world mission game in the browser. Quant went viral for a joke coin but the people who lost their bags want someone to blame. Now a crew called the Degens has taken his dog, Moon. Their boss, a masked streamer called ZK, wants the community paid back, and Quant to stop posting. Quant wants his dog back.
 
 Drive Quant's rocket-boosted supercar through Manhattan, fight the Degens hand to hand, follow the trail from Chelsea to the West Side yards to Washington Square, and get Moon home.
 

@@ -47,7 +47,7 @@ under [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/).
 
 ### Original to this game
 
-"We All Gonna Make It", "Pump & Dump" and "Fifth Ave Glide" play on WAGMI FM (`wagmi-theme.m4a`, `wagmi-pump.m4a`,
+"We All Gonna Make It", "Number Go Up" and "Fifth Ave Glide" play on WAGMI FM (`wagmi-theme.m4a`, `wagmi-pump.m4a`,
 `wagmi-glide.m4a`). They were composed as code in `wagmi/radio/build/music/` and are MIT-licensed with the rest of the
 game.
 

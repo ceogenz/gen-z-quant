@@ -21,7 +21,7 @@ export const STATIONS = [
       { file: 'assets/music/pyro-flow.m4a', title: 'Pyro Flow', artist: 'Kevin MacLeod', dur: 231.97, lufs: -14.04, lic: 'CC BY 4.0', by: MACLEOD('Pyro Flow'), src: INCOMPETECH('Pyro Flow') },
       { file: 'assets/music/wagmi-theme.m4a', title: 'We All Gonna Make It', artist: 'Gen Z Quant', dur: 142.98, lufs: -14.1, lic: 'original' },
       { file: 'assets/music/basic-implosion.m4a', title: 'Basic Implosion', artist: 'Kevin MacLeod', dur: 187.8, lufs: -14.05, lic: 'CC BY 4.0', by: MACLEOD('Basic Implosion'), src: INCOMPETECH('Basic Implosion') },
-      { file: 'assets/music/wagmi-pump.m4a', title: 'Pump & Dump', artist: 'Gen Z Quant', dur: 137.14, lufs: -14.03, lic: 'original' },
+      { file: 'assets/music/wagmi-pump.m4a', title: 'Number Go Up', artist: 'Gen Z Quant', dur: 137.14, lufs: -14.03, lic: 'original' },
       { file: 'assets/music/wagmi-glide.m4a', title: 'Fifth Ave Glide', artist: 'Gen Z Quant', dur: 133.95, lufs: -14.03, lic: 'original' },
     ],
   },
