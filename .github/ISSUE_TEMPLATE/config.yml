@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: An idea (a mission, a character, a side activity, the city)
+    url: https://github.com/ceogenz/gen-z-quant/discussions/categories/ideas
+    about: Pitch it in Discussions first. Good ideas become issues.
+  - name: A question
+    url: https://github.com/ceogenz/gen-z-quant/discussions/categories/q-a
+    about: Ask in Discussions.

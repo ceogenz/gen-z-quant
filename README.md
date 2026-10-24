@@ -1,5 +1,9 @@
 # GEN Z QUANT: Unfinished Business
 
+[![GEN Z QUANT: Unfinished Business](og.jpg)](https://genzquant.com)
+
+**▶ [Play now at genzquant.com](https://genzquant.com)** (free, in your browser, desktop or phone) · [Watch the trailer](https://genzquant.com/trailer.mp4) · [Contribute](CONTRIBUTING.md) · [Roadmap](ROADMAP.md)
+
 **GEN Z QUANT: Unfinished Business** is an open-world mission game in the browser. Quant went viral for a joke coin. It pumped, it dumped, and the people who lost their bags want someone to blame. Now a crew called the Degens has taken his dog, Moon. Their boss, a masked streamer called ZK, wants the community paid back, and Quant to stop posting. Quant wants his dog back.
 
 Drive Quant's rocket-boosted supercar through Manhattan, fight the Degens hand to hand, follow the trail from Chelsea to the West Side yards to Washington Square, and get Moon home.
@@ -8,7 +12,7 @@ GEN Z QUANT is a free, open-source community project. It is built on [Slop New Y
 
 ## Play it
 
-There is no build step. Serve the folder and open it in a browser with WebGPU (a recent Chrome or Edge works best):
+Play it at **[genzquant.com](https://genzquant.com)**. To run it yourself there is no build step: serve the folder and open it in a browser (a recent Chrome or Edge works best; phones work too):
 
 ```bash
 python3 -m http.server 8000
@@ -18,7 +22,7 @@ Then open http://localhost:8000. Click, or press any key, for sound.
 
 ## What's in it
 
-- **Three story missions.** *Dognapped*: the opening, then Chelsea Park. *Burner*: Bryant Park, Times Square and the West Side yard. *Pump and Dump*: Gears' garage and the $MOON2 rally at Washington Square.
+- **Three story missions.** *Dognapped*: the opening, then Chelsea Park. *Burner*: Bryant Park, Times Square and the West Side yard. *KOLs*: Gears' garage and Floor Price Fiona's $MOON2 KOL rally at Washington Square.
 - **An 81-second opening cutscene**, with phone calls, cut scenes and a cast of voiced characters.
 - **Street fighting.** Fists, kicks, bats, bottles and trash cans; counters, dodges and takedowns. No guns.
 - **Quant's car.** A supercar with a V8 or an all-electric mode (Q), cold-gas thrusters for hops and sideways dashes, and a boost.
@@ -59,6 +63,8 @@ Some parts are not ours and keep their own terms:
 Geographic data: NYC Open Data and © [OpenStreetMap contributors](https://www.openstreetmap.org/copyright) (ODbL).
 
 ## For contributors
+
+Start with [CONTRIBUTING.md](CONTRIBUTING.md): how to run it, the house rules, licences and how pull requests are reviewed. What could come next is in [ROADMAP.md](ROADMAP.md); ideas go to [Discussions](https://github.com/ceogenz/gen-z-quant/discussions).
 
 - `index.html` loads the city (`js/`, from Slop New York) and the game (`wagmi/`: missions, combat, the car, audio, radio, characters).
 - `docs/MISSIONS.md` is the mission design and as-built notes; `docs/VOICE-LINES.md` is the line sheet and how voices are made.
