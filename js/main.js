@@ -382,10 +382,22 @@ async function initApp() {
   };
   let hintPad = false;
   // Boosted top speeds in mph (controllers.js caps them at 8.2, 36, 19 & 52 m/s): full scale of the speed meter
-  // (Gen Z Quant: Quant's car reads double on its dial, speedDial: its 76 mph cruise shows 152, the boost 250; the
-  // meter's scale doubled with it, so it fills as before, the cruise most of it and the boost all of it)
-  const topSpeedMph = { person: 18, car: 162, cyclist: 43, helicopter: 116 };
-  const speedDial = { car: 2 };
+  // (Gen Z Quant: Quant's car has a dial of its own, carDial: the meter fills to its 176)
+  const topSpeedMph = { person: 18, car: 176, cyclist: 43, helicopter: 116 };
+  // (Gen Z Quant, the owner 24 Oct: Quant's car peaks at 176 and never shows a frozen number. Double its real mph up to
+  // the cruise (34 m/s, 76 mph: 152), the boost's 76-125 mph over the last 24 (56 m/s: 176); held at either top it
+  // wanders the 3 under it (149-152, 173-176), a new number every update)
+  let dialLast = -1;
+  function carDial(c, boosting) {
+    const v = Math.abs(c.speed), v1 = c.topSpeed ?? 34, v2 = c.boostSpeed ?? 56;
+    const at = v <= v1 ? 152 * v / v1 : 152 + 24 * Math.min(1, (v - v1) / (v2 - v1));
+    // (held at a top: at the boost's while it burns, at the cruise's otherwise; the boost dying away is no top)
+    const cap = (c.boosting ?? boosting) ? v2 : v1;
+    if (Math.abs(v - cap) > cap * 0.005) return (dialLast = Math.round(at));
+    const top = cap === v2 ? 176 : 152;
+    let n; do n = top - Math.floor(Math.random() * 4); while (n === dialLast);
+    return (dialLast = n);
+  }
 
   function renderControlHints(mode) {
     if (!elControlsHint) return;
@@ -895,7 +907,7 @@ async function initApp() {
 
       const activeEnt = controllerManager.getActiveEntity();
       const mode = controllerManager.activeMode;
-      const mph = Math.round(Math.abs(activeEnt.speed) * 2.237 * (speedDial[mode] || 1));
+      const mph = mode === 'car' ? carDial(activeEnt, controllerManager.keys.boost) : Math.round(Math.abs(activeEnt.speed) * 2.237);
       const altFt = Math.max(0, Math.round(activeEnt.position.y * 3.281));
 
       if (elFps) {
