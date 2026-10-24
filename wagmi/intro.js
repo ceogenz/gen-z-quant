@@ -746,11 +746,10 @@ function buildScript(ctx) {
   }
 
   // ---- the cues: once each, as the clock passes them (ui: also replayed on a seek into their span)
-  // (it opens on the place, not on a second title: the start gate's logo, held into the first shot, goes at once; the
-  // owner, 24 Oct)
+  // (it opens on the place, not on a second title (the owner, 24 Oct): the start gate's logo is taken down by the start
+  // itself (run(): the trailer's black, or at once without one), never by a cue: run() draws frame 0 under the gate)
   let sound = {};
   const CUES = [
-    [0, () => ui.gameTitle(false)],
     [0.3, () => sfx.play('stinger', { gain: 0.3 })],
     [0.8, (r = 4.6) => ui.place('Murray Hill', 'E 37th St · Midtown · 5:45 PM', r), 4.6, true],
     [11.0, () => sfx.play('thunk', { gain: 0.12, f: 220, ring: false })],
@@ -803,7 +802,8 @@ function buildScript(ctx) {
   let cueAt = 0;
   function cues(t, seek) {
     if (seek) {
-      ui.phone.hide(); ui.caption(null); ui.gameTitle(false); ui.titleOff(); ui.placeOff(); ui.zk(false);
+      // (the start gate's logo is not the opening's: left to the start, run())
+      ui.phone.hide(); ui.caption(null); ui.titleOff(); ui.placeOff(); ui.zk(false);
       // (what is left of each one's time: a cue that takes it holds only the rest of its span)
       cueAt = 0; while (cueAt < CUES.length && CUES[cueAt][0] <= t) { const c = CUES[cueAt]; if (c[3] && t < c[0] + (c[2] || 0)) c[1](c[0] + (c[2] || 0) - t); cueAt++; }
       return;
@@ -1398,6 +1398,7 @@ function buildScript(ctx) {
     // the trailer first (wagmi/trailer.js), then the opening from its first frame as before
     // (the opening has no title of its own: it opens on Murray Hill, the name already on the gate and in the trailer)
     if (W.trailer) { await W.trailer.play(borrow); W.trailer = null; startState(); t = 0; lastT = -1; frame(0); }
+    else ui.gameTitle(false);
     sound.city = sfx.city(); sound.city?.fadeTo(0.5, 2.5);
     sound.pad = sfx.pad(); sound.pad?.fadeTo(0.16, 4);
     sound.voice = sfx.voice();
