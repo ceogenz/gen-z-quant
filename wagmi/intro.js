@@ -3,7 +3,7 @@
 // ?m1=car|drive|fight|search: Mission 1 from that checkpoint (no cutscene).   ?nogate: no start gate (captures).
 //
 // The opening, E 37th St at golden hour (docs/MISSIONS.md 5.2, with ZK's call moved up to it), 81 s:
-//   1 aerial over Murray Hill to the Empire State: GEN Z QUANT      2 E 37th St from the Madison end: Murray Hill
+//   1 aerial over Murray Hill to the Empire State: Murray Hill      2 E 37th St from the Madison end
 //   3 the door: Moon trots out, Quant follows on his phone          4 the comments; Moon tugs for the car (her eye level)
 //   5 the van turns in from Madison, tyres screaming                 6 behind Quant: the door rips open, the Degens come on
 //   7 over Bagsy's shoulder: 'Sign my bags?'                         8 Stops scoops Moon up and runs for the van
@@ -76,7 +76,7 @@ export async function install(W) {
   // (a first visit's start: 'Starting…' stays on the gate until the cold open can run at once, rather than a black
   // screen while its music still comes down: hold, set below once the opening's cast is under way)
   let roll = null;
-  const gateOpts = { when: () => W.app.ready, onStart: () => { W.audio?.unlock?.(); sfx.unlock(); }, hold: () => roll?.() ?? null, fine: 'Headphones on · Built on Slop New York by mrdoob' };
+  const gateOpts = { when: () => W.app.ready, onStart: () => { W.audio?.unlock?.(); sfx.unlock(); }, hold: () => roll?.() ?? null, fine: 'Community entertainment project. Have fun!' };
   const gate = Q.has('nogate') ? null : save ? save.saveGate(ui, gateOpts) : ui.gate(gateOpts);
   // the cold open (wagmi/trailer.js; ?trailer=0 leaves it out): its music fetched from when Quant is in (game.js), black
   // on the tap once it can play, played on this set before the opening
@@ -746,12 +746,13 @@ function buildScript(ctx) {
   }
 
   // ---- the cues: once each, as the clock passes them (ui: also replayed on a seek into their span)
-  let sound = {}, noTitle = false;
+  // (it opens on the place, not on a second title: the start gate's logo, held into the first shot, goes at once; the
+  // owner, 24 Oct)
+  let sound = {};
   const CUES = [
-    [0, () => { if (!noTitle) ui.gameTitle(true); }, 4.5, true],
+    [0, () => ui.gameTitle(false)],
     [0.3, () => sfx.play('stinger', { gain: 0.3 })],
-    [4.5, () => ui.gameTitle(false)],
-    [6.5, (r = 3.6) => ui.place('Murray Hill', 'E 37th St · Midtown · 5:45 PM', r), 3.6, true],
+    [0.8, (r = 4.6) => ui.place('Murray Hill', 'E 37th St · Midtown · 5:45 PM', r), 4.6, true],
     [11.0, () => sfx.play('thunk', { gain: 0.12, f: 220, ring: false })],
     [12.1, (r = 1.6) => ui.caption('Moon', 'very good dog', BLUE, r), 1.6, true],
     [13.75, (r = 1.85) => ui.caption('Quant', 'the coin kid', YELLOW, r), 1.85, true],
@@ -1395,8 +1396,8 @@ function buildScript(ctx) {
     if (gate) await gate;
     sfx.unlock();
     // the trailer first (wagmi/trailer.js), then the opening from its first frame as before
-    // (after the trailer's own logo slam the opening leaves its title out, so the name doesn't show twice)
-    if (W.trailer) { const tr = await W.trailer.play(borrow); noTitle = !!tr?.sawLogo; W.trailer = null; startState(); t = 0; lastT = -1; frame(0); }
+    // (the opening has no title of its own: it opens on Murray Hill, the name already on the gate and in the trailer)
+    if (W.trailer) { await W.trailer.play(borrow); W.trailer = null; startState(); t = 0; lastT = -1; frame(0); }
     sound.city = sfx.city(); sound.city?.fadeTo(0.5, 2.5);
     sound.pad = sfx.pad(); sound.pad?.fadeTo(0.16, 4);
     sound.voice = sfx.voice();

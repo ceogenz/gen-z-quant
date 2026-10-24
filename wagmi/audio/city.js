@@ -145,7 +145,7 @@ export function createCity(M, E) {
       if (s.t > s.n * 0.62 && k2 < 0.9) { s.n++; for (const dd of [0, 0.13]) E.play('kerb', { bus: 'amb', k: 0.3 * env, vol: avenue, pan: 0, d: 12 + dd }); }
       if (k2 >= 1) { s.L.stop(0.5); s.Q.stop(0.5); subway = null; }
     }
-    if (T.coo <= 0) { at('coo', { d: 5 + R() * 22, vol: 0.5 + 0.5 * R() }); T.coo = (3 + R() * 9) / (0.4 + 1.6 * park); }
+    // (no pigeon coo: it read as an owl hooting in the background, the owner, 24 Oct)
     if (T.chirp <= 0) { if (park > 0.2) at('chirps', { d: 8 + R() * 30, vol: park }); T.chirp = 1 + R() * 4; }
     if (T.flutter <= 0) { at('flutter', { d: 4 + R() * 14, vol: 0.6 }); T.flutter = 20 + R() * 40; }
     if (T.build <= 0) {
