@@ -29,7 +29,10 @@ export function install(W) {
     if (M) return M;
     const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return null;
     try {
-      M = createMixer(new AC({ latencyHint: 'interactive' }));
+      // (touch-first devices get a bigger output buffer: on a busy phone a small one runs dry and crackles)
+      let touchFirst = false;
+      try { touchFirst = matchMedia('(pointer: coarse)').matches && !matchMedia('(any-pointer: fine)').matches; } catch (e) { /* old browsers */ }
+      M = createMixer(new AC({ latencyHint: touchFirst ? 'playback' : 'interactive' }));
       // (the traffic's engines and the crash's metal: their sound baked a slice at a time in idle moments from now)
       M.motors = createMotors(M); M.motors.warm();
       warmCrunch(M);

@@ -75,7 +75,10 @@ function autoGfxTier() {
   let coarse = false;
   try { coarse = window.matchMedia('(pointer: coarse)').matches; } catch (e) { /* old browsers */ }
   const short = Math.min(window.screen.width || Infinity, window.screen.height || Infinity);
-  return coarse && short <= 500 ? 'phone' : 'high';
+  // (a touch-first device with no mouse or trackpad, such as a foldable or a tablet, is a phone too, whatever its size)
+  let fine = true;
+  try { fine = window.matchMedia('(any-pointer: fine)').matches; } catch (e) { /* old browsers */ }
+  return coarse && (short <= 500 || !fine) ? 'phone' : 'high';
 }
 function createQuality() {
   let override = null;
