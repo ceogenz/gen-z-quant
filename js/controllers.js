@@ -31,6 +31,12 @@ const { PersonCrowd, PersonRig } = window.NYC;
 const { HEADLIGHTS, createVehicleHeadlight, placeVehicleHeadlight } = window.NYC;
 // Walking surface for the player's pedestrian (its rig samples it around its feet)
 const personGround = (controllers, x, z) => controllers.getGroundHeight(x, z, 'person');
+// (Gen Z Quant) on foot the way to go is the camera's (readFootMove, walkToward): how briskly he turns to it, and how
+// lazily the view comes round behind him as he walks away from it
+const FOOT_TURN = 11; // rad/s
+const FOOT_FOLLOW = 0.35; // 1/s
+const _footView = new THREE.Vector3();
+const wrapAngle = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 // (x, z) inside a ring of { x, z } points (its bounds kept on it)
 function inRing(pts, x, z) {
   let b = pts._b;
@@ -114,6 +120,8 @@ class ThirdPersonControllerManager {
       down: false,
       boost: false
     };
+    // (Gen Z Quant: on foot, the way they point from the camera: readFootMove)
+    this.footMove = { mag: 0, x: 0, z: 0, away: 0 };
 
     this.entities = {
       person: this.createPersonEntity(),
@@ -1188,8 +1196,51 @@ class ThirdPersonControllerManager {
     this.poseCharacters(dt);
   }
 
+  // (Gen Z Quant) On foot the move keys, the touch stick and a game pad's stick all point the way to go from the camera,
+  // as in a modern third-person game: W (the stick up) away from the lens, S toward it, A and D to its left and right.
+  // The same before, during and after a fight (the fight's footwork reads the keys the same way: wagmi/combat/quant.js).
+  // This frame's, in this.footMove: { mag 0..1, x, z (the way in the world, unit), away (1: straight away from the
+  // lens, 0: across it, -1: toward it) }, also read by the hurdle (wagmi/vault.js) and the fight's camera
+  readFootMove() {
+    const k = this.keys;
+    const m = this.footMove;
+    const f = (+k.forward || 0) - (+k.backward || 0), s = (+k.right || 0) - (+k.left || 0), L = Math.hypot(f, s);
+    m.mag = Math.min(1, L);
+    m.away = L > 1e-6 ? f / L : 0;
+    const cs = (this._footCam = this.cameraSystem || window.__NYC_APP?.cameraSystem || null);
+    if (L < 1e-6 || !cs) { m.x = 0; m.z = 0; return m; }
+    cs.camera.getWorldDirection(_footView);
+    const yaw = Math.atan2(_footView.x, _footView.z), fx = Math.sin(yaw), fz = Math.cos(yaw);
+    // (along the view, and its screen right: (-cos, sin))
+    const dx = fx * f - fz * s, dz = fz * f + fx * s, n = Math.hypot(dx, dz) || 1;
+    m.x = dx / n; m.z = dz / n;
+    return m;
+  }
+
+  // (Gen Z Quant) He turns briskly to the way he is sent. The view stays where it looks while he turns (the chase
+  // camera follows his heading, so its orbit is turned back by as much) and comes round behind him only lazily, only
+  // while he walks away from it and not soon after a look round (a drag, a game pad's right stick). Walking across the
+  // view or toward it, it holds: A or D walks him across the screen, never round in circles. While another camera holds
+  // the view itself (the fight's, a cutscene's: p.viewHeld()) its orbit is left to it. Returns the share of the walk he
+  // makes this frame (less while turning right round)
+  walkToward(p, mv, cs, dt) {
+    const d = wrapAngle(Math.atan2(mv.x, mv.z) - p.heading);
+    const turn = Math.sign(d) * Math.min(Math.abs(d), FOOT_TURN * dt);
+    p.heading += turn;
+    if (!(p.viewHeld && p.viewHeld())) {
+      cs.orbitYawOffset = wrapAngle(cs.orbitYawOffset - turn);
+      const w = Math.max(0, Math.min(1, (mv.away - 0.2) / 0.8));
+      if (w > 0 && !cs.isDragging && cs.userOrbitTimer < 2.5) cs.orbitYawOffset *= Math.exp(-FOOT_FOLLOW * w * dt);
+    }
+    // (the chase camera's own quick swing back behind him held off; across the view or toward it, a fight's hand-back
+    // too: wagmi/combat/camera.js lets go of it past 0.6)
+    cs.userOrbitTimer = Math.max(cs.userOrbitTimer, mv.away > 0.6 ? 0.25 : 0.65);
+    return Math.abs(d) > 2.2 ? 0.3 : 1;
+  }
+
   updatePerson(dt) {
     const p = this.entities.person;
+    const mv = this.readFootMove();
     // (Gen Z Quant: in a fight, or in the middle of a move, the fight moves him itself: footwork facing his man,
     // camera-relative, lunges, rolls; with the same collision and ground as below. True when it did)
     if (p.control && p.control(dt, this.keys, this)) return;
@@ -1197,11 +1248,16 @@ class ThirdPersonControllerManager {
     const turnRate = 2.6;
 
     let targetSpeed = 0;
-    if (this.keys.forward) targetSpeed = maxWalk * this.keys.forward;
-    else if (this.keys.backward) targetSpeed = -maxWalk * 0.65 * this.keys.backward;
-
-    if (this.keys.left) p.heading += turnRate * dt * this.keys.left;
-    if (this.keys.right) p.heading -= turnRate * dt * this.keys.right;
+    const cs = this._footCam;
+    if (cs) {
+      if (mv.mag > 0.02) targetSpeed = maxWalk * mv.mag * this.walkToward(p, mv, cs, dt);
+    } else {
+      // (no camera to go by: the keys turn him)
+      if (this.keys.forward) targetSpeed = maxWalk * this.keys.forward;
+      else if (this.keys.backward) targetSpeed = -maxWalk * 0.65 * this.keys.backward;
+      if (this.keys.left) p.heading += turnRate * dt * this.keys.left;
+      if (this.keys.right) p.heading -= turnRate * dt * this.keys.right;
+    }
 
     p.speed += (targetSpeed - p.speed) * Math.min(1, dt * 10);
 

@@ -902,6 +902,9 @@ class PersonCrowd {
    */
   constructor(maxCount, { farDistance = 34, castShadow = true, farShadow = true, name = 'People' } = {}) {
     this.farDistance = farDistance;
+    // (Gen Z Quant) Three's WebGL2 backend (no WebGPU: main.js, window.NYC.quality) can't read a person's pose from the
+    // storage buffer: a crowd is never drawn there (no layer to be seen on, whatever its visibility)
+    const drawable = !(window.NYC.quality && window.NYC.quality.backend === 'webgl2');
     this.lods = [1, 0].map((detail) => {
       const pose = attributeArray(maxCount * STRIDE, 'vec4').toReadOnly();
       const mesh = new THREE.Mesh(buildPersonGeometry(detail), createPersonMaterial(pose));
@@ -910,6 +913,7 @@ class PersonCrowd {
       mesh.frustumCulled = false;
       mesh.castShadow = castShadow && (detail === 1 || farShadow);
       mesh.receiveShadow = true;
+      if (!drawable) mesh.layers.disableAll();
       return { pose, mesh, count: 0, max: maxCount };
     });
     this.meshes = this.lods.map((l) => l.mesh);

@@ -120,6 +120,8 @@ kbd {
   inset: 0;
   width: 100vw;
   height: 100vh;
+  /* (a phone's visible height, the browser's own bars left out: 100vh is the tallest the page can be) */
+  height: 100dvh;
   z-index: 1;
   cursor: grab;
 }
@@ -1439,6 +1441,127 @@ body.touch-enabled .pop-item { min-height: 44px; }
   body.touch-enabled .hud-bottom-left { display: none; }
   body.touch-enabled .hud-bottom-right { top: calc(max(var(--edge), env(safe-area-inset-top)) + 58px); }
   #touch-controls { bottom: max(var(--edge), env(safe-area-inset-bottom)); }
+}
+
+/* ---- Gen Z Quant on a phone (touch only: body.touch-enabled; played upright and sideways alike). The screen's zones,
+   shared with wagmi/touch.js's buttons: the stick bottom-left, the button cluster bottom-right, the toolbar (Map, Pause,
+   Clean) top-right with the car's pills under it when sideways; the radar top-left, its help and the objective beside
+   it (sideways) or under it (upright); the objective and subtitle line in the free band between the thumbs (sideways)
+   or above them (upright). Every edge kept inside the safe area (the notch, the island, the home bar) ---- */
+body.touch-enabled {
+  --wg-l: max(12px, env(safe-area-inset-left));
+  --wg-r: max(12px, env(safe-area-inset-right));
+  --wg-t: max(12px, env(safe-area-inset-top));
+  --wg-b: max(12px, env(safe-area-inset-bottom));
+  --wg-radar: 104px;
+  --wg-toolbar: 156px;  /* the toolbar's width (Map, Pause, Clean) and a gap */
+  --wg-stick: 172px;    /* the stick's zone, wide (its ring and caption, and a margin) */
+  --wg-pad: 274px;      /* the button cluster's zone, wide */
+  --wg-thumbs: 268px;   /* how far up from the bottom the thumbs' zones reach when upright */
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+}
+@media (max-height: 500px), (max-width: 500px) {
+  body.touch-enabled { --edge: 12px; }
+}
+body.touch-enabled .hud-top-right { top: var(--wg-t); right: var(--wg-r); }
+/* (the city's speed panel: on touch its gauge is hidden and in story mode its camera picker too; nothing left of it but
+   an empty strip under the toolbar) */
+body.touch-enabled.wg-story .hud-bottom-right { display: none !important; }
+/* the radar: top-left, small; the tracker (the objective, kept) beside it sideways, under it upright; the street signs
+   away. (Its canvas sizes itself from the card and redraws while it shows: js/nyc-map.js; the health bar in a fight
+   hangs under it: wagmi/combat/hud.js) */
+body.touch-enabled.wg-story .hud-bottom-left {
+  display: flex; flex-direction: row; align-items: flex-start; gap: 16px;
+  top: var(--wg-t); left: var(--wg-l); bottom: auto; right: auto;
+  max-width: calc(100vw - var(--wg-l) - var(--wg-r) - var(--wg-toolbar));
+}
+body.touch-enabled.wg-story .hud-bottom-left .location { display: none; }
+body.touch-enabled.wg-story .radar { display: block; order: -2; flex: none; width: var(--wg-radar); height: var(--wg-radar); border-radius: 14px; }
+body.touch-enabled.wg-story .radar:hover { transform: none; }
+body.touch-enabled.wg-story .radar-north { top: 5px; }
+body.touch-enabled.wg-story .wg-track { max-width: min(300px, calc(100vw - var(--wg-l) - var(--wg-r) - var(--wg-toolbar) - var(--wg-radar) - 16px));
+  max-height: calc(100vh - var(--wg-t) - 212px); max-height: calc(100dvh - var(--wg-t) - 212px); overflow-y: auto; overscroll-behavior: contain; }
+/* (the help or an offer takes the tracker's place for its few seconds; a call, the top of the screen) */
+body.touch-enabled.wg-story.wg-helpon .wg-track,
+body.touch-enabled.wg-story.wg-offering .wg-track,
+body.touch-enabled.wg-story.wg-calling .wg-track,
+body.touch-enabled.wg-story.wg-dmon .wg-track { visibility: hidden; }
+@media (orientation: portrait) {
+  body.touch-enabled.wg-story .hud-bottom-left { flex-direction: column; gap: 24px; max-width: calc(100vw - var(--wg-l) - var(--wg-r)); }
+  body.touch-enabled.wg-story .wg-track { max-width: calc(100vw - var(--wg-l) - var(--wg-r)); max-height: calc(100dvh - var(--wg-t) - var(--wg-radar) - var(--wg-thumbs) - 150px); }
+  body.touch-enabled.wg-story.wg-calling:not(.wg-helpon):not(.wg-offering):not(.wg-dmon) .wg-track { visibility: visible; }
+  /* (in the car, the car's pills are a column down the right edge: wagmi/touch.js) */
+  body.touch-enabled.wg-story[data-mode='car'] .wg-track { max-width: calc(100vw - var(--wg-l) - var(--wg-r) - 128px); }
+}
+/* (upright, the look hint goes under the toolbar: the help has the place under the radar) */
+@media (orientation: portrait) {
+  body.touch-enabled.wg-story .touch-look-hint { top: calc(var(--wg-t) + 60px); right: var(--wg-r); }
+}
+/* the full map: its controls and status line inside the safe area too (the home bar, a notch on the side) */
+body.touch-enabled .map-controls { right: var(--wg-r); }
+body.touch-enabled .fullmap-footer { bottom: calc(var(--wg-b) + 34px); }
+@media (max-height: 500px) {
+  body.touch-enabled .fullmap-footer { bottom: var(--wg-b); }
+  body.touch-enabled .map-controls { top: calc(var(--wg-t) + 56px); bottom: auto; translate: none; flex-direction: row; align-items: flex-start; }
+}
+/* the radio's card: sideways, top right beside the toolbar (out from under the help); upright, under the toolbar.
+   A call takes the place while it is on */
+body.touch-enabled .wr-card { left: auto; right: calc(var(--wg-r) + var(--wg-toolbar)); top: var(--wg-t); max-width: 260px; transform: translateY(-8px); text-align: right; }
+body.touch-enabled .wr-card.on { transform: none; }
+body.touch-enabled .wr-card .nm { font-size: 30px; }
+body.touch-enabled.wg-calling .wr-card { opacity: 0; }
+@media (orientation: portrait) {
+  body.touch-enabled .wr-card { right: var(--wg-r); top: calc(var(--wg-t) + 58px); max-width: calc(100vw - var(--wg-l) - var(--wg-r) - var(--wg-radar) - 16px); }
+}
+/* (a fight's hit count: sideways, out of the button cluster, under the toolbar where the car's pills are when driving) */
+@media (orientation: landscape) {
+  body.touch-enabled #wf .wf-combo { top: calc(var(--wg-t) + 64px); right: calc(var(--wg-r) + 8px); }
+}
+/* (the thrusters' cooldown chips: out of the button cluster; sideways under the top band, between the help's column
+   and the car's pills; upright above the objective line) */
+body.touch-enabled #wg-thr { left: calc(var(--wg-l) + var(--wg-radar) + 16px); right: calc(var(--wg-r) + var(--wg-pad)); top: calc(var(--wg-t) + 112px); bottom: auto; justify-content: center; flex-wrap: wrap; }
+@media (orientation: portrait) {
+  body.touch-enabled #wg-thr { left: var(--wg-l); right: var(--wg-r); top: auto; bottom: calc(var(--wg-b) + var(--wg-thumbs) + 120px); }
+  body.touch-enabled[data-mode='car'] #wg-thr { right: calc(var(--wg-r) + 128px); }
+}
+/* (sideways: the 'Hit and run' note (wagmi/street, its own inline place) under the car's pills; the radio card one
+   line shorter, its track name away, so it ends above them) */
+@media (orientation: landscape) {
+  body.touch-enabled #wg-tick { top: calc(var(--wg-t) + 128px) !important; right: var(--wg-r) !important; }
+  body.touch-enabled .wr-card .tr { display: none; }
+}
+/* (the radio's card gives way: upright, or sideways on a small phone, to the help, an offer or a DM, which share its
+   corner there; and always to a chase's heat) */
+@media (orientation: portrait), (max-width: 760px) {
+  body.touch-enabled.wg-helpon .wr-card, body.touch-enabled.wg-offering .wr-card, body.touch-enabled.wg-dmon .wr-card { opacity: 0 !important; }
+}
+body.touch-enabled:has(#wg-heat.on) .wr-card { opacity: 0 !important; }
+/* (the chase's heat, wagmi/pursuit/hud.js, which places itself inline beside the toolbar (hence !important): sideways,
+   under the radar, since the top band beside the toolbar is the help's, the call's and the radio's; upright, under the
+   toolbar on the right edge, a call moved down below it and its message) */
+@media (orientation: landscape) {
+  body.touch-enabled #wg-heat { top: calc(var(--wg-t) + var(--wg-radar) + 10px) !important; left: var(--wg-l) !important; right: auto !important; }
+  body.touch-enabled #wg-heat .msg { left: 0; right: auto; }
+  body.touch-enabled:has(#wg .wg-count.on) #wg-heat { top: calc(var(--wg-t) + var(--wg-radar) + 64px) !important; }
+  /* (the thrusters' chips step right of it) */
+  body.touch-enabled:has(#wg-heat.on) #wg-thr { left: calc(var(--wg-l) + 224px); }
+}
+@media (orientation: portrait) {
+  body.touch-enabled #wg-heat { top: calc(var(--wg-t) + 58px) !important; right: var(--wg-r) !important; left: auto !important; }
+  body.touch-enabled:has(#wg-heat.on) #wg .wg-caller { top: calc(var(--wg-t) + 140px); }
+  /* (a fight's short message, 'He's done': over the stick's top at 21vh on a small phone; up above it. The hit count
+     down from 36vh, where it met the objective line over the thumbs on a small phone, to below the help's place) */
+  body.touch-enabled #wf .wf-msg { bottom: calc(var(--wg-b) + 200px); }
+  body.touch-enabled #wf .wf-combo { top: calc(var(--wg-t) + 200px); right: calc(var(--wg-r) + 8px); }
+}
+/* (upright, story mode: the stick down at the bottom edge beside the buttons; the sandbox's mode bar it made room for
+   is hidden in the story) */
+@media (orientation: portrait) {
+  body.touch-enabled.wg-story #touch-controls { bottom: var(--wg-b); }
+  body.touch-enabled #wg-tick { top: calc(var(--wg-t) + 210px) !important; right: auto !important; left: 50% !important; transform: translateX(-50%); }
+  body.touch-enabled:has(.wr-card.on) .touch-look-hint { opacity: 0 !important; }
 }
 
 @media (prefers-reduced-motion: reduce) {

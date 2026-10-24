@@ -3,6 +3,31 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <script>
+    // (sound on a phone: every audio context the page makes is kept, and a tap's release, a click or a key wakes any
+    // the browser left suspended. A finger's pointerdown or touchstart, which is all the game's own unlocks listen to,
+    // doesn't count as a gesture on iPhone; touchend, pointerup and click do. Not while paused or hidden: the game
+    // holds its sound then on purpose)
+    (() => {
+      const list = (window.__wgCtx = []);
+      for (const k of ['AudioContext', 'webkitAudioContext']) {
+        const C = window[k];
+        if (typeof C !== 'function') continue;
+        try {
+          const Kept = class extends C { constructor(...a) { super(...a); list.push(this); } };
+          Object.defineProperty(Kept, 'name', { value: C.name || k });
+          window[k] = Kept;
+        } catch (e) {}
+      }
+      const wake = (e) => {
+        if (!e.isTrusted || document.hidden || (window.WAGMI && window.WAGMI.paused)) return;
+        for (const c of list) if (c.state === 'suspended' || c.state === 'interrupted') { try { c.resume().catch(() => {}); } catch (err) {} }
+      };
+      for (const t of ['touchend', 'pointerup', 'click', 'keydown']) addEventListener(t, wake, { capture: true, passive: true });
+    })();
+  </script>
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
   <title>GEN Z QUANT</title>
   <link rel="icon" href="/favicon.ico" sizes="48x48" />
   <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
@@ -276,7 +301,7 @@
   <!-- Touch input stays available in clean view; the map temporarily suspends it. -->
   <section id="touch-controls" aria-label="Touch controls" hidden>
     <div class="touch-movement">
-      <div id="touch-stick" role="group" aria-label="Movement joystick: drag up or down to move, left or right to turn">
+      <div id="touch-stick" role="group" aria-label="Movement joystick: push the way to go (in the car: up and down to drive, left and right to steer)">
         <span class="touch-stick-axis" aria-hidden="true"></span>
         <span id="touch-stick-knob" aria-hidden="true"></span>
       </div>
@@ -405,5 +430,9 @@
   </script>
   <!-- Gen Z Quant: Quant, his car, getting in and out (waits for the city app) -->
   <script type="module" src="wagmi/game.js"></script>
+  <!-- Gen Z Quant on a phone: the touch buttons, and the shell (full screen, pause on leaving, the viewport); each waits
+       for the game itself and does nothing with a mouse and keyboard -->
+  <script type="module" src="wagmi/touch.js"></script>
+  <script type="module" src="wagmi/phone.js"></script>
 </body>
 </html>

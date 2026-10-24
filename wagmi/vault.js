@@ -28,7 +28,7 @@ export function installVault(W, c) {
   const _d = new THREE.Vector3(), _p = new THREE.Vector3(), _a = new THREE.Vector3();
   const ground = (x, z) => cm.getGroundHeight(x, z, 'person');
 
-  // the way he means to go (unit, on the ground) and how fast: the street's walk along his heading; the fight's
+  // the way he means to go (unit, on the ground) and how fast: the street's walk (camera-relative: he faces the way he goes) along his heading; the fight's
   // footwork camera-relative, by the stick
   function intent(keys, fighting) {
     if (fighting) {
@@ -39,7 +39,7 @@ export function installVault(W, c) {
       _d.normalize();
       return m * (keys.boost ? 5.6 : 2.3);
     }
-    if (!(+keys.forward > 0.3)) return 0;
+    if (!((cm.footMove ? cm.footMove.mag : +keys.forward) > 0.3)) return 0;
     fwd(P.heading, _d);
     return Math.max(0, P.speed || 0);
   }

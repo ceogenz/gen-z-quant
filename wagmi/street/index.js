@@ -45,6 +45,7 @@ export function install(W) {
 
   // ------------------------------------------------------------------ the tick: GTA's little 'hit and run' note
   const tick = document.createElement('div');
+  tick.id = 'wg-tick';
   Object.assign(tick.style, { position: 'fixed', right: '28px', top: '96px', zIndex: 21, pointerEvents: 'none', opacity: '0', transition: 'opacity 0.25s',
     font: "600 22px 'Barlow Condensed', system-ui, sans-serif", letterSpacing: '0.08em', color: '#fff', textTransform: 'uppercase',
     textShadow: '0 1px 2px rgba(0,0,0,0.55), 0 0 12px rgba(0,0,0,0.35)', padding: '6px 12px', borderRadius: '10px', background: 'rgba(8,10,14,0.62)' });

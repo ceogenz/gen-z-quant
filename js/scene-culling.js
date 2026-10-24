@@ -133,8 +133,19 @@ function proxyableMaterial(mat) {
  * Sets up the culling of the static city under `roots` (Object3Ds). `shadow` is the SunLightShadow whose cascade
  * cameras render the shadow stand-ins (none are made without it). Returns stats; the culling itself runs in
  * updateSceneCulling().
+ * (Gen Z Quant) `quality`: the graphics tier's knobs (main.js, window.NYC.quality), all unset on the high tier:
+ * - propScale brings every chunk's cull distance nearer (the chunks themselves stay the same: a phone's screen is a
+ *   third of the 1300 px these distances were made for, so the props shrink below a pixel or two that much sooner);
+ * - propShadows false stops the chunked small props casting;
+ * - staticFar (m) also hides the outer boroughs' building chunks and the far bridges beyond it (in the haze);
+ * - nearShadowsOnly: the far sun cascade draws the building stand-ins only, so beyond the near cascade (~40 m at
+ *   street level) only the buildings cast. Each cascade draws its casters again, so this nearly halves the shadow
+ *   draws, which is what a phone's CPU pays for.
  */
-function setupSceneCulling(scene, roots, shadow = null) {
+function setupSceneCulling(scene, roots, shadow = null, quality = {}) {
+  const propScale = quality.propScale ?? 1;
+  const propShadows = quality.propShadows !== false;
+  const staticFar = quality.staticFar ?? Infinity;
   scene.updateMatrixWorld(true);
   const stats = { chunkedMeshes: 0, chunks: 0, proxiedMeshes: 0, proxies: 0, proxyTriangles: 0 };
   const culled = [];
@@ -162,14 +173,37 @@ function setupSceneCulling(scene, roots, shadow = null) {
     parent.remove(mesh);
     chunks.forEach((chunk, k) => {
       parent.add(chunk);
+      if (!propShadows) chunk.castShadow = false;
       // shader precompile: the first chunk compiles the pipeline every chunk of the mesh shares (main.js)
       if (k > 0) chunk.userData.sharesPipelineWith = chunks[0];
       chunk.updateMatrixWorld(true);
       const sphere = chunk.boundingSphere.clone().applyMatrix4(chunk.matrixWorld);
-      culled.push({ mesh: chunk, x: sphere.center.x, y: sphere.center.y, z: sphere.center.z, r: sphere.radius, d: cullDist });
+      culled.push({ mesh: chunk, x: sphere.center.x, y: sphere.center.y, z: sphere.center.z, r: sphere.radius, d: cullDist * propScale });
     });
     stats.chunkedMeshes++;
     stats.chunks += chunks.length;
+  }
+
+  // 1b. (Gen Z Quant) The far static city, beyond staticFar: the outer boroughs' building chunks (instanced, 1.2 km
+  // squares) and the bridges
+  if (Number.isFinite(staticFar)) {
+    const done = new Set(culled.map((c) => c.mesh));
+    for (const root of roots) {
+      root.traverse((o) => {
+        if (done.has(o) || !isStaticMesh(o) || !/^BoroughBuildings|Bridge$/.test(o.name)) return;
+        let sphere;
+        if (o.isInstancedMesh) {
+          if (o.count !== o.instanceMatrix.count) return;
+          if (!o.boundingSphere) o.computeBoundingSphere();
+          sphere = o.boundingSphere.clone().applyMatrix4(o.matrixWorld);
+        } else {
+          if (!o.geometry.boundingSphere) o.geometry.computeBoundingSphere();
+          sphere = o.geometry.boundingSphere.clone().applyMatrix4(o.matrixWorld);
+        }
+        culled.push({ mesh: o, x: sphere.center.x, y: sphere.center.y, z: sphere.center.z, r: sphere.radius, d: staticFar });
+        stats.farStatic = (stats.farStatic || 0) + 1;
+      });
+    }
   }
 
   // 2. Shadow stand-ins for the big static casters
@@ -305,6 +339,8 @@ function setupSceneCulling(scene, roots, shadow = null) {
       }
     }
     for (const cam of cams) cam.layers.enable(SHADOW_PROXY_LAYER);
+    // (Gen Z Quant) the far cascade: the stand-ins only
+    if (quality.nearShadowsOnly && cams.length > 1) cams[cams.length - 1].layers.set(SHADOW_PROXY_LAYER);
   }
 
   state.culled = culled;

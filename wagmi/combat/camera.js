@@ -274,7 +274,7 @@ export function createFightCamera(c) {
       if (want && c.me.fighting) assist(dt, w);
       // the fight over (nobody near him on his feet): round behind him while it holds on the two of them, so the city's
       // camera takes over looking the way he faces
-      else if (st.idle > 0.3 && !st.cine) { const d = angWrap(H - st.yaw); st.yaw += Math.sign(d) * Math.min(Math.abs(d), Math.min(SWING, 0.5 + 2.2 * Math.abs(d)) * dt); st.swing = 0; }
+      else if (st.idle > 0.3 && !st.cine && !(cm.footMove && cm.footMove.mag > 0.1)) { const d = angWrap(H - st.yaw); st.yaw += Math.sign(d) * Math.min(Math.abs(d), Math.min(SWING, 0.5 + 2.2 * Math.abs(d)) * dt); st.swing = 0; }
       cs.orbitYawOffset = angWrap(st.yaw - H); st.lastOff = cs.orbitYawOffset;
       cs.userOrbitTimer = Math.max(cs.userOrbitTimer, 0.5);
       st.handback = true;

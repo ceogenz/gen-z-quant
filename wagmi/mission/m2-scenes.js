@@ -37,7 +37,7 @@ export async function runScene(W, def) {
     if (!done) t = Math.min(def.END, t + Math.min(dt, 0.1) * W.sceneClock.rate);
     try { def.pose?.(t, dt, C, D); } catch (e) { console.warn('[m2] pose', e); }
     const sh = shotAt(t), c = W.sceneClock.cam || sh.cam(t, sh.t);
-    D.camera.pos = c.pos; D.camera.look = c.look; D.camera.fov = c.fov; D.camera.shake = c.shake ? handheld(t, c.shake) : null;
+    D.camera.pos = c.pos; D.camera.look = c.look; D.camera.fov = c.fov; D.camera.band = c.band; D.camera.shake = c.shake ? handheld(t, c.shake) : null;
     if (grade && def.exposure) grade.exposure.value = def.exposure;
     while (ci < cues.length && cues[ci][0] <= t) { try { cues[ci][1](st); } catch (e) { console.warn('[m2] cue', e); } ci++; }
   };

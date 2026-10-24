@@ -39,9 +39,11 @@ const {
 const { PersonCrowd, PersonRig } = window.NYC;
 const { mergeGeometries } = window.NYC.Addons;
 
-const NUM_CARS = 250; // (Gen Z Quant: was 200, side streets stood empty)
-const NUM_BUSES = 24; // (Gen Z Quant: 32 bunched into columns and walls of buses round the player)
-const NUM_PEDS = 340;
+// (Gen Z Quant: these are the high graphics tier's; createTrafficSystem takes the tier's own from window.NYC.quality)
+const DEFAULT_NUM_CARS = 250; // (Gen Z Quant: was 200, side streets stood empty)
+const DEFAULT_NUM_BUSES = 24; // (Gen Z Quant: 32 bunched into columns and walls of buses round the player)
+const DEFAULT_NUM_PEDS = 340;
+const DEFAULT_HEADLIGHTS = 96;
 
 // Intelligent Driver Model: max acceleration, comfortable braking, time headway, standstill gap; and the sideways
 // acceleration drivers accept in bends, which sets how fast they take each turn or lane shift
@@ -91,6 +93,13 @@ function createBusDestinationTexture() {
 const clamp = (x, lo, hi) => Math.max(lo, Math.min(hi, x));
 
 function createTrafficSystem(scene, sidewalks, obstacles) {
+  // (Gen Z Quant) the graphics tier's traffic (main.js): fewer cars, buses, pedestrians and headlight spots on the
+  // phone and low tiers, and no pedestrians at all on WebGL2 (their poses are read from a storage buffer per instance)
+  const quality = window.NYC.quality || {};
+  const NUM_CARS = quality.cars ?? DEFAULT_NUM_CARS;
+  const NUM_BUSES = quality.buses ?? DEFAULT_NUM_BUSES;
+  const NUM_PEDS = quality.peds ?? DEFAULT_NUM_PEDS;
+
   const group = new THREE.Group();
   group.name = 'ManhattanTrafficAndPedestrians';
 
@@ -327,7 +336,7 @@ function createTrafficSystem(scene, sidewalks, obstacles) {
   // =========================================================================
   // One instanced draw per level of detail; every pedestrian has a PersonRig that plants its footsteps on the
   // sidewalk (no sliding), with their own build, height, sex, hair, clothes and gait
-  const pedCrowd = new PersonCrowd(NUM_PEDS);
+  const pedCrowd = NUM_PEDS > 0 ? new PersonCrowd(NUM_PEDS) : null;
   const hash = (i, salt) => {
     const v = Math.sin(i * 12.9898 + salt * 78.233) * 43758.5453;
     return v - Math.floor(v);
@@ -367,12 +376,12 @@ function createTrafficSystem(scene, sidewalks, obstacles) {
       })
     });
   }
-  group.add(...pedCrowd.meshes);
+  if (pedCrowd) group.add(...pedCrowd.meshes);
 
   // Add vehicle contact shadows last + pre-allocated Clustered SpotLight / PointLight pools
   group.add(carShadowInst, busShadowInst);
 
-  const HEADLIGHT_POOL_SIZE = 96;
+  const HEADLIGHT_POOL_SIZE = quality.headlights ?? DEFAULT_HEADLIGHTS;
   const NYPD_LIGHT_POOL_SIZE = 6;
   const MAX_LIGHT_DIST = 115;
   const MAX_LIGHT_DIST_SQ = MAX_LIGHT_DIST * MAX_LIGHT_DIST;
@@ -2452,7 +2461,7 @@ function createTrafficSystem(scene, sidewalks, obstacles) {
     walkedNodes.length = 0;
     gatherCurbs();
     let pedBudget = jump ? Infinity : 6;
-    pedCrowd.begin();
+    if (pedCrowd) pedCrowd.begin();
     for (let i = 0; i < NUM_PEDS; i++) {
       const p = peds[i];
       // (Gen Z Quant: knocked down by a car, wagmi/street moves and draws them until it hands them back out of view)
@@ -2469,7 +2478,7 @@ function createTrafficSystem(scene, sidewalks, obstacles) {
       walk(p, dt);
       renderPed(p, dt);
     }
-    pedCrowd.end();
+    if (pedCrowd) pedCrowd.end();
 
     // 3. Collision sparks, including the player's own impacts against buildings
     if (playerEntity && playerEntity.lastCollisionSpark) {

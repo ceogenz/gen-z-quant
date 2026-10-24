@@ -186,16 +186,21 @@ class LightingSystem {
 
     // Three.js r186 SunLight with automatic 2-Cascade Shadow Map (SunLightShadow + SunShadowNode)
     // Shines from its position vector toward the origin (no .target needed)
+    // (Gen Z Quant) the graphics tier (main.js, window.NYC.quality): the phone tier's cascades are 1024 tiles over a
+    // shorter range (140 m at street level, up to 300 m); the low tier has no sun shadows at all
+    const quality = window.NYC.quality || {};
+    this.shadowFar = quality.shadowFar ?? 300;
+    this.shadowFarMax = quality.shadowFarMax ?? 720;
     this.sunLight = new SunLight(0xffca92, 5.8);
     this.sunLight.position.copy(TIME_PRESETS.golden.sunDir);
-    this.sunLight.castShadow = true;
+    this.sunLight.castShadow = quality.shadows !== false;
     // 3072x3072 per cascade = 6144x3072 2-cascade shadow atlas (an 8192x4096 one cost ~20% fps and caused hitches),
     // 2048 where the device allows less. The near cascade spans ~0.35-80 m of the view at street level (see update)
     const maxTex = (renderer && renderer.backend && renderer.backend.device && renderer.backend.device.limits.maxTextureDimension2D) || 4096;
-    const tile = maxTex >= 6144 ? 3072 : 2048;
+    const tile = quality.shadowTile || (maxTex >= 6144 ? 3072 : 2048);
     this.sunLight.shadow.mapSize.set(tile, tile);
     this.sunLight.shadow.camera.near = 0.5;
-    this.sunLight.shadow.camera.far = 300;
+    this.sunLight.shadow.camera.far = this.shadowFar;
     // Suppress shadow acne along the surface normal in world units
     // so short casters like cars, curbs, tree trunks, and pedestrians keep crisp contact shadows
     this.sunLight.shadow.normalBias = 0.05;
@@ -299,8 +304,10 @@ class LightingSystem {
     // every frame inside SunShadowNode.renderShadow(), splitting [near, far] halfway between a uniform and a
     // logarithmic split (the near cascade ends at ~far / 4). Keep far at 300 m at street level so the near cascade
     // stays sharp, and expand it with altitude (helicopter / observatory) so shadows reach all the way down to street level.
+    // (Gen Z Quant: the phone tier's range scaled down with its street-level far, shadowFar / 300)
     const altitude = focusPos && Number.isFinite(focusPos.y) ? Math.max(0, focusPos.y) : 0;
-    this.sunLight.shadow.camera.far = Math.max(300, Math.min(720, 260 + altitude * 1.6));
+    const k = this.shadowFar / 300;
+    this.sunLight.shadow.camera.far = Math.max(this.shadowFar, Math.min(this.shadowFarMax, (260 + altitude * 1.6) * k));
   }
 }
 

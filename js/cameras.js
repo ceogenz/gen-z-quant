@@ -65,6 +65,30 @@ function rayClear(p, ux, uy, uz, len, boxes) {
 // Ways round the player a blocked follow camera may swing to (rad off straight behind him)
 const SWINGS = [0.45, -0.45, 0.9, -0.9, 1.35, -1.35, 1.8, -1.8, 2.3, -2.3];
 
+// (Gen Z Quant) a phone held upright. three's fov is the height of the view, so on a screen taller than wide the view
+// across closes right in (a 56 degree lens on a 393 x 852 phone sees 27 degrees across). Narrower than PORT (width /
+// height) the lens opens out to keep a useful width, the follow cameras stand a little further back and higher, and
+// look down the street more (the tall frame's top half is the road ahead, not the sky); all of it by portK, 0 at PORT
+// and above (landscape and every desktop window: today's numbers exactly) to 1 at PORT_FULL and below (a phone).
+const PORT = 1.3, PORT_FULL = 0.6;
+// how much of the lost width the lens wins back (1: all of it, the width of a PORT screen), and its most (deg)
+const PORT_WIDEN = 0.78, PORT_FOV_MAX = 102;
+// the follow camera upright (at portK 1): its boom longer by PULL, higher by LIFT m and looking DROP m lower (on foot;
+// a car's own below)
+const PORT_RIG = { person: { pull: 0.06, lift: 0.75, drop: 1.05 }, car: { pull: 0.08, lift: 0.85, drop: 0.35 } };
+function portK(aspect) {
+  if (!(aspect < PORT)) return 0;
+  const k = Math.min(1, (PORT - aspect) / (PORT - PORT_FULL));
+  return k * k * (3 - 2 * k);
+}
+// the lens (vertical fov, deg) that sees about as wide on this screen as `fov` does on a PORT one (upright only)
+function portFov(fov, aspect) {
+  const k = portK(aspect);
+  if (!k) return fov;
+  const t = Math.tan(fov * Math.PI / 360) * Math.pow(PORT / aspect, PORT_WIDEN);
+  return Math.min(PORT_FOV_MAX, Math.max(fov, Math.atan(t) * 360 / Math.PI));
+}
+
 class CameraSystem {
   constructor(domElement, controllerManager) {
     this.domElement = domElement;
@@ -184,7 +208,7 @@ class CameraSystem {
     const preset = CAMERA_PRESETS.find((p) => p.id === presetId);
     if (!preset) return;
     this.activePresetId = preset.id;
-    this.camera.fov = preset.fov;
+    this.camera.fov = this.portK() ? portFov(preset.fov, this.camera.aspect) : preset.fov;
     this.camera.updateProjectionMatrix();
     if (snapImmediately) {
       this.initialized = false;
@@ -233,6 +257,17 @@ class CameraSystem {
     this.camera.updateProjectionMatrix();
   }
 
+  // (Gen Z Quant) how upright the screen is (0: landscape or wider than PORT; 1: a phone held upright), and the lens the
+  // follow cameras use for a preset's fov on it (wagmi/mission/cine.js: a cutscene's hand-back glides to it)
+  portK() { return portK(this.camera.aspect); }
+  fitFov(fov) { return portFov(fov, this.camera.aspect); }
+  viewFov() { return this._port ? (this.lensFov ?? this.fitFov(this.getActivePreset().fov)) : this.getActivePreset().fov; }
+  // (the follow camera's boom upright: longer, higher, looking lower; all 0 in landscape)
+  portRig(entity, k = this.portK()) {
+    const r = entity && (entity.type === 'car' ? PORT_RIG.car : entity.type === 'person' ? PORT_RIG.person : null);
+    return { pull: r ? r.pull * k : 0, lift: r ? r.lift * k : 0, drop: r ? r.drop * k : 0 };
+  }
+
   update(dt, elapsed) {
     const entity = this.controllerManager.getActiveEntity();
     const desiredPos = this._desiredPos;
@@ -253,6 +288,21 @@ class CameraSystem {
     const speedLag = this.smoothedSpeed * 0.1;
 
     const totalYaw = entity.heading + this.orbitYawOffset;
+    // (Gen Z Quant: the screen upright, pk > 0: see PORT. Turned back to landscape: the lens as it was, at once)
+    const pk = this.portK();
+    if (!pk && this._port) {
+      this._port = false;
+      if (!this._lens) this.lensFov = null;
+      this.camera.fov = this._lens && this.lensFov != null ? this.lensFov : this.getActivePreset().fov;
+      this.camera.updateProjectionMatrix();
+    }
+    // (the quality tier's view distance: wagmi's phone and low tiers draw less of the far city, js/main.js)
+    const farScale = window.NYC.quality?.farScale;
+    if (farScale > 0 && farScale !== this._farScale) {
+      this._farScale = farScale;
+      this.camera.far = 60000 * farScale;
+      this.camera.updateProjectionMatrix();
+    }
     // (out of a car that sets its own lens: the preset's back)
     if (this._lens && !(this.activePresetId === 'chase' && entity.chase)) {
       this._lens = false;
@@ -268,10 +318,14 @@ class CameraSystem {
         // long one, and the lens widening with speed and more on the boost, so the car stays big and speed still reads;
         // its shake flat out, below)
         const ch = entity.chase;
-        const dist = ch
+        let dist = ch
           ? entity.chaseDistance * this.zoomMultiplier + ch.pull * this.smoothedSpeed
           : entity.chaseDistance * this.zoomMultiplier * (1 + Math.min(0.25, this.smoothedSpeed * 0.01));
-        const height = entity.chaseHeight * this.zoomMultiplier + Math.sin(this.orbitPitchOffset) * dist * 0.85;
+        // (upright: a longer boom, higher, looking lower)
+        const rig = pk ? this.portRig(entity, pk) : null;
+        if (rig) dist *= 1 + rig.pull;
+        let height = entity.chaseHeight * this.zoomMultiplier + Math.sin(this.orbitPitchOffset) * dist * 0.85;
+        if (rig) height += rig.lift * this.zoomMultiplier;
         const horizDist = Math.cos(this.orbitPitchOffset) * dist + (ch ? 0 : speedLag);
         if (ch) {
           const kick = ch.kick * Math.min(1, this.smoothedSpeed / ch.vmax) + (entity.boosting ? ch.boostKick : 0);
@@ -296,6 +350,7 @@ class CameraSystem {
           entity.position.y + entity.cameraTargetOffset.y + lookUpBias,
           entity.position.z + Math.cos(totalYaw) * 5.2
         );
+        if (rig) desiredLook.y -= rig.drop;
         break;
       }
 
@@ -416,6 +471,18 @@ class CameraSystem {
       }
     }
 
+    // (upright: the lens opened out, PORT; it is the lens for whatever sets the fov over the camera's too, lensFov:
+    // wagmi/combat/camera.js)
+    if (pk) {
+      const f = portFov(this._lens && entity.chase ? entity.chase.fov + this._kick : this.getActivePreset().fov, this.camera.aspect);
+      this.lensFov = f;
+      this._port = true;
+      if (Math.abs(this.camera.fov - f) > 1e-4) {
+        this.camera.fov = f;
+        this.camera.updateProjectionMatrix();
+      }
+    }
+
     if (!this.initialized || this.activePresetId === 'pov') {
       this.currentPos.copy(desiredPos);
       this.currentLookAt.copy(desiredLook);
@@ -524,7 +591,9 @@ class CameraSystem {
   // van, a wall or the stage right at his back would have the view in it): wagmi/mission/cine.js release()
   clearTurn(entity) {
     if (!entity || entity.type === 'car' || entity.type === 'helicopter') return 0;
-    const dist = entity.chaseDistance, height = entity.chaseHeight + Math.sin(0.09) * dist * 0.85, horiz = Math.cos(0.09) * dist;
+    // (upright, the boom as update() makes it: see PORT)
+    const rig = this.portK() ? this.portRig(entity) : null;
+    const dist = entity.chaseDistance * (rig ? 1 + rig.pull : 1), height = entity.chaseHeight + Math.sin(0.09) * dist * 0.85 + (rig ? rig.lift : 0), horiz = Math.cos(0.09) * dist;
     const P = this._pivot.set(entity.position.x, entity.position.y + 1.45, entity.position.z);
     const near = this.nearBoxes(P, dist + 1, entity);
     const clearAt = (yaw) => {

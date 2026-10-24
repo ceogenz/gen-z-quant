@@ -22,7 +22,7 @@ import { buildVan } from './van.js';
 import { createUI } from './mission/ui.js';
 import { createAudio } from './mission/audio.js';
 import { createZK } from './mission/zk.js';
-import { createDirector, keys, angleKeys, spline, travel, rig, masked, handheld, clamp, smooth, lerp, ease } from './mission/cine.js';
+import { createDirector, keys, angleKeys, spline, travel, rig, masked, handheld, clamp, smooth, lerp, ease, shotAspect, shotFov } from './mission/cine.js';
 import { createFace } from './face.js';
 
 const Q = new URLSearchParams(location.search);
@@ -69,7 +69,7 @@ export async function install(W) {
   const gateOpts = { when: () => W.app.ready, onStart: () => sfx.unlock(), fine: 'Headphones on · Built on Slop New York by mrdoob' };
   const gate = Q.has('nogate') ? null : save ? save.saveGate(ui, gateOpts) : ui.gate(gateOpts);
   // the first shot's camera and the bars from now on, while the cast is built behind the loading screen
-  const hold = createDirector(W); hold.camera = { pos: [260, 140, 250], look: [-80, 172, 686], fov: 50 }; hold.take(); ui.cine(true);
+  const hold = createDirector(W); hold.camera = { pos: [260, 140, 250], look: [-80, 172, 686], fov: 50, band: false }; hold.take(); ui.cine(true);
   W._holdCam = hold;
   const castP = castOpening(W);
   // (Continue: free roam on foot by the next mission's blip, no opening; the cast still builds, for the missions)
@@ -582,10 +582,12 @@ function buildScript(ctx) {
   // ---- the shots
   // (framing: aimAt puts a subject at a screen x (-1 left edge .. 1 right edge) and y (-1 bottom .. 1 top) from a
   // camera; ots stands behind a character's shoulder, side > 0 his right, < 0 his left)
-  const aspect = () => app.cameraSystem.camera.aspect || 16 / 9;
-  function aimAt(from, subj, ndcX, fov, ndcY = 0) {
+  // (the frame a shot is composed for: on a phone held upright, the band's landscape frame, cine.js shotAspect; a shot
+  // with band: false fills the upright screen, its own shape)
+  const aspect = (band = true) => shotAspect(app.cameraSystem, band);
+  function aimAt(from, subj, ndcX, fov, ndcY = 0, band = true) {
     const dx = subj[0] - from[0], dz = subj[2] - from[2], d = Math.hypot(dx, dz) || 1, tn = Math.tan(fov * PI / 360);
-    const off = -ndcX * d * tn * aspect();
+    const off = -ndcX * d * tn * aspect(band);
     return [subj[0] + (-dz / d) * off, subj[1] - ndcY * d * tn, subj[2] + (dx / d) * off];
   }
   function ots(x, z, h, back, side, y) { return [x - Math.sin(h) * back - Math.cos(h) * side, y, z - Math.cos(h) * back + Math.sin(h) * side]; }
@@ -605,7 +607,8 @@ function buildScript(ctx) {
   const zkPalm = keys([[65.15, 0], [65.6, 1], [66.4, 1], [66.8, 0.2]]);
   const shots = [
     // 1 the aerial: Murray Hill's roofs to the Empire State
-    { t: T.s1, exp: 1.04, cam: (t) => { const pos = keys([[0, [260, 140, 250]], [6, [200, 120, 330]]])(t); return { pos, look: aimAt(pos, keys([[0, [-80, 172, 686]], [6, [-80, 150, 686]]])(t), 0.52, 50), fov: 50 }; } },
+    // (upright, it fills the tall screen: the tower is a tall subject, and the title is over it)
+    { t: T.s1, exp: 1.04, cam: (t) => { const pos = keys([[0, [260, 140, 250]], [6, [200, 120, 330]]])(t); return { pos, look: aimAt(pos, keys([[0, [-80, 172, 686]], [6, [-80, 150, 686]]])(t), 0.52, 50, 0, false), fov: 50, band: false }; } },
     // 2 E 37th St from the Madison end, craning down to the roadster at the curb
     { t: T.s2, exp: 1.18, cam: (t) => ({ pos: keys([[6, [150, 7.0, 398.4]], [11, [124, 1.55, 397.6]]])(t), look: keys([[6, [70, 4, 392]], [11, [88, 0.9, 394.3]]])(t), fov: keys([[6, 40], [11, 30]])(t) }) },
     // 3 the door: it opens, Moon trots out first, Quant follows, reading; he looks up as his card lands; they walk toward
@@ -1260,12 +1263,13 @@ function buildScript(ctx) {
     street.update(t, sdt, seek, D.camera.pos);
     // the camera
     const s = shotAt(t), c = api.cam || s.cam(t);
-    D.camera.pos = c.pos; D.camera.look = c.look; D.camera.fov = c.fov; D.camera.roll = 0;
+    D.camera.pos = c.pos; D.camera.look = c.look; D.camera.fov = c.fov; D.camera.roll = 0; D.camera.band = c.band;
     D.camera.shake = c.shake && !api.cam ? handheld(t * 1.0, c.shake) : null;
     setGrade(t < 6 ? smooth(t / 6) : 1, s.exp ?? exp0);
     // ZK's room: full frame in his shots, and on Quant's phone while the call is up
     const zc = api.zkCam || (!api.cam && s.zk ? s.zk(t) : null), feed = phone.visible && screenAt(t) === 'video';
-    zk.full(zc); zk.phone(feed);
+    // (his room through the band too, upright: cine.js shotFov)
+    zk.full(zc && app.cameraSystem.portK?.() ? { ...zc, fov: shotFov(app.cameraSystem, zc.fov, zc.band !== false) } : zc); zk.phone(feed);
     // (in his room the street goes quiet)
     if (zc && playing) W.audio?.duck?.('amb', 0.85, 0.12);
     if (zc || feed) zk.pose(t, { lean: zkLean(t), tilt: zkTilt(t), palm: zkPalm(t) });

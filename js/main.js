@@ -12,6 +12,7 @@ const {
   metalness,
   roughness,
   vec2,
+  vec4,
   smoothstep
 } = window.NYC.TSL;
 const { ssr } = window.NYC.PostFX;
@@ -34,6 +35,126 @@ const { LightingSystem } = window.NYC;
 const { NYCMapSystem } = window.NYC;
 const { setupSceneCulling, updateSceneCulling } = window.NYC;
 
+// (Gen Z Quant) Graphics tier, picked before the renderer is made: 'high' is the city as built (every knob below
+// unset, so each module keeps its own constant), 'phone' a lighter city for phones, 'low' the plainest one, for
+// devices without WebGPU (three's WebGL2 backend). ?gfx=high|phone|low wins, then the saved choice
+// (localStorage 'wagmi.gfx', the pause menu's Graphics row), then auto: phone on a phone (coarse primary pointer and a
+// screen no wider than 500 CSS px either way up), low without WebGPU, high otherwise. Nothing switches live: the
+// shadows, the reflections and MSAA would recompile every pipeline (a 3 s stall), so a choice applies on the next load.
+// The tiers' knobs are published on window.NYC.quality, which lighting.js, traffic.js, post-processing.js,
+// scene-culling.js and the cameras read as they build.
+const GFX_KEY = 'wagmi.gfx';
+const GFX_TIERS = {
+  high: { farScale: 1 },
+  phone: {
+    shadows: true, shadowTile: 1024, shadowFar: 140, shadowFarMax: 300, propShadows: false, nearShadowsOnly: true,
+    ssr: false, bloomScale: 0.25, bloomStrength: 1, antialias: true,
+    cars: 120, buses: 12, peds: 150, headlights: 32, clusters: [256, 64, 28, 48],
+    propScale: 0.55, staticFar: 3000, farScale: 0.7, adaptive: true
+  },
+  low: {
+    shadows: false, ssr: false, bloomScale: 0.25, bloomStrength: 0.6, antialias: false,
+    cars: 90, buses: 8, peds: 0, headlights: 16, clusters: [256, 64, 28, 48],
+    propScale: 0.5, staticFar: 2500, farScale: 0.6, adaptive: true
+  }
+};
+const gfxValid = (v) => v === 'high' || v === 'phone' || v === 'low';
+const gfxStore = {
+  get() {
+    try { return window.localStorage.getItem(GFX_KEY); } catch (e) { return null; }
+  },
+  set(v) {
+    try {
+      if (v === 'auto') window.localStorage.removeItem(GFX_KEY);
+      else window.localStorage.setItem(GFX_KEY, v);
+    } catch (e) { /* private mode: the choice lasts this page only */ }
+  }
+};
+function autoGfxTier() {
+  if (!navigator.gpu) return 'low';
+  let coarse = false;
+  try { coarse = window.matchMedia('(pointer: coarse)').matches; } catch (e) { /* old browsers */ }
+  const short = Math.min(window.screen.width || Infinity, window.screen.height || Infinity);
+  return coarse && short <= 500 ? 'phone' : 'high';
+}
+function createQuality() {
+  let override = null;
+  try { override = new URLSearchParams(window.location.search).get('gfx'); } catch (e) { /* no URL */ }
+  if (!gfxValid(override)) override = null;
+  const saved = gfxStore.get();
+  const choice = gfxValid(saved) ? saved : 'auto';
+  const auto = autoGfxTier();
+  const tier = override || (choice === 'auto' ? auto : choice);
+  const q = {
+    tier, // what this load runs
+    choice, // what the player picked: 'auto' | 'high' | 'low' (| 'phone')
+    auto, // what auto picks on this device
+    override, // ?gfx= (wins over the choice, this load only)
+    backend: navigator.gpu ? 'webgpu' : 'webgl2', // settled once the renderer is up
+    next: tier, // what the next load will run
+    // Saves the choice for the next load (no live switch); returns the tier that load will run
+    set(c) {
+      const v = c === 'auto' || gfxValid(c) ? c : 'auto';
+      gfxStore.set(v);
+      q.choice = v;
+      q.next = q.override || (v === 'auto' ? q.auto : v);
+      return q.next;
+    }
+  };
+  Object.assign(q, GFX_TIERS[tier]);
+  return q;
+}
+// Once the renderer is up: drop to the low tier when the WebGPU device couldn't be had after all (unless a tier was
+// picked), and never build the crowd on WebGL2
+function settleQuality(q, isWebGPU) {
+  q.backend = isWebGPU ? 'webgpu' : 'webgl2';
+  if (isWebGPU) return;
+  if (!q.override && q.choice === 'auto' && q.tier !== 'low') {
+    q.tier = q.auto = q.next = 'low';
+    Object.assign(q, GFX_TIERS.low);
+  }
+  q.peds = 0; // the crowd reads its poses from a storage buffer per instance, which WebGL2 can't do
+}
+const quality = createQuality();
+window.NYC.quality = quality;
+
+// (Gen Z Quant) Adaptive resolution, phone and low tiers only: after 3 s of play, a median frame over 22 ms for 2 s
+// steps the 3D canvas down (1.0 -> 0.85 -> 0.7 of a CSS pixel), under 14 ms for 5 s steps it back up. Only the canvas
+// size changes (no pipeline recompiles); devicePixelRatio is never used for it.
+function createAdaptiveResolution(renderer) {
+  const STEPS = [1.0, 0.85, 0.7];
+  const win = [];
+  let step = 0;
+  let playT = 0;
+  let slowT = 0;
+  let fastT = 0;
+  return {
+    get scale() { return STEPS[step]; },
+    update(rawDt) {
+      const ms = rawDt * 1000;
+      // a frame over 250 ms is a stall (the pause menu, a hidden tab, a compile), not the frame rate
+      if (!(ms > 0) || ms > 250) return;
+      playT += rawDt;
+      win.push(ms);
+      if (win.length > 31) win.shift();
+      if (playT < 3 || win.length < 15) return;
+      const sorted = win.slice().sort((a, b) => a - b);
+      const median = sorted[sorted.length >> 1];
+      slowT = median > 22 ? slowT + rawDt : 0;
+      fastT = median < 14 ? fastT + rawDt : 0;
+      let next = step;
+      if (slowT >= 2 && step < STEPS.length - 1) next = step + 1;
+      else if (fastT >= 5 && step > 0) next = step - 1;
+      if (next === step) return;
+      step = next;
+      slowT = fastT = 0;
+      win.length = 0;
+      renderer.setPixelRatio(STEPS[step]);
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    }
+  };
+}
+
 async function initApp() {
   const container = document.getElementById('canvas-container');
   const loadingOverlay = document.getElementById('loading-overlay');
@@ -52,16 +173,17 @@ async function initApp() {
   }
 
   // 1. Initialize Three.js WebGPURenderer with 32-bit float reversedDepthBuffer
+  // (Gen Z Quant: the graphics tier's MSAA, shadows and light clusters, see GFX_TIERS)
   const renderer = new THREE.WebGPURenderer({
-    antialias: true,
+    antialias: quality.antialias !== false,
     powerPreference: 'high-performance',
     reversedDepthBuffer: true
   });
   renderer.setPixelRatio(1.0);
   renderer.setSize(window.innerWidth, window.innerHeight);
-  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.enabled = quality.shadows !== false;
   if (ClusteredLighting) {
-    renderer.lighting = new ClusteredLighting(256, 32, 28, 48);
+    renderer.lighting = new ClusteredLighting(...(quality.clusters || [256, 32, 28, 48]));
   }
   container.appendChild(renderer.domElement);
 
@@ -76,6 +198,16 @@ async function initApp() {
 
   await renderer.init();
   markInit('renderer');
+  // (Gen Z Quant) Without WebGPU, WebGPURenderer draws with its WebGL2 backend: settle the tier on it (auto goes low)
+  // and say which backend it is under the title
+  const isWebGPU = !!(renderer.backend && renderer.backend.isWebGPUBackend);
+  settleQuality(quality, isWebGPU);
+  renderer.shadowMap.enabled = quality.shadows !== false;
+  if (!isWebGPU) {
+    const subtitle = document.querySelector('.brand-subtitle');
+    const label = subtitle && subtitle.firstChild;
+    if (label && label.nodeType === Node.TEXT_NODE) label.textContent = label.textContent.replace('WebGPU', 'WebGL 2');
+  }
 
   // 2. Build Scene & Physical Atmospheric Sky / PMREM IBL / 4096x4096 Shadow Lighting
   const scene = new THREE.Scene();
@@ -122,17 +254,22 @@ async function initApp() {
   const cullingRoots = ['ManhattanCityGrid', 'ManhattanCityBlocks', 'ManhattanStreetDetails', 'ManhattanLandmarks', 'Boroughs']
     .map((name) => scene.getObjectByName(name))
     .filter(Boolean);
-  const cullingStats = setupSceneCulling(scene, cullingRoots, lightingSystem.sunLight.shadow);
+  // (Gen Z Quant: no shadow stand-ins on a tier without shadows; the phone tier's props cull nearer, see scene-culling.js)
+  const cullingStats = setupSceneCulling(scene, cullingRoots, quality.shadows === false ? null : lightingSystem.sunLight.shadow, quality);
   markInit('culling');
 
   // Small InstancedMeshes (<= 1000 instances) keep their matrices in uniform buffers that three.js
   // re-uploads on every draw of every pass (~2.5 MB/frame with the shadow cascades, stalling the GPU queue).
   // Storage attributes are only uploaded when instanceMatrix.needsUpdate is set.
-  scene.traverse((object) => {
-    if (object.isInstancedMesh) {
-      object.instanceMatrix = new THREE.StorageInstancedBufferAttribute(object.instanceMatrix.array, 16);
-    }
-  });
+  // (Gen Z Quant: on WebGPU only. Three's WebGL2 backend can't read an instance's matrix from a storage buffer: the
+  // city came out torn into spikes at 3 fps)
+  if (isWebGPU) {
+    scene.traverse((object) => {
+      if (object.isInstancedMesh) {
+        object.instanceMatrix = new THREE.StorageInstancedBufferAttribute(object.instanceMatrix.array, 16);
+      }
+    });
+  }
 
   // 5. TSL RenderPipeline with Half-Res Screen Space Reflections (SSRNode), Bloom & Filmic Toning
   //    Fade out distant and matte surfaces so SSR spends its rays on visible glossy reflections.
@@ -142,41 +279,52 @@ async function initApp() {
   // them spares the GPU writing 3 x 4 samples per pixel to memory every frame (transient, memoryless attachments where
   // the browser supports them). The multisampled depth stays stored: SSR reads it.
   scenePass.renderTarget.storeMultisampledColorBuffer = false;
-  const ssrFade = smoothstep(360.0, 180.0, positionView.z.negate());
-  const maxSSRRoughness = 0.75;
-  const sceneMRT = mrt({
-    output: output,
-    normal: normalView,
-    metalRough: vec2(roughness.lessThan(maxSSRRoughness).select(metalness.mul(ssrFade), 0), roughness)
-  });
-  sceneMRT.setBlendMode('normal', new THREE.BlendMode(THREE.MaterialBlending));
-  sceneMRT.setBlendMode('metalRough', new THREE.BlendMode(THREE.MaterialBlending));
-  scenePass.setMRT(sceneMRT);
-
   const scenePassColor = scenePass.getTextureNode('output');
-  const scenePassDepth = scenePass.getTextureNode('depth');
-  const scenePassNormal = scenePass.getTextureNode('normal');
-  const scenePassMetalRough = scenePass.getTextureNode('metalRough');
+  // (Gen Z Quant) The phone and low tiers draw no reflections: no SSR pass and a single colour attachment. It is still
+  // an MRT of its own: the decals, puddles, contact shadows and effects that write their own normal / metalRough
+  // (material.mrtNode) are merged into it, and with no MRT at all their shaders would have no output left
+  let sceneMRT;
+  let ssrPass = null;
+  let reflections = vec4(0);
+  if (quality.ssr === false) {
+    sceneMRT = mrt({ output: output });
+    scenePass.setMRT(sceneMRT);
+  } else {
+    const ssrFade = smoothstep(360.0, 180.0, positionView.z.negate());
+    const maxSSRRoughness = 0.75;
+    sceneMRT = mrt({
+      output: output,
+      normal: normalView,
+      metalRough: vec2(roughness.lessThan(maxSSRRoughness).select(metalness.mul(ssrFade), 0), roughness)
+    });
+    sceneMRT.setBlendMode('normal', new THREE.BlendMode(THREE.MaterialBlending));
+    sceneMRT.setBlendMode('metalRough', new THREE.BlendMode(THREE.MaterialBlending));
+    scenePass.setMRT(sceneMRT);
 
-  const ssrPass = ssr(scenePassColor, scenePassDepth, scenePassNormal, {
-    metalnessNode: scenePassMetalRough.r,
-    roughnessNode: scenePassMetalRough.g,
-    camera: cameraSystem.camera
-  });
-  ssrPass.resolutionScale = 0.5;
-  ssrPass.blurQuality = 1;
-  ssrPass.maxDistance.value = 42;
-  ssrPass.thickness.value = 0.85;
-  // Fewer coarse steps, then refine detected hits to keep reflection edges precise.
-  ssrPass.quality.value = 0.25;
-  ssrPass.binaryRefine = true;
-  ssrPass.intensity.value = 0.50;
-  ssrPass.screenEdgeFadeBlack = true;
+    const scenePassDepth = scenePass.getTextureNode('depth');
+    const scenePassNormal = scenePass.getTextureNode('normal');
+    const scenePassMetalRough = scenePass.getTextureNode('metalRough');
 
-  // Roughness mip blur must not spread reflections back onto matte or nonreflective surfaces.
-  const reflectionMask = scenePassMetalRough.r.greaterThan(0).select(smoothstep(maxSSRRoughness, 0.55, scenePassMetalRough.g), 0);
-  const reflections = ssrPass.mul(reflectionMask);
-  const colorGrade = createPostProcessing(renderer, scenePassColor, reflections);
+    ssrPass = ssr(scenePassColor, scenePassDepth, scenePassNormal, {
+      metalnessNode: scenePassMetalRough.r,
+      roughnessNode: scenePassMetalRough.g,
+      camera: cameraSystem.camera
+    });
+    ssrPass.resolutionScale = 0.5;
+    ssrPass.blurQuality = 1;
+    ssrPass.maxDistance.value = 42;
+    ssrPass.thickness.value = 0.85;
+    // Fewer coarse steps, then refine detected hits to keep reflection edges precise.
+    ssrPass.quality.value = 0.25;
+    ssrPass.binaryRefine = true;
+    ssrPass.intensity.value = 0.50;
+    ssrPass.screenEdgeFadeBlack = true;
+
+    // Roughness mip blur must not spread reflections back onto matte or nonreflective surfaces.
+    const reflectionMask = scenePassMetalRough.r.greaterThan(0).select(smoothstep(maxSSRRoughness, 0.55, scenePassMetalRough.g), 0);
+    reflections = ssrPass.mul(reflectionMask);
+  }
+  const colorGrade = createPostProcessing(renderer, scenePassColor, reflections, quality);
   const { bloomPass } = colorGrade;
   const renderPipeline = new THREE.RenderPipeline(renderer, colorGrade.outputNode);
 
@@ -208,8 +356,9 @@ async function initApp() {
   });
 
   // Keyboard guide for each mode: [keys, action]
+  // (Gen Z Quant: on foot he walks the way you press, relative to the camera, so one Move for the four keys)
   const controlHints = {
-    person: [[['W', 'S'], 'Walk'], [['A', 'D'], 'Turn'], [['Shift'], 'Sprint'], [['Space'], 'Jump'], [['Drag'], 'Orbit']],
+    person: [[['W', 'A', 'S', 'D'], 'Move'], [['Shift'], 'Sprint'], [['Space'], 'Jump'], [['Drag'], 'Orbit']],
     car: [[['W', 'S'], 'Drive / Reverse'], [['A', 'D'], 'Steer'], [['Shift'], 'Boost'], [['Drag'], 'Orbit']],
     cyclist: [[['W', 'S'], 'Pedal / Brake'], [['A', 'D'], 'Lean & Turn'], [['Shift'], 'Sprint'], [['Drag'], 'Orbit']],
     helicopter: [[['W', 'S'], 'Pitch'], [['A', 'D'], 'Yaw'], [['Space', 'E'], 'Ascend'], [['Q', 'C'], 'Descend'], [['Shift'], 'Boost']]
@@ -549,7 +698,8 @@ async function initApp() {
     renderer,
     scene,
     renderPipeline,
-    postFX: { scenePass, ssrPass, bloomPass, colorGrade },
+    postFX: { scenePass, ssrPass, bloomPass, colorGrade }, // (Gen Z Quant: ssrPass null on the phone & low tiers)
+    quality, // (Gen Z Quant: the graphics tier, also window.NYC.quality)
     cullingStats,
     cityBlocks,
     quadtree: cityBlocks.quadtree,
@@ -654,10 +804,13 @@ async function initApp() {
   let warmedUp = false; // see the first frame below
 
   if (elFps) elFps.textContent = '60';
+  // (Gen Z Quant) the phone & low tiers' canvas resolution follows the frame time (see createAdaptiveResolution)
+  const adaptiveResolution = quality.adaptive ? createAdaptiveResolution(renderer) : null;
 
   renderer.setAnimationLoop((now) => {
     const rawDt = (now - lastTime) * 0.001;
     lastTime = now;
+    if (adaptiveResolution && warmedUp) adaptiveResolution.update(rawDt);
     const dt = Math.min(Math.max(rawDt, 0.001), 0.05);
     elapsed += dt;
 
@@ -710,6 +863,12 @@ async function initApp() {
         markInit('gpu');
         console.log(`[init] ${initTimings.join(', ')}`);
         initTimings = null;
+        // (Gen Z Quant) the lighter tiers' memory at ready, for the phone checks
+        if (quality.tier !== 'high') {
+          const mem = renderer.info.memory;
+          const heap = performance.memory ? `, JS heap ${Math.round(performance.memory.usedJSHeapSize / 1048576)} MB` : '';
+          console.log(`[gfx] ${quality.tier} on ${quality.backend}: ${mem.geometries} geometries, ${mem.textures} textures${mem.texturesSize ? ` (${Math.round(mem.texturesSize / 1048576)} MB)` : ''}${heap}`);
+        }
         if (loadingOverlay) loadingOverlay.classList.add('hidden');
         setLoadingProgress(1);
         window.__NYC_APP.ready = true;

@@ -19,12 +19,14 @@
 //   return  'Go back to the garage.'  Juno calls                                               checkpoint 'return'
 //   home    (a scene) Gears at the door: "in one piece." "Mostly."
 //   then MISSION PASSED (TIME, RIGS SMASHED, DEGENS REKT, HITS TAKEN, FOLLOWERS +18,500, NEW: bats · cold-gas
-//   thrusters), the save, and Pete's DM: the P at Sara D. Roosevelt Park ('Mission 4 is coming soon': no Mission 4 yet)
+//   thrusters), the save, Pete's DM, and the END OF EPISODE 1 card (episode.js: keep exploring, replay a mission,
+//   share the game; MISSION 4 · COMING SOON). No Mission 4 yet: in free roam after it, Pete's P at Sara D. Roosevelt
+//   Park is the Mission 4 teaser, labelled so (its sign: MISSION 4 COMING SOON), never "a new mission is available"
 // Fails: 'Quant got rekt.', 'You left the fight.', 'The Degens caught you.' Retry, Quit, Skip (after three).
 // Into the G in the dark (Mission 2 ends at dusk), the night in the garage comes first: on the couch, lights out, NEXT
 // MORNING, the sun through the door (m3-scenes.js nightScene); the city's light goes night, then sunrise, then midday.
 // URL: ?m3=garage|square|rigs|escape|return (and handoff: the G at night; night: straight into the night in the
-// garage; pete: the P after it).
+// garage; pete: the P after it; end: the END OF EPISODE 1 card at the garage, as the mission leaves him).
 import * as THREE from 'three/webgpu';
 import { place, getCast } from '../intro.js';
 import { createGPS } from './gps.js';
@@ -38,6 +40,7 @@ import { buildChevron } from './m2-set.js';
 import { buildRally, buildGarage, buildSUV, buildFiona, buildGears, ARCH, ARENA, GARAGE, SUV_AT } from './m3-set.js';
 import { garageScene, nightScene, rallyScene, dumpScene, homeScene, SPOT, ESCAPE_CAR } from './m3-scenes.js';
 import { watchStory, markDone } from './m3-save.js';
+import { episodeEnd, openMissionSelect } from './episode.js';
 import { clamp } from './cine.js';
 
 const PI = Math.PI;
@@ -211,6 +214,13 @@ export async function install(W) {
     return;
   }
   if (at === 'pete') { place(W, { car: SPOT.out.car, quant: SPOT.out.quant }); toPete(W, { quick: true }); return; }
+  // (end: as the mission leaves him, in the evening at the garage door, and the card)
+  if (at === 'end') {
+    W.app.selectTime?.('golden');
+    place(W, { car: SPOT.out.car, quant: [SPOT.door.quant[0], SPOT.door.quant[1], 0] });
+    endEpisode(W, { secs: 0.4 }).catch((e) => console.error('[m3] end', e));
+    return;
+  }
   // (night: as if into the G at night: the night in the garage, then the mission)
   if (at === 'night') { W.app.selectTime?.('twilight'); place(W, { car: [-1530, 1603.6, PI / 2], quant: [-1556, 1607.4, -PI / 2] }); }
   start(W, { at }).catch((e) => console.error('[m3]', e));
@@ -295,15 +305,28 @@ export function toGarage(W, { quick = false } = {}) {
   });
   if (!quick) W.ui?.help(['A new mission is available. Go to the ', { G: 'yellow' }, ' on the Radar.'], 9);
 }
-// after Mission 3: Pete's P at Sara D. Roosevelt Park, where Mission 4 will start
+// after Mission 3 (Episode 1 over): Pete's P at Sara D. Roosevelt Park, where Mission 4 will start. A teaser, labelled
+// as one everywhere it shows (the objective, the blip's name, the sign over the corona): no stall nudges toward it, and
+// never "a new mission is available" (there isn't one yet). quick: no help line with it (the save's Continue)
 export function toPete(W, { quick = false } = {}) {
   between(W, {
-    letter: 'P', at: P_AT, name: 'Pete · Sara D. Roosevelt Park', objective: ['Meet ', { Pete: 'blue' }, ' at ', { 'Sara D. Roosevelt Park': 'yellow' }, '.'],
+    letter: 'P', at: P_AT, name: 'Mission 4 (coming soon) · Sara D. Roosevelt Park',
+    objective: [{ 'Mission 4': 'yellow' }, ' is coming soon. It starts at ', { "Pete's": 'blue' }, ' bench.'],
     sign: ['MISSION 4', 'COMING SOON'],
-    note: ['Unknown number', 'sara roosevelt park. by the benches. take your time. -P'],
     onArrive: () => { W.ui?.place('Sara D. Roosevelt Park', 'Lower East Side · New York', 3); W.ui?.help(['Mission 4 is coming soon. ', { Pete: 'blue' }, ' will meet you here.'], 9); },
   });
-  if (!quick) W.ui?.help(['A new mission is available. Go to the ', { P: 'yellow' }, ' on the Radar.'], 9);
+  if (!quick) W.ui?.help(['Free roam. ', { 'Mission 4': 'yellow' }, ' is coming soon: its ', { P: 'yellow' }, ' on the Radar is a teaser.'], 8);
+}
+// the END OF EPISODE 1 card (episode.js) after secs, then: free roam with the teaser's P, or the pause menu's Mission
+// select (the P set too, for a Resume without a replay)
+export async function endEpisode(W, { secs = 0 } = {}) {
+  if (secs) await sleep(secs * 1000);
+  W.ui?.dm?.(null); W.ui?.help?.(null);
+  const choice = await episodeEnd(W);
+  if (W.mission?.running) return choice;
+  if (choice === 'replay') { toPete(W, { quick: true }); openMissionSelect(W); }
+  else toPete(W);
+  return choice;
 }
 
 /* ---------------------------------------------------------- the mission -- */
@@ -657,6 +680,8 @@ function createMission(W, { keep = false } = {}) {
           return best;
         };
         onKey = (e) => {
+          // (a finger is the stick's or the view's, never a blow: on touch, STRIKE / HEAVY come as J / K)
+          if (e.type === 'pointerdown' && e.pointerType === 'touch') return;
           const key = e.type === 'keydown' && !e.repeat && (e.code === 'KeyJ' || e.code === 'KeyK'), click = e.type === 'pointerdown' && (e.button === 0 || e.button === 2);
           if ((!key && !click) || W.cutscene || W.paused || inCar()) return;
           const heavy = e.code === 'KeyK' || e.button === 2;
@@ -900,8 +925,9 @@ function createMission(W, { keep = false } = {}) {
     await gsleep(4500);
     sfx?.play('buzz', { gain: 0.18, times: 2 }); sfx?.play('ding', { gain: 0.14 }); W.audio?.play?.('phoneBuzz');
     ui.dm('Unknown number', 'i want out. i know where the dog is going. sara roosevelt park. come alone. -P', 12);
-    await gsleep(2500);
-    toPete(W);
+    // (the DM read, then the end of the episode: its card, and free roam after it)
+    await gsleep(5500);
+    await endEpisode(W);
   }
 
   /* ------------------------------------------------------- the runner -- */

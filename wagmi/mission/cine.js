@@ -131,6 +131,60 @@ export function handheld(t, amt = 1) {
   return { yaw: n(0.9, 1.3) * 0.004 * amt, pitch: n(1.1, 4.2) * 0.003 * amt, roll: n(0.7, 2.2) * 0.004 * amt, x: n(0.8, 0.4) * 0.012 * amt, y: n(1.3, 5.1) * 0.01 * amt };
 }
 
+// ---- a phone held upright. The shots are composed for a landscape frame, and three's fov is the height of the view, so
+// on a tall screen a shot's subjects would fall off its sides. While the screen is upright (js/cameras.js portK: 0 at
+// width / height 1.3 and wider, today's frame exactly; 1 on a phone) a shot is seen through a band across the middle of
+// the screen, the cutscene's black bars grown to it (--bar on #wg), its lens opened out so the band sees the width a
+// SHOT_ASPECT screen sees: whatever the shot puts in a landscape frame is in it, at the same place (aimAt's thirds too,
+// shotAspect). The band is BAND wide to its height: a little taller than the landscape frame, the shot's own framing
+// across its middle. The subtitles go under it, in the black. A shot with band: false (the opening's aerial, the title)
+// fills the upright screen instead, at its own lens. All of it is worked out again every frame: the phone turned
+// mid-scene, the frame follows at once.
+const SHOT_ASPECT = 16 / 9, BAND = 1.25;
+const portOf = (cs) => (cs.portK ? cs.portK() : 0);
+// the width to height a shot is composed for on this screen (aimAt's thirds): the screen's own unless it is upright
+export function shotAspect(cs, band = true) {
+  const a = cs.camera.aspect || SHOT_ASPECT, k = band ? portOf(cs) : 0;
+  return k ? lerp(a, SHOT_ASPECT, k) : a;
+}
+// the lens for a shot's fov on this screen (the same fov unless it is upright)
+export function shotFov(cs, fov, band = true) {
+  const a = cs.camera.aspect || SHOT_ASPECT, k = band ? portOf(cs) : 0;
+  if (!k) return fov;
+  return Math.atan(Math.tan(fov * Math.PI / 360) * shotAspect(cs) / a) * 360 / Math.PI;
+}
+let bandPx = 0, bandCss = false;
+function setBand(px) {
+  const root = document.getElementById('wg');
+  if (!bandCss && px > 0) {
+    bandCss = true;
+    const st = document.createElement('style');
+    st.id = 'wg-band-css';
+    // (the subtitle line under the picture, in the black; a mission's title card over it, in the black, clear of the
+    // place and time captions on the picture's lower corners; his phone's close-up (ui.phone) on the picture's right, a
+    // little taller than it, not over him on its left third)
+    st.textContent = `body.wg-cine.wg-band #wg .wg-line { bottom: auto; top: calc(100% - var(--bar) + 12px); }
+body.wg-cine.wg-band #wg .wg-title { top: calc(var(--bar) / 2); }
+body.wg-cine.wg-band #wg .wg-phone { height: min(60vh, 600px, calc(100% - 2 * var(--bar) + 48px)); right: 5vw; }`;
+    document.head.appendChild(st);
+  }
+  if (px > 0) {
+    if (Math.abs(px - bandPx) > 0.5 && root) { root.style.setProperty('--bar', px.toFixed(1) + 'px'); bandPx = px; }
+    document.body.classList.add('wg-band');
+  } else if (bandPx) {
+    bandPx = 0; root?.style.removeProperty('--bar'); document.body.classList.remove('wg-band');
+  }
+}
+// the bars for a shot (0: the cutscene's own) and the lens it is seen through, for this screen
+function frameShot(cs, c) {
+  const k = c.band === false ? 0 : portOf(cs);
+  if (!k) { setBand(0); return c.fov; }
+  const el = cs.domElement, w = el?.clientWidth || innerWidth, h = el?.clientHeight || innerHeight;
+  const a = cs.camera.aspect || w / h, b = lerp(a, BAND, k);
+  setBand(Math.max(0, (h - w / b) / 2));
+  return shotFov(cs, c.fov);
+}
+
 export function createDirector(W) {
   const app = W.app, cs = app.cameraSystem, cam = cs.camera, cm = app.controllerManager;
   const _look = new THREE.Vector3(), _q = new THREE.Quaternion(), _q2 = new THREE.Quaternion(), _e = new THREE.Euler(), _p = new THREE.Vector3(), _pv = new THREE.Vector3();
@@ -154,7 +208,9 @@ export function createDirector(W) {
       _look.set(c.look[0], c.look[1], c.look[2]);
       cam.up.set(0, 1, 0); cam.lookAt(_look);
       if (s || c.roll) { _e.set((s ? s.pitch : 0), (s ? s.yaw : 0), (c.roll || 0) + (s ? s.roll : 0), 'YXZ'); _q.setFromEuler(_e); cam.quaternion.multiply(_q); }
-      if (Math.abs(cam.fov - c.fov) > 1e-3) { cam.fov = c.fov; cam.updateProjectionMatrix(); }
+      // (upright: through the band, the lens opened out; else the shot's own)
+      const fov = frameShot(cs, c);
+      if (Math.abs(cam.fov - fov) > 1e-3) { cam.fov = fov; cam.updateProjectionMatrix(); }
       cs.currentPos.copy(cam.position); cs.currentLookAt.copy(_look);
     },
     // hand the camera back: over secs it eases from the last shot into the city's own (the chase camera behind the
@@ -179,7 +235,7 @@ export function createDirector(W) {
         const seen = from.p.distanceTo(pv0) > 2.5 && (cam.updateMatrixWorld(), pv0.project(cam), pv0.z < 1 && Math.abs(pv0.x) < 0.9 && Math.abs(pv0.y) < 0.9);
         W.handback = { turn, seen, at: performance.now() }; // (for looking at it)
         cs.update = prev;
-        if (secs <= 0) { D.active = false; return res(); }
+        if (secs <= 0) { D.active = false; setBand(0); return res(); }
         // (a glide is short: at most 0.6 s)
         secs = Math.min(secs, 0.6);
         let k = 0, first = true;
@@ -194,13 +250,13 @@ export function createDirector(W) {
             if (!clear) { k = 1; prev.call(cs, 0, el); }
           }
           k = Math.min(1, k + dt / secs); const e = ease.inOut(k);
-          const toP = cam.position.clone(), toQ = cam.quaternion.clone(), toF = cs.getActivePreset().fov;
+          const toP = cam.position.clone(), toQ = cam.quaternion.clone(), toF = cs.viewFov ? cs.viewFov() : cs.getActivePreset().fov;
           cam.position.lerpVectors(from.p, toP, e); cam.quaternion.slerpQuaternions(from.q, toQ, e);
           // (and should the line from him to the lens be cut on the way all the same, it cuts to the view behind him
           // there instead of gliding through)
           if (k < 1 && cs.segClear && cs.segClear(pv, cam.position, ent) < 0.97) { k = 1; cam.position.copy(toP); cam.quaternion.copy(toQ); }
           const f = k >= 1 ? toF : lerp(from.fov, toF, e); if (Math.abs(cam.fov - f) > 1e-3) { cam.fov = f; cam.updateProjectionMatrix(); }
-          if (k >= 1) { cs.update = prev; D.active = false; res(); }
+          if (k >= 1) { cs.update = prev; D.active = false; setBand(0); res(); }
         };
       });
     },

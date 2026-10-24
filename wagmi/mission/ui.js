@@ -244,6 +244,91 @@ body.wg-rekt #canvas-container { filter: grayscale(.85) contrast(1.05); transiti
 .wg-track .log .l b { font-weight: 700; letter-spacing: .5px; margin-right: 6px; }
 .wg-track .log .hp { font: 600 15px/1.25 'Barlow Condensed'; color: rgba(255,255,255,.85); }
 .wg-track .log kbd, .wg-track .o kbd { display: inline-block; min-width: 18px; padding: 0 5px; margin: 0 2px; border: 1px solid rgba(255,255,255,.55); border-radius: 4px; background: rgba(255,255,255,.12); font: 700 13px/17px 'Barlow Condensed'; text-align: center; }
+
+/* ---- on a phone (touch only: body.touch-enabled), upright or sideways. The zones are css/style.css's (--wg-l/r/t/b
+   the safe edges, --wg-radar, --wg-toolbar, --wg-stick and --wg-pad the thumbs' zones sideways, --wg-thumbs their
+   height upright): nothing here reaches under a thumb or the toolbar. The top band, sideways: the radar, then the help
+   (or an offer, a DM, the tracker) beside it, then a call (or the radio's card) beside the toolbar; upright, the help
+   and the rest go under the radar, a call under the toolbar. The objective and the subtitles: between the thumbs
+   sideways, above them upright ---- */
+body.touch-enabled #wg .wg-help, body.touch-enabled #wg .wg-offer, body.touch-enabled #wg .wg-dm {
+  left: calc(var(--wg-l) + var(--wg-radar) + 16px); right: auto; top: var(--wg-t); padding: 10px 13px; font-size: 16px; width: auto;
+  max-width: min(360px, calc(100vw - var(--wg-l) - var(--wg-radar) - 16px - var(--wg-r) - var(--wg-toolbar) - 8px)); }
+/* (sideways: in the car the car's pills are a row under the toolbar, wagmi/touch.js; a call sits left of the toolbar) */
+@media (orientation: landscape) {
+  body.touch-enabled[data-mode='car'] #wg .wg-help, body.touch-enabled[data-mode='car'] #wg .wg-offer, body.touch-enabled[data-mode='car'] #wg .wg-dm {
+    max-width: min(360px, calc(100vw - var(--wg-l) - var(--wg-radar) - 16px - var(--wg-r) - 248px)); }
+  body.touch-enabled.wg-calling #wg .wg-help, body.touch-enabled.wg-calling #wg .wg-offer, body.touch-enabled.wg-calling #wg .wg-dm {
+    max-width: min(360px, calc(100vw - var(--wg-l) - var(--wg-radar) - 16px - var(--wg-r) - var(--wg-toolbar) - 196px)); }
+}
+body.touch-enabled #wg .wg-dm .b { font-size: 16px; }
+/* (a DM has the help's place while it is up) */
+body.touch-enabled.wg-dmon #wg .wg-help { opacity: 0 !important; }
+/* (an offer is tapped: its options side by side, finger-sized; scrolled rather than reaching the stick) */
+body.touch-enabled #wg .wg-offer { display: flex; flex-wrap: wrap; gap: 6px; max-height: calc(100% - var(--wg-t) - var(--wg-stick) + 24px); overflow-y: auto; }
+body.touch-enabled #wg .wg-offer .h, body.touch-enabled #wg .wg-offer .n { flex: 1 1 100%; margin-bottom: 0; }
+body.touch-enabled #wg .wg-offer button { flex: 1 1 auto; width: auto; min-height: 44px; margin: 0; padding: 6px 12px 6px 8px; }
+body.touch-enabled #wg .wg-offer .x { display: none; }
+body.touch-enabled #wg .wg-offer kbd { display: none; }
+body.touch-enabled #wg .wg-caller { right: calc(var(--wg-r) + var(--wg-toolbar)); top: var(--wg-t); bottom: auto; padding: 6px 12px 6px 6px; gap: 10px; transform: translateY(-8px); }
+body.touch-enabled #wg .wg-caller.on { transform: none; }
+body.touch-enabled #wg .wg-caller .av { width: 34px; height: 34px; font-size: 18px; }
+body.touch-enabled #wg .wg-caller .av.cam { width: 33px; height: 44px; border-radius: 6px; }
+body.touch-enabled #wg .wg-caller .n { font-size: 17px; }
+body.touch-enabled #wg .wg-caller .s { font-size: 12px; margin-top: 3px; }
+/* (a count, under the radar and the health bar; a place's name and M2's meters, in the middle of the top band) */
+body.touch-enabled #wg .wg-count { left: var(--wg-l); right: auto; top: calc(var(--wg-t) + var(--wg-radar) + 24px); bottom: auto; text-align: left; display: flex; align-items: baseline; gap: 8px; }
+body.touch-enabled #wg .wg-count .l { font-size: 13px; }
+body.touch-enabled #wg .wg-count .v { font-size: 24px; margin: 0; }
+body.touch-enabled:not(.wg-cine) #wg .wg-place { left: calc(var(--wg-l) + var(--wg-radar) + 16px); right: calc(var(--wg-r) + var(--wg-pad)); top: calc(var(--wg-t) + 100px); bottom: auto; text-align: center; }
+body.touch-enabled:not(.wg-cine) #wg .wg-place .n { font-size: 26px; }
+body.touch-enabled #wg .m2-tail, body.touch-enabled #wg .m2-target { left: calc(var(--wg-l) + var(--wg-radar) + 16px); right: calc(var(--wg-r) + var(--wg-pad)); top: calc(var(--wg-t) + 80px); bottom: auto; width: auto; max-width: 250px; margin: 0 auto; }
+/* the line: between the thumbs, sideways (out of a cutscene: there, the buttons are away and it sits over the bar) */
+body.touch-enabled:not(.wg-cine) #wg .wg-line { left: calc(var(--wg-l) + var(--wg-stick)); right: calc(var(--wg-r) + var(--wg-pad)); bottom: var(--wg-b); width: auto; max-width: 440px; margin: 0 auto; transform: none; }
+body.touch-enabled #wg .wg-obj { font-size: 20px; line-height: 1.2; }
+body.touch-enabled #wg .wg-sub { font-size: 19px; line-height: 1.2; }
+body.touch-enabled.wg-cine #wg .wg-line { width: min(max(52vw, 320px), 820px, calc(100vw - var(--wg-l) - var(--wg-r))); }
+body.touch-enabled.wg-cine #wg .wg-sub { font-size: 21px; }
+/* (the safe edges for what sits by them; a cutscene's bars stay full width) */
+body.touch-enabled #wg .wg-cap { left: max(5vw, var(--wg-l)); }
+body.touch-enabled #wg .wg-skip { right: max(3.2vw, var(--wg-r)); bottom: max(calc(5.5vh - 11px), env(safe-area-inset-bottom)); }
+body.touch-enabled #wg .wg-zk .hd { left: max(5vw, var(--wg-l)); }
+body.touch-enabled #wg .wg-zk .rec, body.touch-enabled #wg .wg-zk .wave { right: max(5vw, var(--wg-r)); }
+body.touch-enabled #wg .wg-gate .go { font-size: 20px; letter-spacing: 3px; padding: 12px 26px; }
+body.touch-enabled #wg .wg-gate .fine { left: var(--wg-l); right: var(--wg-r); bottom: calc(var(--bar) + 2.6vh + env(safe-area-inset-bottom)); }
+body.touch-enabled #wg .wg-big { padding: var(--wg-t) var(--wg-r) var(--wg-b) var(--wg-l); }
+body.touch-enabled #wg .wg-big .h { font-size: min(84px, 12.5vw) !important; text-align: center; }
+body.touch-enabled #wg .wg-big .t { text-align: center; }
+body.touch-enabled #wg .wg-big .stats { min-width: min(340px, 100%); }
+/* (wider than 2:1, a phone on its side: thinner bars, so the picture between them isn't a strip) */
+@media (min-aspect-ratio: 2/1) { body.touch-enabled #wg { --bar: min(6vh, 9.5vw); } }
+@media (max-height: 500px) {
+  body.touch-enabled #wg .wg-big .h { font-size: min(60px, 12.5vw) !important; }
+  body.touch-enabled #wg .wg-big .t { font-size: 26px; }
+  body.touch-enabled #wg .wg-big .stats { margin-top: 10px; padding: 8px 18px; }
+  body.touch-enabled #wg .wg-big .row { line-height: 1.45; }
+  body.touch-enabled #wg .wg-big .choices { margin-top: 14px; }
+  body.touch-enabled #wg .wg-title .name { font-size: 48px; }
+}
+@media (orientation: portrait) {
+  body.touch-enabled #wg .wg-help, body.touch-enabled #wg .wg-offer, body.touch-enabled #wg .wg-dm,
+  body.touch-enabled.wg-calling #wg .wg-help, body.touch-enabled.wg-calling #wg .wg-offer, body.touch-enabled.wg-calling #wg .wg-dm {
+    left: var(--wg-l); right: var(--wg-r); top: calc(var(--wg-t) + var(--wg-radar) + 24px); max-width: none; }
+  body.touch-enabled #wg .wg-offer { max-height: calc(100% - var(--wg-t) - var(--wg-radar) - 24px - var(--wg-b) - var(--wg-thumbs) - 120px); }
+  /* (in the car, the car's pills are a column down the right edge: wagmi/touch.js) */
+  body.touch-enabled[data-mode='car'] #wg .wg-help, body.touch-enabled[data-mode='car'] #wg .wg-offer, body.touch-enabled[data-mode='car'] #wg .wg-dm,
+  body.touch-enabled[data-mode='car']:not(.wg-cine) #wg .wg-place, body.touch-enabled[data-mode='car']:not(.wg-cine) #wg .wg-line { right: calc(var(--wg-r) + 128px); }
+  body.touch-enabled #wg .wg-caller { right: var(--wg-r); top: calc(var(--wg-t) + 58px); }
+  body.touch-enabled #wg .wg-count { left: auto; right: var(--wg-r); top: calc(var(--wg-t) + 58px); }
+  body.touch-enabled.wg-calling #wg .wg-count { top: calc(var(--wg-t) + 120px); }
+  body.touch-enabled:not(.wg-cine) #wg .wg-place { left: var(--wg-l); right: var(--wg-r); top: auto; bottom: calc(var(--wg-b) + var(--wg-thumbs) + 110px); }
+  body.touch-enabled #wg .m2-tail, body.touch-enabled #wg .m2-target { left: var(--wg-l); right: var(--wg-r); top: auto; bottom: calc(var(--wg-b) + var(--wg-thumbs) + 110px); }
+  body.touch-enabled:not(.wg-cine) #wg .wg-line { left: var(--wg-l); right: var(--wg-r); bottom: calc(var(--wg-b) + var(--wg-thumbs)); max-width: none; }
+  body.touch-enabled #wg .wg-obj { font-size: 22px; }
+  body.touch-enabled #wg .wg-sub { font-size: 21px; }
+  body.touch-enabled #wg .wg-title .name { font-size: min(64px, 13vw); }
+  body.touch-enabled #wg .wg-big .choices { flex-wrap: wrap; justify-content: center; }
+}
 `;
 
 export function createUI() {
@@ -279,6 +364,9 @@ export function createUI() {
   const bigEl = el('wg-big');
   const holdEl = el('wg-hold', `<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" stroke="rgba(255,255,255,.25)"/><circle class="p" cx="12" cy="12" r="9" stroke="#FFC93C" stroke-dasharray="56.5" stroke-dashoffset="56.5"/></svg><span></span>`);
   const offerEl = el('wg-offer');
+  // (what is up, on the body, for a phone's layout: the help, a call and a DM each move what shares their place)
+  const flag = (node, cls) => new MutationObserver(() => document.body.classList.toggle(cls, node.classList.contains('on'))).observe(node, { attributes: true, attributeFilter: ['class'] });
+  flag(helpEl, 'wg-helpon'); flag(callerEl, 'wg-calling'); flag(dmEl, 'wg-dmon');
 
   const timers = new Map();
   const later = (key, ms, fn) => { clearTimeout(timers.get(key)); timers.set(key, setTimeout(fn, ms)); };
@@ -523,16 +611,21 @@ export function createUI() {
       const show = () => { shown = true; g.classList.add('on'); gTitle.classList.add('on'); ui.bootOff(); };
       if (when()) show(); else { const poll = setInterval(() => { if (when()) { clearInterval(poll); show(); } }, 50); }
       return new Promise((res) => {
+        // (a finger starts on its release, a tap's end: on a phone only that lets the opening's first line be heard.
+        // A mouse or a pen still starts on the press)
+        const EVS = ['keydown', 'pointerdown', 'pointerup', 'touchend', 'click'];
         const go = (e) => {
           if (!shown) return;
           if (e.type === 'keydown' && (e.metaKey || e.ctrlKey || e.altKey || e.repeat)) return;
+          if (e.type === 'pointerdown' && e.pointerType === 'touch') { e.stopImmediatePropagation(); return; }
+          if (e.type === 'pointerup' && e.pointerType !== 'touch') return;
           e.stopImmediatePropagation(); if (e.type === 'keydown') e.preventDefault();
-          removeEventListener('keydown', go, true); removeEventListener('pointerdown', go, true);
+          for (const t of EVS) removeEventListener(t, go, true);
           try { onStart?.(); } catch (err) { console.warn(err); }
           g.classList.remove('on'); document.body.classList.remove('wg-gating'); setTimeout(() => g.remove(), 900);
           res();
         };
-        addEventListener('keydown', go, true); addEventListener('pointerdown', go, true);
+        for (const t of EVS) addEventListener(t, go, true);
       });
     },
     story(on) { document.body.classList.toggle('wg-story', !!on); },

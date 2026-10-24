@@ -13,7 +13,11 @@ const LOOKS = {
   midnight: { exposure: 1.04, contrast: 1.08, saturation: 1.06, balance: [0.985, 1.00, 1.035], bloom: 0.30, threshold: 1.00 }
 };
 
-function createPostProcessing(renderer, sceneColor, reflections) {
+// (Gen Z Quant) options: the graphics tier's knobs (window.NYC.quality): bloomScale (the bloom's resolution, a share of
+// the canvas: 0.5 as built) and bloomStrength (a factor on every look's bloom: 1 as built)
+function createPostProcessing(renderer, sceneColor, reflections, options = {}) {
+  const bloomScale = options.bloomScale ?? 0.5;
+  const bloomStrength = options.bloomStrength ?? 1;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   // Exposure is applied before bloom so its threshold follows the image's exposed brightness.
   // RenderPipeline performs ACES and the output color-space conversion exactly once, after this graph.
@@ -31,7 +35,7 @@ function createPostProcessing(renderer, sceneColor, reflections) {
   const bloomInput = vec4(exposed.mul(float(8.0).div(max(peak, 8.0))), 1.0);
   const bloomPass = bloom(bloomInput, 0.24, 0.40, 1.20);
   bloomPass.smoothWidth.value = 0.30;
-  bloomPass.setResolutionScale(0.5);
+  bloomPass.setResolutionScale(bloomScale);
 
   const outputNode = Fn(() => {
     const color = exposed.add(bloomPass.rgb).toVar();
@@ -62,7 +66,7 @@ function createPostProcessing(renderer, sceneColor, reflections) {
     contrast.value = look.contrast;
     saturation.value = look.saturation;
     balance.value.set(...look.balance);
-    bloomPass.strength.value = look.bloom;
+    bloomPass.strength.value = look.bloom * bloomStrength;
     bloomPass.threshold.value = look.threshold;
   }
 

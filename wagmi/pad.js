@@ -5,7 +5,8 @@
 // applyGamepadInput), and every button is sent as the key the game already knows for it (a KeyboardEvent marked
 // e.wgPad, which the game's own F takes as a real key). So the fight, the car, the missions, the pause menu, the help
 // offers and the cutscenes need nothing of their own for it, and the keyboard works as before.
-//   ON FOOT    LS move (camera-relative; in a fight, the fight's own footwork)   RS look   A jump (Space)
+//   ON FOOT    LS move (camera-relative, as the keys and the touch stick: js/controllers.js; in a fight the fight's
+//              footwork reads it the same way)   RS look   A jump (Space)
 //              X strike (J)   Y get in (F) with the car's prompt or a hold-F ring up, else heavy (K)   B dodge (C)
 //              LB counter (L)   RB grab · pick up · throw (E)   LT held, or L3 (on until the stick lets go): sprint
 //   IN THE CAR RT drive   LT brake · reverse   LS steer   RS look   A hop (Space)   X boost   LB · RB dash left · right
@@ -27,9 +28,6 @@
 //                 ids: the buttons' names (A B X Y LB RB LT RT LS RS L3 R3 Up Down Left Right View Start) }
 const BTN = { A: 0, B: 1, X: 2, Y: 3, LB: 4, RB: 5, LT: 6, RT: 7, View: 8, Start: 9, L3: 10, R3: 11, Up: 12, Down: 13, Left: 14, Right: 15 };
 const IDS = ['A', 'B', 'X', 'Y', 'LB', 'RB', 'LT', 'RT', 'LS', 'RS', 'L3', 'R3', 'Up', 'Down', 'Left', 'Right', 'View', 'Start'];
-const TURN = 11; // rad/s: how briskly he turns to the way the stick points, on foot
-const FOLLOW = 0.35; // 1/s: how lazily the camera comes round behind him while the stick walks him (none right after a look)
-const wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 
 /* ------------------------------------------------------------- the glyphs -- */
 // (Xbox: its letters in their colours; PlayStation: its shapes; any other pad: the letters, which the standard layout
@@ -64,9 +62,12 @@ export function glyphParts(id, fam, psNew) {
 
 export function install(W) {
   const app = W.app, gp = app.gamepadControls, cm = app.controllerManager, cs = app.cameraSystem;
+  // (on foot the walk is the city's, camera-relative for the keys, the touch stick and this pad alike: js/controllers.js
+  // walkToward. While a camera of the game's own holds the view (the fight's, round a fight and for a beat after it; a
+  // cutscene's), the walk leaves its orbit alone: that camera keeps the view where it is itself)
+  W.person.viewHeld = () => !!(W.cutscene || W.directed || (W.combat?.debug?.c?.cam?.weight ?? 0) > 0.003);
   if (!gp || typeof gp.attach !== 'function') return;
   const body = document.body.classList;
-  const cam = cs.camera;
 
   /* --------------------------------------------------- the keys it sends -- */
   const NAME = { Space: ' ', Enter: 'Enter', Escape: 'Escape', ArrowUp: 'ArrowUp', ArrowDown: 'ArrowDown', ArrowLeft: 'ArrowLeft', ArrowRight: 'ArrowRight' };
@@ -112,35 +113,13 @@ export function install(W) {
       return;
     }
     set('boost', sprint ? 1 : 0);
-    const mag = Math.min(1, Math.hypot(L.x, L.y));
-    const me = W.combat?.debug?.c?.me;
-    const fight = !!W.combat?.fighting || (me?.moveName && me.moveName() !== 'free');
-    // in a fight (or a move of it) the fight's footwork reads the stick itself, camera-relative: W along the view, D to
-    // its right; and standing still, nothing to turn
-    if (fight || W.ride?.phase || mag < 0.02) {
-      set('forward', Math.max(0, -L.y)); set('backward', Math.max(0, L.y)); set('left', Math.max(0, -L.x)); set('right', Math.max(0, L.x));
-      return;
-    }
-    // camera-relative: he turns briskly to the way the stick points from the camera and goes that way; the camera stays
-    // where it looks while he turns (the city's follows his heading: turned back by as much), and comes round behind
-    // him lazily as he goes
-    const p = W.person;
-    cam.getWorldDirection(_d);
-    const yaw = Math.atan2(_d.x, _d.z), fx = Math.sin(yaw), fz = Math.cos(yaw);
-    const dx = fx * -L.y - fz * L.x, dz = fz * -L.y + fx * L.x;
-    const d = wrap(Math.atan2(dx, dz) - p.heading), turn = Math.sign(d) * Math.min(Math.abs(d), TURN * s.dt);
-    p.heading += turn;
-    cs.orbitYawOffset -= turn;
-    if (lookT > 1.5) { cs.orbitYawOffset = wrap(cs.orbitYawOffset) * Math.exp(-FOLLOW * s.dt); cs.userOrbitTimer = Math.max(cs.userOrbitTimer, 0.25); }
-    set('forward', mag * (Math.abs(d) > 2.2 ? 0.3 : 1)); set('backward', 0); set('left', 0); set('right', 0);
+    // the stick as W A S D (up W): the walk turns him to the way it points from the camera and takes him that way, the
+    // view held where it looks (js/controllers.js walkToward); the fight's footwork reads it the same way
+    set('forward', Math.max(0, -L.y)); set('backward', Math.max(0, L.y)); set('left', Math.max(0, -L.x)); set('right', Math.max(0, L.x));
   }
-  const _d = new (cam.position.constructor)();
-  let lookT = 9;
   function look(s, R, inCar) {
-    lookT += s.dt;
     if (!R.x && !R.y) return;
     cs.applyGamepadInput(R.x, R.y, 0, s.dt);
-    lookT = 0;
     // (in the car the view goes back behind it soon after the stick lets go, GTA's way)
     if (inCar) cs.userOrbitTimer = Math.min(cs.userOrbitTimer, 0.7);
   }
