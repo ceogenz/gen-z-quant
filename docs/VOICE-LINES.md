@@ -164,7 +164,7 @@ Mission 3 (wagmi/mission/m3*.js).
 | 11 | `m3-wick-yo-thats-the-coin` | Wick | Yo. That's the coin kid. Protect the streams! |  |  |
 | 12 | `m3-fiona-wait-why-is-it` | Fiona | Wait. Why is it red? Why is it going down? |  |  |
 | 13 | `m3-fiona-its-a-healthy-correction` | Fiona | It's a healthy correction! Bye! |  |  |
-| 14 | `m3-quant-pump-and-dump` | Quant | Pump. And dump. |  |  |
+| 14 | `m3-quant-not-financial-advice` | Quant | Not financial advice. |  |  |
 | 15 | `m3-quant-pete-the-guy-who` | Quant | Pete. The guy who wants out. |  |  |
 | 16 | `m3-gears-youre-back-and-the` | Gears | You're back. And the car's in one piece. |  |  |
 | 17 | `m3-quant-mostly` | Quant | Mostly. |  |  |
@@ -179,12 +179,13 @@ Mission 3 (wagmi/mission/m3*.js).
 | 26 | `m3-fiona-we-lost-a-stream` | Fiona | We lost a stream! Keep pumping! |  |  |
 | 27 | `m3-fiona-two-streams-down-this` | Fiona | Two streams down! This is fine! Pump harder! |  |  |
 | 28 | `m3-wick-backup-protect-the-last` | Wick | Backup! Protect the last stream! |  |  |
-| 29 | `m3-juno-the-stream-runs-off` | Juno | The stream runs off three ring lights in the park. Kill the rigs, the stream dies. |  |  |
-| 30 | `m3-quant-and-no-stream-no` | Quant | And no stream, no pump. |  |  |
-| 31 | `m3-juno-and-no-pump-fionas` | Juno | And no pump, Fiona's just a lady shouting at a fountain. |  |  |
-| 32 | `m3-juno-two-degens-cars-on` | Juno | Two Degens cars on you. The Village is all crooked streets. Use them. |  |  |
-| 33 | `m3-quant-gears-said-the-thrusters` | Quant | Gears said the thrusters were very safe. |  |  |
-| 34 | `m3-juno-gears-says-that-about` | Juno | Gears says that about everything. |  |  |
-| 35 | `m3-juno-moon-two-is-down` | Juno | Moon two is down ninety-nine point eight percent. The stream died mid-sentence. |  |  |
-| 36 | `m3-quant-good` | Quant | Good. |  |  |
-| 37 | `m3-juno-everyone-who-bought-it` | Juno | Everyone who bought it is furious. At ZK, for once. Go get some sleep. |  |  |
+| 29 | `m3-juno-its-a-kol-rally` | Juno | It's a KOL rally. Fiona talks, her followers buy. |  |  |
+| 30 | `m3-juno-the-stream-runs-off` | Juno | The stream runs off three ring lights in the park. Kill the rigs, the stream dies. |  |  |
+| 31 | `m3-quant-and-no-stream-no` | Quant | And no stream, no pump. |  |  |
+| 32 | `m3-juno-and-no-pump-fionas` | Juno | And no pump, Fiona's just a lady shouting at a fountain. |  |  |
+| 33 | `m3-juno-two-degens-cars-on` | Juno | Two Degens cars on you. The Village is all crooked streets. Use them. |  |  |
+| 34 | `m3-quant-gears-said-the-thrusters` | Quant | Gears said the thrusters were very safe. |  |  |
+| 35 | `m3-juno-gears-says-that-about` | Juno | Gears says that about everything. |  |  |
+| 36 | `m3-juno-moon-two-is-down` | Juno | Moon two is down ninety-nine point eight percent. The stream died mid-sentence. |  |  |
+| 37 | `m3-quant-good` | Quant | Good. |  |  |
+| 38 | `m3-juno-everyone-who-bought-it` | Juno | Everyone who bought it is furious. At ZK, for once. Go get some sleep. |  |  |

@@ -1,4 +1,4 @@
-// Gen Z Quant: Mission 3 · Pump and Dump (docs/MISSIONS.md 4.4, as built), and the way into it after Mission 2. Installed
+// Gen Z Quant: Mission 3 · KOLs (docs/MISSIONS.md 4.4, as built; it was 'Pump and Dump' till the owner's 24 Oct note), and the way into it after Mission 2. Installed
 // by game.js after m2.js; Mission 2's way on (the G at Gears' garage) is taken over by ours (m3-save.js watchStory).
 //   garage  (a scene, midday, the next day) the Static Garage on W 22nd St: Gears under Quant's car ("Cold-gas
 //           thrusters..."), Juno's video call: the $MOON2 launch stream, Fiona on the megaphone, Moon on the banner
@@ -989,6 +989,7 @@ function createMission(W, { keep = false } = {}) {
     if (t.dead) { ui.caller(null); return; }
     ui.caller('Juno', BLUE, 'On call');
     await say([
+      ['Juno', BLUE, "It's a KOL rally. Fiona talks, her followers buy."],
       ['Juno', BLUE, 'The stream runs off three ring lights in the park. Kill the rigs, the stream dies.'],
       ['Quant', WHITE, 'And no stream, no pump.'],
       ['Juno', BLUE, "And no pump, Fiona's just a lady shouting at a fountain."],
@@ -1021,7 +1022,7 @@ function createMission(W, { keep = false } = {}) {
     teardown();
     const secs = Math.round((now() - stats.t0) / 1000);
     sfx?.play('passed'); W.audio?.play?.('missionPassed');
-    await ui.passed({ title: 'Pump and Dump', stats: [
+    await ui.passed({ title: 'KOLs', stats: [
       ['TIME', `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`], ['RIGS SMASHED', '3/3'],
       ['DEGENS REKT', String(stats.rekt || 0)], ['HITS TAKEN', String(stats.hits)],
     ], reward: '+18,500', note: '#MoonTwoRugged is trending · NEW: bats · cold-gas thrusters' }, 6);
@@ -1078,7 +1079,7 @@ function createMission(W, { keep = false } = {}) {
     S,
   };
   missions(W).register({
-    id: 'm3', act: 'Act II · Mission 3', title: 'Pump and Dump',
+    id: 'm3', act: 'Act II · Mission 3', title: 'KOLs',
     checkpoints: ['garage', 'square', 'rigs', 'escape', 'return'].map((id) => ({ id, label: LABELS[id] })),
     active: () => running && !!M._phase && M._phase !== 'passed',
     at: () => CHECKPOINT[M._phase] || 'garage',

@@ -12,7 +12,7 @@ const KEY = 'wagmi.save.v1';
 export const STORY = [
   { id: 'm1', act: 'Act I · Mission 1', title: 'Dognapped', unlocks: { fists: true } },
   { id: 'm2', act: 'Act I · Mission 2', title: 'Burner', unlocks: { cans: true } },
-  { id: 'm3', act: 'Act II · Mission 3', title: 'Pump and Dump', unlocks: { bats: true, thrusters: true } },
+  { id: 'm3', act: 'Act II · Mission 3', title: 'KOLs', unlocks: { bats: true, thrusters: true } },
 ];
 const ORDER = ['m1', 'm2', 'm3', 'm4'];
 const J_AT = { x: -296, z: 84.5 }, G_AT = { x: -1560, z: 1611 };

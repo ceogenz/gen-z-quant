@@ -164,7 +164,7 @@ export function garageScene(W, { U, say, gears, garage }) {
       { line: 7, t: Infinity, cam: (t, t0) => ({ pos: drift([GX - 1.0, GY + 1.5, GZ + 4.3], [GX - 1.05, GY + 1.5, GZ + 4.45], 3)(t, t0), look: [SPOT.gears[0], GY + 1.42, SPOT.gears[1]], fov: 34, shake: 0.3 }) },
     ],
     cues: [
-      [0.3, () => { ui.title('ACT II · DOWN BAD', 'Pump and Dump', 2.8); sfx?.play('stinger', { gain: 0.35 }); W.audio?.play?.('missionStart'); }],
+      [0.3, () => { ui.title('ACT II · DOWN BAD', 'KOLs', 2.8); sfx?.play('stinger', { gain: 0.35 }); W.audio?.play?.('missionStart'); }],
       [1.0, () => ui.place('Static Garage', 'West Chelsea · New York', 3.2)],
       [T.inside - 0.1, () => { garage.inside(true); }],
       [1.3, (st) => {
@@ -427,7 +427,7 @@ export function dumpScene(W, { say, fiona, rally, suv }) {
       [T.run - 0.2, (st) => say([['Fiona', PINK, "It's a healthy correction! Bye!"]], st)],
       [T.inCar - 0.1, () => W.audio?.play?.('doorOpen', { pos: [doorAt[0], 1, doorAt[1]] })],
       [T.go, () => { sfx?.play('squeal', { gain: 0.45, dur: 1.2 }); W.audio?.play?.('engineStart', { pos: [SX, 0.8, SZ] }); }],
-      [T.car + 0.2, (st) => say([['Quant', WHITE, 'Pump. And dump.']], st)],
+      [T.car + 0.2, (st) => say([['Quant', WHITE, 'Not financial advice.']], st)],
       // Lev's phone: the Degens' chat, ZK's new plan
       [T.chat, (st) => {
         if (st.dead || !W.m2ui) return;

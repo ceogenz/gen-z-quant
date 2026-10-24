@@ -14,7 +14,8 @@ import * as THREE from 'three/webgpu';
 const PI = Math.PI;
 const RANGE = 15, HALF = 0.72, CLOSE = 3.2;
 // (who they are, for 'SPOTTED! The side-gate lookout saw you.': by post, m2-set.js's order; a post's own name first)
-const NAMES = ['The gate lookout', 'The lookout on the west row', 'The side-gate lookout'];
+// (one string, split: the voice build reads a three-string array as [speaker, colour, words], a line to record)
+const NAMES = 'The gate lookout|The lookout on the west row|The side-gate lookout'.split('|');
 const angWrap = (a) => { a = (a + PI) % (2 * PI); if (a < 0) a += 2 * PI; return a - PI; };
 
 export function createStealth(W, { posts, U, center }) {

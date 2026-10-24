@@ -393,8 +393,11 @@ Twilight (Times Square lights on). Juno traces the burner's twin to a Degens cou
     wanders off; its checkpoint puts him 3.5 m off it, facing it, clear of the wreck. Driving to a fixed place, a
     turn-by-turn cue at the top (gps.js + turns.js: "Left on W 51st St · 790 m"), and a bolder route line.
 
-#### M3 · Pump and Dump (Act II) · West Chelsea -> Washington Square -> West Village
-Midday. The Degens launch $MOON2, a copycat coin with Moon's photo on it, at a rally under the Washington Square arch.
+#### M3 · KOLs (Act II) · West Chelsea -> Washington Square -> West Village
+(Was 'Pump and Dump'; renamed by the owner 24 Oct: the phrase reads badly. The mission is the same: stop a KOL pumping
+a token at her rally.)
+Midday. The Degens launch $MOON2, a copycat coin with Moon's photo on it, at a KOL rally under the Washington Square
+arch: Floor Price Fiona, a key opinion leader, hypes it to her followers on three livestreams.
 - Giver **G**: the Static Garage bay door (-1560, 0.22, 1611).
 - Opening cutscene: Gears under Quant's car: "Cold-gas thrusters. Little puffs of nitrogen. Very safe. Mostly."
   Juno on video call: the $MOON2 launch stream, Floor Price Fiona with a megaphone and Moon's face on a banner.
