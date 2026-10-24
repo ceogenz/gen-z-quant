@@ -7,6 +7,7 @@
 import * as THREE from 'three/webgpu';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { buildRoadster, createDriver } from './roadster.js';
+import { createStand } from './stand.js';
 import { drive, installDriveMode } from './audio/drivemode.js';
 
 const app = await new Promise((res) => { const t = setInterval(() => { if (window.__NYC_APP && window.__NYC_APP.controllerManager) { clearInterval(t); res(window.__NYC_APP); } }, 100); });
@@ -255,6 +256,10 @@ installDriveMode(WAGMI);
   const clipOf = (n) => THREE.AnimationClip.findByName(clips, n);
   const act = (n) => A[n] || (A[n] = mixer.clipAction(clipOf(n)));
   const bones = {}; body.traverse((o) => { if (o.isBone) bones[o.name] = o; });
+  // standing still, his knees straightened under him, his feet flat and his hips over them (wagmi/stand.js): eased in
+  // over STAND_EASE once he is still on his feet with nothing else on him, and out as soon as anything is
+  const stand = createStand(THREE, body, bones), STAND_EASE = 0.25;
+  let standW = 0;
   const smooth = (x) => { x = Math.min(1, Math.max(0, x)); return x * x * (3 - 2 * x); };
   // the gaits and the speed each clip was captured at (its time scale follows the real speed)
   // (a clip the model lacks is left out: a re-export with fewer clips still loads)
@@ -336,7 +341,26 @@ installDriveMode(WAGMI);
     hand(side, out = new THREE.Vector3()) { const b = bones[side === 'L' ? 'finger3-1_L' : 'finger3-1_R'] || bones[ARM[side][2]]; return b.getWorldPosition(out); },
     // where a striking limb is now: fl / fr the knuckles, footL / footR the ankles (as the blows were measured)
     limb(name, out = new THREE.Vector3()) { const b = bones[LIMB[name]] || bones.root; body.updateMatrixWorld(true); return b.getWorldPosition(out); },
+    // the standing correction over the pose as it is now (a still posed from a held clip frame: full on the idle, off on
+    // any other), and the clip's own legs given back (before the car or a scene takes him)
+    stand: (dt, clip) => stand.apply(clip === 'idle' ? 1 : 0),
+    unstand() { stand.release(); standW = 0; },
   };
+  // a scene's Quant (the cast's clips, mission/cine.js rig) standing on the idle's legs gets it too, by the idle legs'
+  // share of the pose: over the clips, before the scene's own touches (his back upright, a hand to the phone)
+  const IDLE_LEGS = /^idle(\/(noArmL|body|legs))?$/;
+  function sceneStand(r) {
+    if (!r || r.standing) return; r.standing = true;
+    const pose = r.pose;
+    r.pose = (t) => {
+      const cur = pose(t); let k = 0;
+      for (const a of mixer._actions) if (IDLE_LEGS.test(a.getClip().name) && r.owns(a)) k += a.getEffectiveWeight();
+      // (the scene zeroes these after the clips, then tips him itself)
+      body.position.y = 0; body.rotation.x = 0;
+      stand.apply(Math.min(1, k));
+      return cur;
+    };
+  }
   let directed = false;
   person.label = 'Quant';
   person.model = {
@@ -344,7 +368,7 @@ installDriveMode(WAGMI);
       // a cutscene (or anything else that directs him) drives the body itself, mixer and all; the moment it takes over
       // the moves and the fight's stance are let go and the gaits left as they were (it finds them as it always did)
       if (WAGMI.directed) {
-        if (!directed) { directed = true; for (const t of tracks) release(t); tracks.length = 0; for (const [n] of STEPS) { W[n] = 0; act(n).setEffectiveWeight(0); } for (const h of Object.values(hands)) h.w = h.want = 0; Q.loco = null; }
+        if (!directed) { directed = true; for (const t of tracks) release(t); tracks.length = 0; for (const [n] of STEPS) { W[n] = 0; act(n).setEffectiveWeight(0); } for (const h of Object.values(hands)) h.w = h.want = 0; Q.loco = null; Q.unstand(); sceneStand(WAGMI.cast?.qRig); }
         WAGMI.directed(dt, p, air); return;
       }
       // (back from it: the loops playing again, whatever it stopped, from the weights it left)
@@ -391,6 +415,14 @@ installDriveMode(WAGMI);
       for (const n of LOCO) { W[n] += (want[n] - W[n]) * Math.min(1, dt * 10); act(n).setEffectiveWeight(W[n] * rem); }
       mixer.update(d);
       body.position.y = 0;
+      // standing still: not stepping, not in the fight's guard, no move on him (a blow, a vault, down, a pick-up), on
+      // the ground, not getting in or out of the car; by the idle's share of the pose
+      if (p.inVehicle || (WAGMI.ride?.phase && WAGMI.ride.phase !== 'walk')) Q.unstand();
+      else {
+        const still = !(L && L.fight) && v < 0.25 && !air && !tracks.length && !WAGMI.ride?.phase;
+        standW = Math.min(1, Math.max(0, standW + (still ? dt : -dt) / STAND_EASE));
+        stand.apply(smooth(standW) * Math.min(1, W.idle * rem));
+      }
       // the hands' reach, over the pose
       for (const s of ['L', 'R']) { const h = hands[s]; h.w += (h.want - h.w) * Math.min(1, dt * 14); if (h.w > 0.01) { body.updateMatrixWorld(true); ik(s, h); } }
       Q.post?.(d, p, air);
@@ -411,6 +443,8 @@ installDriveMode(WAGMI);
 // driver (createDriver's)
 const BAIL = 10, T_IN = 1.15, T_OUT = 1.05, MOVE = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight']);
 const rs = car.roadster, Q = WAGMI.quant, cs = app.cameraSystem, cam = cs.camera, drv = createDriver(THREE, rs, Q);
+// (into the seat from his clip's own legs, not the standing correction: the seat's way in measures his idle hips once)
+{ const attach = drv.attach; drv.attach = (ease) => { Q.unstand(); attach(ease); }; }
 const ride = (WAGMI.ride = { phase: null, mode: null, k: 1, t: 0 });
 const smooth = (x) => { x = Math.min(1, Math.max(0, x)); return x * x * (3 - 2 * x); };
 const wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
